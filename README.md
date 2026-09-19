@@ -1,2 +1,2 @@
 # Metis
-AI Desktop Assistant
+AI Desktop Assistant Project
