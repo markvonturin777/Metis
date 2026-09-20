@@ -1,0 +1,32 @@
+# Configurazione TTS — decisa in M0 giorno 5 (decision gate D0).
+#
+# CONFRONTO MISURATO, latenza media di sintesi su 10 frasi:
+#   kokoro if_sara        858 ms   fuori budget (100-250 ms)
+#   kokoro im_nicola      898 ms   fuori budget
+#   piper  paola medium   102 ms   IN BUDGET   <- scelto
+#   piper  riccardo x_low  75 ms   in budget
+#
+# Con Kokoro la latenza end-to-end sarebbe 1687 ms, cioe' al limite del p95
+# su OGNI turno, senza margine per la GUI di M3. Con Piper: 931 ms, sotto il
+# p50 con ~270 ms di margine.
+#
+# Kokoro resta in `metis/tts/kokoro_engine.py` come alternativa: se un domani
+# la qualita' dovesse contare piu' della latenza, il motore e' gia' scritto.
+
+[engine]
+backend = "piper"          # "piper" | "kokoro"
+device  = "cpu"            # libera 0,4 GB di VRAM, §3.2 della specifica
+
+[piper]
+voice      = "it_IT-paola-medium"
+voices_dir = "data/piper"
+
+[kokoro]
+voice     = "if_sara"
+lang_code = "i"
+
+[streaming]
+# Il primo chunk esce piu' corto per anticipare l'inizio del parlato; i
+# successivi sono piu' lunghi, perche' chunk piu' ampi danno prosodia migliore.
+first_chunk_min_chars = 15
+min_chars             = 25
