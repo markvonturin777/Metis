@@ -34,14 +34,23 @@ _SENTENCE_END = re.compile(r"[.!?…](?=\s|$)")
 
 _WS = re.compile(r"\s+")
 
+# Confini secondari, per spezzare una frase troppo lunga senza aspettarne la fine.
+_SOFT_BREAK = re.compile(r"[,;:—–](?=\s)")
+
+# Il modello produce markdown anche sul canale vocale: "**astrattismo**".
+# Osservato in 4 turni su 30 durante M0: gli asterischi finiscono dritti nel
+# TTS. Vanno rimossi qui, perche' e' l'ultimo punto prima della sintesi.
+_MARKDOWN = re.compile(r"(\*{1,3}|_{1,3}|`{1,3}|~~)")
+
 
 def _clean(chunk: str) -> str:
-    """Spazi interni normalizzati.
+    """Testo pronto per il TTS: niente markdown, spazi normalizzati.
 
-    Il modello inserisce a capo dentro le risposte elencate; passati cosi'
-    come sono al TTS diventano pause innaturali a meta' chunk.
+    Il modello inserisce a capo dentro le risposte elencate e marca in
+    grassetto i termini chiave; passati cosi' come sono alla sintesi
+    diventano pause innaturali e artefatti.
     """
-    return _WS.sub(" ", chunk).strip()
+    return _WS.sub(" ", _MARKDOWN.sub("", chunk)).strip()
 
 
 @dataclass
@@ -81,7 +90,9 @@ class CancelToken:
         return self._event.is_set()
 
 
-def split_sentences(buf: str, min_chars: int = 25) -> tuple[list[str], str]:
+def split_sentences(
+    buf: str, min_chars: int = 25, max_chars: int | None = None
+) -> tuple[list[str], str]:
     """Estrae dal buffer i chunk pronti per il TTS, restituisce (chunk, resto).
 
     `min_chars` evita di sintetizzare frammenti come "Sì." o "Certo.": un
@@ -98,6 +109,14 @@ def split_sentences(buf: str, min_chars: int = 25) -> tuple[list[str], str]:
     Ora le frasi corte si ACCUMULANO: si estende il chunk attraverso i confini
     di frase finche' non raggiunge min_chars. Ogni chunk emesso e' quindi
     lungo abbastanza, e nessun testo resta indietro.
+
+    `max_chars` LIMITA IL CASO OPPOSTO (aggiunto il 2026-09-20)
+    Se il modello scrive una frase di 190 caratteri, aspettarne la fine costa
+    700 ms: misurato, e' quanto ha sforato lo stadio 'prima frase' rispetto al
+    budget di 330. Oltre max_chars si spezza a un confine secondario — virgola,
+    punto e virgola, trattino. Il valore giusto si ricava dalla velocita'
+    misurata: a 67 tok/s sono circa 270 caratteri al secondo, quindi 330 ms di
+    budget valgono ~90 caratteri.
     """
     out: list[str] = []
     while True:
@@ -105,6 +124,24 @@ def split_sentences(buf: str, min_chars: int = 25) -> tuple[list[str], str]:
             (m.end() for m in _SENTENCE_END.finditer(buf) if m.end() >= min_chars),
             None,
         )
+        # La fine frase non basta: puo' esistere ma essere troppo lontana.
+        # Il caso che costa latenza e' proprio quello — una frase di 190
+        # caratteri ha il suo punto, ma aspettarlo vale 700 ms.
+        too_far = end is None or end > max_chars if max_chars is not None else False
+        if too_far and len(buf) >= max_chars:
+            soft = next(
+                (
+                    m.end()
+                    for m in reversed(list(_SOFT_BREAK.finditer(buf[:max_chars])))
+                    if m.end() >= min_chars
+                ),
+                None,
+            )
+            if soft is None:
+                cut = buf.rfind(" ", min_chars, max_chars)
+                soft = cut if cut > 0 else None
+            if soft is not None:
+                end = soft
         if end is None:
             break
         out.append(_clean(buf[:end]))
@@ -162,8 +199,21 @@ class LlmClient:
         messages: list[dict],
         cancel: CancelToken | None = None,
         min_chars: int = 25,
+        max_chars: int | None = 120,
+        first_min_chars: int = 12,
+        first_max_chars: int | None = 45,
     ) -> Iterator[tuple[str, GenMetrics]]:
-        """Emette una frase alla volta, appena e' completa.
+        """Emette un chunk alla volta, appena e' pronto.
+
+        IL PRIMO CHUNK HA SOGLIE PIU' STRETTE (2026-09-20)
+        Il primo chunk determina da solo quando Metis comincia a parlare; i
+        successivi sono coperti dalla riproduzione di quello precedente. Con
+        soglie uniche a 90 caratteri lo stadio 'prima frase' restava a 391 ms
+        contro un budget di 330 — inevitabile, perche' generare 90 caratteri a
+        270 car/s costa gia' 333 ms. Il cap va messo SOTTO il budget, non sopra.
+
+        Con 45 caratteri il primo chunk esce in ~167 ms. La prosodia di quel
+        primo frammento e' un po' piu' secca: e' un prezzo che vale la pena.
 
         Il chiamante riceve anche le metriche vive: servono alla GUI di M3 e
         al calcolo della latenza end-to-end.
@@ -181,7 +231,12 @@ class LlmClient:
             m.tokens += 1
             buf += piece
 
-            done, buf = split_sentences(buf, min_chars)
+            is_first = not m.sentences
+            done, buf = split_sentences(
+                buf,
+                first_min_chars if is_first else min_chars,
+                first_max_chars if is_first else max_chars,
+            )
             for s in done:
                 if m.t_first_sentence_ms is None:
                     m.t_first_sentence_ms = (time.perf_counter() - m.t_start) * 1000.0

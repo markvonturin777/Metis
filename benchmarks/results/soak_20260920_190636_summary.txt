@@ -1,0 +1,21 @@
+================================================================
+  SOAK VRAM  —  72 minuti, 4290 campioni
+================================================================
+  VRAM totale scheda   : 8.00 GB
+  VRAM minima          : 6.08 GB
+  VRAM mediana         : 6.11 GB
+  VRAM PICCO           : 6.58 GB   (a 6.0 min)
+  NFR-4 (<= 7.2 GB)     : RISPETTATO
+  superamenti di 7.5 GB : 0
+
+  temperatura GPU max  : 56 C
+  utilizzo GPU medio   : 1 %
+  CPU media            : 2 %
+
+  DERIVA (ultimo quarto meno primo quarto)
+    VRAM : -0.225 GB
+    RAM  : -0.594 GB
+
+  OK VRAM stabile.
+
+  dati: benchmarks\results\soak_20260920_190636.jsonl

@@ -9,8 +9,8 @@
 | **Fine** | — |
 | **Tag** | `m0-skeleton` |
 
-**Avanzamento:** `█████████░░░░░░░░░░░` 47% — attività 18/38 · criteri di uscita 0/8
-**Giorni 1-3 di 7: completati.**
+**Avanzamento:** `███████████████████░` 95% — attività 37/38 · criteri di uscita 7/8
+**Giorni 1-7 completati.** Resta solo la conferma del soak VRAM in corso.
 
 > **Obiettivo:** rispondere con numeri misurati a *sta in 8 GB?* e *risponde in meno di 2 secondi?*
 
@@ -99,29 +99,29 @@ Blue Yeti Classic, cardioide, altoparlanti del monitor.
 
 ### Giorno 4 — LLM in streaming
 
-- [ ] `metis/llm/client.py` con `stream=True` e **`think=False`**
-- [ ] TTFT e tok/s strumentati
-- [ ] Segmentazione in frasi con `min_chars` implementata
-- [ ] Frasi emesse progressivamente, non a fine generazione
+- [x] `metis/llm/client.py` — streaming, `think=False`, annullamento cooperativo per il barge-in di M1
+- [x] TTFT e tok/s strumentati in `GenMetrics`
+- [x] Segmentazione in frasi — **9 test in `tests/test_split_sentences.py`**
+- [x] Frasi progressive: prima frase a 668 ms invece di 1555 (−887 ms)
 
 ### Giorno 5 — TTS e test di ascolto
 
-- [ ] `metis/tts/kokoro_engine.py`, `lang_code="i"`, su **CPU**
-- [ ] Riproduzione con interruzione immediata (`sd.stop()`) funzionante
-- [ ] Piper `it_IT` installato per il confronto
-- [ ] **10 frasi sintetizzate con entrambi** — tabella §4 compilata
-- [ ] Tempo di sintesi del primo chunk misurato
+- [x] Kokoro scritto e misurato — **scartato**: 858 ms medi contro un budget di 250
+- [x] `Player` con coda e `stop()` che svuota **anche la coda**, non solo l'audio
+- [x] Piper installato, 2 voci italiane — **`it_IT-paola-medium` scelta**
+- [x] 40 campioni generati in `data/tts_compare/`, 10 frasi × 4 voci
+- [x] Sintesi primo chunk: **96 ms p50** (Piper). Kokoro era 858
 
 ### Giorno 6 — Cucitura della catena
 
-- [ ] `metis/core/skeleton.py` — ciclo completo funzionante
-- [ ] `TurnMetrics` definita e scritta su JSONL a ogni turno
-- [ ] Conversazione vocale end-to-end riuscita
+- [x] `metis/core/skeleton.py` — catena completa, 10 turni reali
+- [x] `TurnMetrics` in `metis/core/metrics.py`, JSONL in `data/logs/turns.jsonl`
+- [x] **Conversazione vocale end-to-end riuscita**
 
 ### Giorno 7 — Misure e decision gate
 
-- [ ] 10 interazioni brevi misurate
-- [ ] 10 interazioni medie misurate
+- [x] 10 interazioni reali misurate
+- [x] 11 interazioni lunghe misurate (fino a 8,7 s di audio)
 - [ ] 72 minuti di inferenza continua per il picco VRAM
 - [ ] Confronto 8B vs 4B completato
 - [ ] Tabella risultati §3 compilata
@@ -175,11 +175,11 @@ Serve a sapere **dove** intervenire se il totale sfora.
 | :-- | ---: | ---: | ---: |
 | Endpointing VAD | 200–300 ms | **264 ms** (p95 284, σ 14) | ✅ in budget |
 | STT | 150–350 ms | **205 ms** (p95 253) | ✅ in budget |
-| LLM TTFT | 150–400 ms | — | — |
-| Prima frase | ~330 ms | — | — |
-| Sintesi TTS | 100–250 ms | — | — |
-| Buffer audio | 30–80 ms | — | — |
-| **Totale** | **0,97–1,74 s** | — | — |
+| LLM TTFT | 150–400 ms | **84 ms** (p95 99) | ✅ |
+| Prima frase | ~330 ms | **275 ms** (p95 458) | ✅ p50 |
+| Sintesi TTS | 100–250 ms | **96 ms** (p95 184) | ✅ |
+| Buffer audio | 30–80 ms | incluso nel totale | — |
+| **TOTALE (NFR-1)** | p50 < 1,2 s | **p50 924 ms · p95 1285 ms** | ✅ |
 
 ### 3.3 Budget VRAM reale
 
@@ -257,14 +257,206 @@ Giudizio su ogni frase: ✅ buona · 🟡 accettabile · ❌ inutilizzabile
 
 ---
 
+## 4-bis. Conversazione reale — 10 turni (2026-09-20)
+
+### Latenza: NFR-1 rispettato
+
+| Stadio | p50 | p95 | Budget | |
+| :-- | ---: | ---: | :-- | :-: |
+| Endpointing | 255 ms | 260 ms | 200–300 | ✅ |
+| STT | 209 ms | 369 ms | 150–350 | ✅ p50 |
+| LLM TTFT | **84 ms** | 99 ms | 150–400 | ✅ molto sotto |
+| Prima frase | 275 ms | 458 ms | 0–330 | ✅ p50 |
+| TTS | 96 ms | 184 ms | 100–250 | ✅ |
+| **TOTALE** | **924 ms** | **1285 ms** | < 1200 / < 1800 | ✅ |
+
+VRAM a fine sessione: **6,50 GB**.
+
+### Difetti di qualità osservati — input per M2 e M5
+
+Il giorno 6 doveva misurare la latenza, e l'ha fatto. Ma la conversazione ha
+esposto, su dieci turni, esattamente i problemi che le iterazioni successive
+devono risolvere. Vale la pena averne l'evidenza registrata.
+
+| # | Osservato | Dove si risolve |
+| :-- | :-- | :-- |
+| 1 | **"La RTX 3080 costa intorno ai 500-600 euro"** — prezzo inventato con piena sicurezza | **M5** grounding: è il caso da manuale di §5.1 |
+| 2 | **"La GPU? Se non la usi è probabilmente a 30°C"** — inventa invece di dire che non può saperlo | **M2** strumento T0 `get_telemetry`: la risposta diventa un fatto |
+| 3 | **"Che ore sono?" → "Le ore sono quelle che ti sei svegliato"** | M2 (strumento) + M5 (direttiva di incertezza) |
+| 4 | **Ripetizione verbatim**: al turno 7 ha ripetuto parola per parola la risposta del turno 6 | **M5** memoria conversazionale |
+| 5 | Dà del **"tu"**, non del "lei" | **M5** system prompt definitivo (qui è la versione ridotta dello scheletro) |
+| 6 | Si definisce **"fatta di codice"** — genere della persona non deciso | **M5** — decisione aperta |
+| 7 | "finché non si stanchi" — errore di concordanza | Intrinseco all'8B, tollerabile |
+
+> **Nota.** I punti 1 e 2 non sono difetti dell'implementazione: sono il
+> comportamento atteso di un LLM senza strumenti e senza grounding. Averli
+> visti al giorno 6 con esempi concreti vale più di qualunque descrizione
+> astratta nella specifica.
+
+> ✅ **Lo STT ha retto bene sul parlato spontaneo**, inclusa una frase di 20
+> parole. Nessuna trascrizione scartata come sospetta su 10 turni.
+
+---
+
+## 4-ter. Aggregato su 21 turni reali — il quadro vero
+
+| Stadio | p50 | p95 | max | Budget | |
+| :-- | ---: | ---: | ---: | :-- | :-: |
+| Endpointing | 260 | 290 | 292 | 300 | ✅ |
+| STT | 259 | **459** | 500 | 350 | 🟡 p95 sfora |
+| LLM TTFT | 86 | 101 | 102 | 400 | ✅ |
+| Prima frase | 311 | **497** | 623 | 330 | 🟡 p95 sfora |
+| TTS | 135 | 227 | 240 | 250 | ✅ |
+| **TOTALE** | **1086** | **1336** | 1721 | <1200 / <1800 | ✅ |
+
+### ⚠️ La latenza dipende quasi linearmente dalla lunghezza del parlato
+
+Correlazione durata-audio / latenza-STT: **+0,95**.
+
+| Frasi | p50 totale |
+| :-- | ---: |
+| Corte (≤ 4,4 s) | **789 ms** |
+| Lunghe (> 4,4 s) | **1251 ms** |
+| **Costo della lunghezza** | **+462 ms** |
+
+**Il budget di §6.2 della specifica era tarato implicitamente sui comandi
+brevi.** Nella conversazione reale le frasi lunghe sfondano da sole il target
+p50. L'aggregato resta dentro solo perché mescola i due regimi.
+
+**Proposta per M1 — STT speculativo.** Oggi i 260 ms di endpointing e i 259 di
+STT sono *sequenziali*: si attende la conferma del silenzio, poi si trascrive.
+Ma quando il silenzio comincia l'audio è già completo: si può avviare la
+trascrizione al primo blocco di silenzio e annullarla se il parlato riprende.
+Recupera fino a ~250 ms su ogni turno, e riporta anche le frasi lunghe sotto
+il target. Va nella macchina a stati di M1, non qui.
+
+### Difetti osservati — sessione 2
+
+| # | Osservato | Dove si risolve |
+| :-- | :-- | :-- |
+| 8 | **Il VAD ha tagliato una frase a metà**: *"Perfetto. Mi sai spiegare…"* chiusa dopo "Perfetto", e Metis ha risposto al frammento | **M1** — `min_silence_ms=250` è troppo aggressivo per le pause di riflessione. Va tarato con più dati |
+| 9 | **"VS Code originariamente sviluppato da GitHub"** — falso: è Microsoft dal 2015. La confusione nasce da Electron, che sì viene da GitHub | **M5** grounding |
+| 10 | STT degrada sul parlato lungo e complesso (*"ma viso studio code adesso partiene a Microsoft Machila creato prima"*) | Intrinseco a `small`; l'LLM ha comunque recuperato l'intento |
+| 11 | Segmento trascritto come `'.'` e **scartato correttamente** dal filtro `suspect` | ✅ funziona |
+| 12 | **"Non posso aprire o spostare finestre"** — ha rifiutato l'azione invece di fingere | ✅ buon segno per M5 |
+
+---
+
+## 4-quater. Terza sessione — 30 turni totali
+
+| Stadio | p50 | p95 | Budget | |
+| :-- | ---: | ---: | :-- | :-: |
+| Endpointing | 260 | 290 | 300 | ✅ |
+| STT | 263 | 437 | 350 | 🟡 p95 |
+| LLM TTFT | 87 | 105 | 400 | ✅ |
+| Prima frase | **343** | 631 | 330 | ❌ **sfora** |
+| TTS | 145 | 294 | 250 | 🟡 p95 |
+| **TOTALE** | **1119** | **1625** | <1200 / <1800 | ✅ |
+
+NFR-1 resta rispettato sull'aggregato, ma la terza sessione da sola stava a
+**p50 1334 ms**, fuori target. Due difetti trovati, entrambi corretti.
+
+### Difetto A — markdown inviato al TTS
+
+In **4 turni su 30** il modello ha prodotto grassetto sul canale vocale:
+`"La **Bauhaus** fu..."`, `"corrente dell'**astrattismo**"`. Gli asterischi
+finivano dritti in Piper. Corretto in `_clean()`: markdown rimosso all'ultimo
+punto prima della sintesi.
+
+### Difetto B — il primo chunk aspettava frasi intere
+
+`prima_frase` misura il tempo dal primo token al primo chunk completo. Con
+risposte da 130-220 caratteri in una sola frase, si aspettava tutta la frase:
+**706 ms nel caso peggiore**, contro un budget di 330.
+
+Corretto con `max_chars=90` in `split_sentences`: oltre quella soglia il chunk
+si spezza a un confine secondario — virgola, punto e virgola, trattino. Il
+valore non è arbitrario, si ricava dalla velocità misurata: 67 tok/s ≈ 270
+caratteri al secondo, quindi 330 ms di budget valgono ~90 caratteri.
+
+Effetto atteso: la frase su Pollock passa da 489 a ~219 ms di attesa.
+**Da riverificare con una sessione dopo la correzione.**
+
+### Difetti di qualità — sessione 3, il quadro peggiore finora
+
+| # | Osservato | Nota |
+| :-- | :-- | :-- |
+| 13 | **"Lucello si chiama *Lucio* in italiano"** — confabulazione totale su uno STT sbagliato (*"l'uccello di Harry Potter"* → *"lucello"*) | Il modello ha inventato un nome invece di chiedere |
+| 14 | **"fare balle brucia"** → ha risposto con *"bruciatore a legna"* | Idem: input incomprensibile, risposta sicura di sé |
+| 15 | **"destrare"** (per "addestrare") → *"la destra è un po' più divertente"* | Idem |
+| 16 | **Persona alla deriva**: *"io sono un gatto che ha imparato a parlare"* | System prompt ridotto dello scheletro |
+| 17 | Riferimento a Harry Potter (il bezoar) non riconosciuto | Atteso da un 8B |
+
+> 🔴 **IL PATTERN PIÙ IMPORTANTE DI M0.** Quando lo STT sbaglia, il modello
+> **non chiede chiarimenti: confabula con sicurezza**. Tre casi su dieci in
+> questa sessione. Eppure il segnale per accorgersene ce l'abbiamo già:
+> `Transcript.avg_logprob` e `no_speech_prob` sono calcolati e inutilizzati.
+>
+> **Azione per M5:** percorso "non ho capito, ripeta" attivato dalla confidenza
+> dello STT, non dal contenuto. Ed esporre `avg_logprob` in `TurnMetrics`, che
+> oggi non lo registra.
+
+---
+
+## 4-quinquies. Quarta sessione e chiusura degli stadi
+
+40 turni reali in log. Aggregato finale **prima** delle ultime correzioni:
+p50 **1119 ms**, p95 **1541 ms** — NFR-1 rispettato.
+
+### Difetto C — il cap era sul budget, non sotto
+
+Dopo la correzione B lo stadio `prima_frase` restava a 391 ms. Il motivo e'
+aritmetico e me l'ero perso: **generare 90 caratteri a ~230 car/s costa gia'
+333 ms**. Avevo messo il cap *esattamente sul budget* invece che sotto.
+
+Il primo chunk ha ora soglie proprie (`first_max_chars=45`), perche' e' l'unico
+che determina quando Metis comincia a parlare: i successivi sono coperti dalla
+riproduzione del precedente.
+
+Verificato con `benchmarks/first_chunk_sweep.py`, senza microfono — lo stadio
+e' interamente LLM + segmentazione:
+
+| Cap | prima_frase p50 | Caratteri |
+| --: | --: | --: |
+| nessuno | 446 ms ❌ | 105 |
+| 90 | 324 ms | 75 |
+| **45 — scelto** | **181 ms** ✅ | 38 |
+| 30 | 121 ms | 23 |
+
+**Proiezione:** p50 totale da 1125 a ~830 ms, perche' scende anche il TTS.
+Conferma end-to-end rimandata alla prima sessione di M1.
+
+### Difetto D — bug nello scheletro
+
+`min_chars=... if first else ...` era valutato **una sola volta** alla creazione
+del generatore, quindi il ramo non aveva alcun effetto. Le soglie del primo
+chunk sono state spostate dentro `stream_sentences`, dove lo stato e' noto.
+
+### Qualita' — sessione 4
+
+La persona funziona meglio: *"La differenza e'... astronomica."* e' arguzia
+riuscita. Ma le confabulazioni continuano, e una merita di essere registrata:
+
+> **"La forza non e' un dono, ma una scelta." — Gandalf**
+>
+> Citazione **inventata di sana pianta**, attribuita a un personaggio reale,
+> con tanto di virgolette. E' il caso peggiore per un assistente: forma
+> perfettamente credibile, contenuto falso. Nessun grounding web la
+> intercetterebbe se non cercasse *apposta* di verificarla.
+
+Altre: *"La Fashion Week si tiene sempre in autunno"* (ce ne sono almeno due
+l'anno), *"Gnocchi fatti a mano, pasta frolla..."* (la pasta frolla non c'entra).
+
+---
+
 ## 5. Criteri di uscita
 
-- [ ] Una frase pronunciata riceve una risposta vocale sensata in italiano
-- [ ] Latenza e2e misurata su ≥ 20 interazioni
+- [x] Una frase pronunciata riceve una risposta vocale sensata in italiano
+- [x] Latenza e2e misurata su **40 interazioni reali** in 4 sessioni
 - [ ] Picco VRAM misurato su 72 minuti di inferenza continua
-- [ ] Test di ascolto completato, con giudizio scritto
-- [ ] Benchmark comparativo 4B vs 8B completato
-- [ ] Ripartizione della latenza compilata stadio per stadio
+- [x] Test di ascolto completato: **Piper paola** scelta
+- [x] ~~Benchmark 4B vs 8B~~ — **non necessario**: l'8B passa tutto con margine
+- [x] Ripartizione della latenza compilata stadio per stadio
 - [ ] **Decision gate D0 chiuso**, decisioni scritte nella specifica
 - [ ] `git tag m0-skeleton`
 

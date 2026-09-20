@@ -23,3 +23,7 @@ secrets.toml
 # Windows
 Thumbs.db
 desktop.ini
+
+# Ambiente separato per l'addestramento della wake word (vedi wakeword/README.md)
+.venv-train/
+wakeword/data/

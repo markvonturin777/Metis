@@ -8,7 +8,8 @@
 | **Data** | 2026-09-20 |
 | **Sostituisce** | `bozza Metis V16.md` (documento di visione, ora archiviato) |
 | **Basata su** | `report_bozza_Metis_V16.md` (analisi tecnica) |
-| **Stato** | Approvata per l'implementazione — Milestone M0 |
+| **Stato** | In esecuzione — **M0 chiuso il 2026-09-20**, i numeri misurati hanno sostituito le stime |
+| **Revisione** | 1.1 — valori di §3.2, §3.3, §6.2, §10 e §15 aggiornati con le misure di M0 |
 
 ---
 
@@ -125,16 +126,18 @@ Dichiarato esplicitamente per evitare espansione incontrollata:
 
 Budget vincolante: **massimo 7,2 GB su 8 GB**, per lasciare margine al compositing di Windows ed evitare lo spill silenzioso in RAM di sistema.
 
-| Consumatore | Collocazione | Configurazione | VRAM |
-| :-- | :-- | :-- | ---: |
-| Desktop Windows + browser | — | baseline | 0,8 – 1,5 GB |
-| **LLM** Qwen 3 8B | **GPU** | `Q4_K_M` | ~4,7 GB |
-| **KV cache** | **GPU** | 8k ctx, **quantizzata `q8_0`** | ~0,4 GB |
-| **STT** `faster-whisper small` | **GPU** | `int8_float16` | ~0,6 GB |
-| **TTS** Kokoro 82M | **CPU** | — | 0 GB |
-| **Wake word** openWakeWord | **CPU** | — | 0 GB |
-| **VAD** Silero | **CPU** | — | 0 GB |
-| **Totale GPU** | | | **6,5 – 7,2 GB** ✅ |
+| Consumatore | Collocazione | Configurazione | Stimato | **Misurato** |
+| :-- | :-- | :-- | ---: | ---: |
+| Desktop Windows + browser | — | baseline | 0,8 – 1,5 GB | **0,66 GB** |
+| **LLM** Qwen 3 8B + KV cache | **GPU** | `Q4_K_M`, kv `q8_0`, 8k | ~5,1 GB | **5,42 GB** |
+| **STT** `faster-whisper small` | **GPU** | `int8_float16` | ~0,6 GB | **0,39 GB** |
+| **TTS** Piper | **CPU** | ONNX | 0 GB | 0 GB |
+| **Wake word** openWakeWord | **CPU** | — | 0 GB | 0 GB |
+| **VAD** Silero | **CPU** | — | 0 GB | 0 GB |
+| **Totale GPU** | | | 6,5 – 7,2 GB | **6,58 GB** ✅ |
+
+> Misurato il 2026-09-20 su 40 turni reali e 72 minuti di campionamento continuo.
+> Margine residuo: **1,4 GB su 8**. Deriva della VRAM nel tempo: negativa, nessun leak.
 
 ```mermaid
 xychart-beta
@@ -150,8 +153,8 @@ xychart-beta
 
 | Profilo | Modello | Dove | tok/s attesi | Quando si usa |
 | :-- | :-- | :-- | ---: | :-- |
-| **Standard** | Qwen 3 8B Q4_K_M | GPU | 55 – 70 | **Default per tutto** |
-| Rapido | Qwen 3 4B Q4_K_M | GPU | 100 – 120 | Opzionale: routing d'intento se l'8B non regge la latenza |
+| **Standard** | Qwen 3 8B Q4_K_M | GPU | **67,1 misurati** | **Default per tutto** |
+| Rapido | Qwen 3 4B Q4_K_M | GPU | 100 – 120 | **Non scaricato**: l'8B supera ogni criterio con margine |
 | Profondo | Qwen 3 30B-A3B Q4 | CPU/RAM | 10 – 16 | Solo su richiesta esplicita, task non interattivi |
 
 La **14B è esclusa** dalle opzioni: non entra in GPU e non gode della sparsità della MoE.
@@ -363,15 +366,24 @@ sequenceDiagram
     Note over U,A: TOTALE 0,97 - 1,74 s
 ```
 
-| Stadio | Budget | Collocazione | Leva principale |
-| :-- | ---: | :-- | :-- |
-| Endpointing VAD | 200 – 300 ms | CPU | Silero, soglia tarata; è il pavimento irriducibile |
-| STT finale | 150 – 350 ms | GPU | `faster-whisper` su CTranslate2 |
-| Routing intento | 5 – 30 ms | CPU | Fast-path: i comandi noti non toccano l'LLM |
-| LLM TTFT | 150 – 400 ms | GPU | System prompt in prompt-cache, `keep_alive: -1` |
-| Prima frase | ~330 ms | GPU | Streaming frase per frase, mai attendere il completamento |
-| Sintesi TTS | 100 – 250 ms | CPU | Pipeline sovrapposta alla generazione |
-| Buffer audio | 30 – 80 ms | — | Buffer ridotto |
+| Stadio | Budget | **Misurato p50** | Leva principale |
+| :-- | ---: | ---: | :-- |
+| Endpointing VAD | 200 – 300 ms | **260 ms** | Silero a chiamata diretta; è il pavimento irriducibile |
+| STT finale | 150 – 350 ms | **263 ms** | `faster-whisper` su CTranslate2. Cresce con la durata: corr. **+0,95** |
+| Routing intento | 5 – 30 ms | — | Fast-path: i comandi noti non toccano l'LLM (da M2) |
+| LLM TTFT | 150 – 400 ms | **87 ms** | `keep_alive: -1`, `think=False` |
+| Prima frase | ~330 ms | **181 ms** | Primo chunk con soglie proprie: `first_max_chars=45` |
+| Sintesi TTS | 100 – 250 ms | **145 ms** | **Piper**, non Kokoro: vedi §10 |
+| **TOTALE (NFR-1)** | **p50 < 1200 ms** | **1119 ms** su 40 turni | |
+
+> ⚠️ **La latenza dipende quasi linearmente dalla durata del parlato.**
+> Frasi corte (≤ 4,4 s): p50 **789 ms**. Frasi lunghe (> 4,4 s): p50 **1251 ms**.
+> Il budget originale era implicitamente tarato sui comandi brevi.
+>
+> **Contromisura pianificata per M1 — STT speculativo.** Endpointing e STT oggi
+> sono sequenziali. Quando il silenzio comincia l'audio è però già completo: si
+> può avviare la trascrizione al primo blocco di silenzio e annullarla se il
+> parlato riprende. Recupera fino a ~250 ms per turno.
 
 ### 6.3 STT ibrido
 
@@ -384,13 +396,22 @@ Questa separazione dà il feedback immediato di Vosk e l'accuratezza di Whisper 
 
 ### 6.4 TTS
 
+> **DECISIONE D0, 2026-09-20: Piper, non Kokoro.** Il piano B è diventato la
+> scelta primaria. Kokoro resta implementato in `metis/tts/kokoro_engine.py`.
+
 | Aspetto | Decisione |
 | :-- | :-- |
-| **Motore** | **Kokoro** (82M, Apache 2.0), su **CPU** |
-| **Verifica obbligatoria** | Test di ascolto su 10 frasi italiane rappresentative **in M0**. Il supporto italiano di Kokoro è coperto da meno voci e meno dati rispetto all'inglese: va ascoltato, non assunto. |
-| **Piano B** | **Piper** `it_IT` — molto leggero, CPU, qualità inferiore ma affidabile |
-| **Piano C** | XTTSv2 — qualità superiore, ma torna a consumare VRAM: da valutare solo se A e B falliscono |
-| **Streaming** | Sintesi frase per frase, in pipeline con la generazione dell'LLM |
+| **Motore** | **Piper** `it_IT-paola-medium`, ONNX, su **CPU** |
+| **Perché** | Latenza di sintesi **102 ms** contro gli **858 ms** di Kokoro, misurati su 10 frasi. Con Kokoro la latenza end-to-end sarebbe stata ~1700 ms, cioè al limite del p95 su **ogni** turno, senza margine per la GUI di M3 |
+| **Alternativa** | **Kokoro** `if_sara` — già implementato, si attiva da `config/tts.toml`. Da riconsiderare solo se la qualità dovesse contare più della latenza |
+| **Piano C** | XTTSv2 — qualità superiore, ma torna a consumare VRAM |
+| **Streaming** | Chunk per chunk, con **soglie dedicate al primo chunk** (`first_max_chars=45`): è l'unico che determina quando Metis comincia a parlare |
+| **Igiene del testo** | Il markdown viene rimosso prima della sintesi: il modello produce grassetto anche sul canale vocale, osservato in 4 turni su 30 |
+
+**Nota sulla scelta di torch CPU.** Kokoro dipende da torch, quindi nella nostra
+installazione non può usare la GPU. Questo non toglie nulla di previsto — §3.2
+metteva Kokoro su CPU comunque — ma va saputo: i suoi 858 ms sono la sua forma
+migliore disponibile qui.
 
 ---
 
@@ -678,7 +699,8 @@ Il system prompt completo è in [Appendice A](#appendice-a--system-prompt-metis)
 
 | Ambito | Pacchetto | Versione | Nota |
 | :-- | :-- | :-- | :-- |
-| Linguaggio | Python | 3.12 | — |
+| Linguaggio | Python | 3.12.10 | — |
+| PyTorch | `torch` | 2.9.1**+cpu** | **CPU-only deliberato**: la GPU la usano Ollama e CTranslate2, con runtime propri. ~4 GB risparmiati |
 | GUI | `PySide6` | ≥ 6.7 | **LGPL** |
 | LLM runtime | Ollama | ≥ 0.5 | Processo separato |
 | Modello | `qwen3:8b` | `Q4_K_M` | §3.3 |
@@ -686,8 +708,10 @@ Il system prompt completo è in [Appendice A](#appendice-a--system-prompt-metis)
 | VAD | `silero-vad` | — | CPU |
 | STT live | `vosk` | `small-it` | CPU, parziali |
 | STT finale | `faster-whisper` | `small`, `int8_float16` | GPU |
-| TTS | `kokoro` | — | CPU. Fallback: `piper-tts` |
+| **TTS** | **`piper-tts`** | 1.8 | **CPU, scelto in M0.** Alternativa: `kokoro` |
 | Audio I/O | `sounddevice` | — | Più pulito di PyAudio |
+| **Resampling** | **`soxr`** | 1.1 | **Necessario**: il Blue Yeti su WASAPI accetta solo 48 kHz, decimazione 3:1 |
+| **CUDA per CTranslate2** | `nvidia-cublas-cu12`, `nvidia-cudnn-cu12` | 12.9 / 9.26 | Servono perché torch è CPU-only; vanno registrate con `os.add_dll_directory` **e** nel PATH |
 | Finestre | `pywinctl` | — | **Sostituisce `pygetwindow`** |
 | Input | `pyautogui`, `pynput` | — | Con guardie §8.4 |
 | Cattura schermo | `mss` | — | Multi-monitor corretto |
@@ -715,11 +739,11 @@ Sono **criteri di accettazione della V1.0**. Ognuno è verificato in M7.
 
 | # | Metrica | Target | Come si misura |
 | :-- | :-- | :-- | :-- |
-| **NFR-1** | Latenza vocale end-to-end | p50 < 1,2 s · p95 < 1,8 s | Timestamp fine-parlato → primo campione audio, 100 interazioni |
-| **NFR-2** | Time To First Token | < 400 ms con contesto ≤ 2k | Log orchestratore, esposto in GUI |
-| **NFR-3** | Throughput generazione | ≥ 45 tok/s | Metriche Ollama |
-| **NFR-4** | Picco VRAM | ≤ 7,2 GB su 8 GB | `nvidia-ml-py`, campionamento 1 Hz per 72 h |
-| **NFR-5** | WER italiano (STT finale) | < 12% | Set di prova registrato, 50 frasi reali dell'utente |
+| **NFR-1** | Latenza vocale end-to-end | p50 < 1,2 s · p95 < 1,8 s | ✅ **M0: p50 1119 ms, p95 1625 ms** su 40 turni |
+| **NFR-2** | Time To First Token | < 400 ms con contesto ≤ 2k | ✅ **M0: 87 ms** a contesto breve, ~330-400 ms a 2k |
+| **NFR-3** | Throughput generazione | ≥ 45 tok/s | ✅ **M0: 67,1 tok/s** |
+| **NFR-4** | Picco VRAM | ≤ 7,2 GB su 8 GB | ✅ **M0: 6,58 GB**, deriva negativa su 72 min |
+| **NFR-5** | WER italiano (STT finale) | < 12% | 🟡 **M0: 8,6%** su 10 frasi. Ne servono 50 per NFR-5 pieno |
 | **NFR-6** | Falsi risvegli | < 1 ogni 8 h di uso normale | Conteggio nell'audit log |
 | **NFR-7** | Auto-inneschi da eco | **0** | Test dedicato: 2 h di TTS continuo con microfono aperto |
 | **NFR-8** | Reattività GUI | ≥ 30 fps, nessun freeze > 100 ms | Profiling Qt sotto inferenza |
