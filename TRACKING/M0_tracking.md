@@ -9,8 +9,8 @@
 | **Fine** | — |
 | **Tag** | `m0-skeleton` |
 
-**Avanzamento:** `████░░░░░░░░░░░░░░░░` 24% — attività 9/38 · criteri di uscita 0/8
-**Giorno 1 di 7: completato.**
+**Avanzamento:** `█████████░░░░░░░░░░░` 47% — attività 18/38 · criteri di uscita 0/8
+**Giorni 1-3 di 7: completati.**
 
 > **Obiettivo:** rispondere con numeri misurati a *sta in 8 GB?* e *risponde in meno di 2 secondi?*
 
@@ -23,13 +23,37 @@
 | GPU | RTX 2070 SUPER, **8192 MiB**, driver 581.08 | Conferma il vincolo di §3 della specifica |
 | VRAM a riposo | **504 MiB** | Più bassa della stima 0,8–1,5 GB: budget più comodo del previsto |
 | Monitor | 2× 1920×1080, DISPLAY2 a X=1920 | **Nessuna coordinata negativa, stessa risoluzione** → il rischio DPI di M4 è molto ridotto |
-| Audio | Realtek HD Audio | Da confermare che il microfono sia su questo device |
+| Microfono | **Blue Yeti Classic** su WASAPI, **solo 48 kHz**, 2 ch, latenza 3 ms | Resampling 3:1 a carico nostro: `soxr` |
+| Uscita audio | **altoparlanti** — default: VG258QM via NVIDIA HD Audio | ⚠️ Altoparlanti + microfono aperto: **D3 si orienta verso AEC in M6** |
 | VS Code | `%LOCALAPPDATA%\Programs\Microsoft VS Code\Code.exe` | Già in `config/apps.toml` per M2 |
 | GitHub Desktop | `%LOCALAPPDATA%\GitHubDesktop\GitHubDesktop.exe` | Idem |
 | Git | 2.25.0 | OK |
 | Python | **3.12.10** installato | Inizialmente presente solo l'alias Microsoft Store |
 | Ollama | **0.34.2** installato, server su :11434 | Nessun account necessario: il sign-in serve solo ai modelli cloud |
 | Disco C: | 27 GB → **34,9 GB liberi** dopo pulizia | Rientrato. Venv 1,14 GB + modello 5,2 GB |
+
+---
+
+## 0-bis. Taratura audio — 2026-09-20
+
+Blue Yeti Classic, cardioide, altoparlanti del monitor.
+
+| Metrica | Valore | Nota |
+| :-- | ---: | :-- |
+| Rumore di fondo | **-86,4 dBFS** | Stanza molto silenziosa |
+| Voce rms p95 | -22,3 dBFS | Dopo riduzione del guadagno |
+| Picco | **-9,6 dBFS** | In finestra obiettivo -12…-6 |
+| Margine clipping | 9,6 dB | Era 2,7: guadagno abbassato |
+| **SNR** | **55,4 dB** | Eccellente |
+| Blocchi persi | **0** | Il resampling nel callback regge |
+| **Endpointing VAD** | **264 ms** σ 14 | Teorico 282. Pavimento della latenza |
+
+> **Due errori di misura corretti oggi**, entrambi miei e dello stesso tipo — una
+> costante scelta a caso al posto di un valore derivato dai dati:
+> 1. Livello voce come mediana su tutta la finestra → misurava le pause. Ora media
+>    sui soli blocchi attivi, con soglia adattiva ancorata anche al livello del parlato.
+> 2. Fine parlato via soglia `rms > -55 dBFS` → dispersione endpointing 90-390 ms.
+>    Ora probabilità di Silero per blocco: dispersione 14 ms.
 
 ---
 
@@ -60,18 +84,18 @@
 
 ### Giorno 2 — Cattura audio, VAD, push-to-talk
 
-- [ ] `metis/audio/capture.py` — `InputStream` 16 kHz mono, callback non bloccante
-- [ ] `metis/audio/vad.py` — Silero con `min_silence_duration_ms=250`
-- [ ] `metis/audio/ptt.py` — hotkey globale `Ctrl+Alt+M`, comportamento **toggle**
-- [ ] Segmento di parlato isolato correttamente, con timestamp di fine parlato
+- [x] `metis/audio/capture.py` — WASAPI 48 kHz → mono → soxr 3:1 → blocchi da 512. **0 blocchi persi** su 3 prove
+- [x] `metis/audio/vad.py` — Silero **a chiamata diretta**, non `VADIterator`: isteresi 0,50/0,35, scarto frasi < 200 ms
+- [x] `metis/audio/ptt.py` — `Ctrl+Alt+M` toggle, verificata in esecuzione
+- [x] Segmento isolato con **due** timestamp: `t_speech_end` (zero per NFR-1) e `t_endpoint`
 
 ### Giorno 3 — Speech-to-Text
 
-- [ ] `metis/stt/whisper_engine.py` con `faster-whisper small`, `int8_float16`, `cuda`
-- [ ] `language="it"` esplicito, `beam_size=1`, `vad_filter=False`
-- [ ] Latenza STT misurata su 10 frasi
-- [ ] VRAM aggiuntiva dello STT misurata
-- [ ] Confronto rapido con `base` e `medium` registrato (serve se il budget sfora)
+- [x] `metis/stt/whisper_engine.py` — `small`, `int8_float16`, `cuda`. Serve `metis/core/cuda_libs.py`: torch CPU non porta cuBLAS/cuDNN
+- [x] `language="it"`, `beam_size=1`, `vad_filter=False`, `condition_on_previous_text=False`
+- [x] Latenza STT su 10 frasi reali: **205 ms** medi, p95 253 (budget 150–350)
+- [x] VRAM STT: **+0,39 GB** (stimata 0,6). **Totale LLM+STT: 6,58 GB**, margine 1,4
+- [x] `medium` **non necessario**: `small` + vocabolario di dominio sta gia' sotto target
 
 ### Giorno 4 — LLM in streaming
 
@@ -149,8 +173,8 @@ Serve a sapere **dove** intervenire se il totale sfora.
 
 | Stadio | Budget | Misurato | Delta |
 | :-- | ---: | ---: | ---: |
-| Endpointing VAD | 200–300 ms | — | — |
-| STT | 150–350 ms | — | — |
+| Endpointing VAD | 200–300 ms | **264 ms** (p95 284, σ 14) | ✅ in budget |
+| STT | 150–350 ms | **205 ms** (p95 253) | ✅ in budget |
 | LLM TTFT | 150–400 ms | — | — |
 | Prima frase | ~330 ms | — | — |
 | Sintesi TTS | 100–250 ms | — | — |
@@ -163,11 +187,52 @@ Serve a sapere **dove** intervenire se il totale sfora.
 | :-- | ---: | ---: | :-- |
 | Desktop Windows baseline | 0,8–1,5 GB | **0,66 GB** | meglio del previsto |
 | LLM 8B Q4_K_M + KV cache q8_0 | ~5,1 GB | **5,42 GB** | +0,3 GB |
-| STT faster-whisper small | ~0,6 GB | da misurare al giorno 3 | — |
+| STT faster-whisper small | ~0,6 GB | **0,39 GB** | meglio del previsto |
 | **Totale con LLM caricato** | 6,5–7,2 GB | **6,08 GB** | — |
-| **Totale previsto con STT** | — | **~6,7 GB** | margine ~1,3 GB su 8 |
+| **Totale misurato LLM + STT** | ~6,7 GB | **6,58 GB** | ✅ margine 1,4 GB su 8 |
 
 > Il budget di §3.2 della specifica regge. Kokoro e Silero restano su CPU come previsto, quindi non incidono.
+
+---
+
+## 3-ter. STT — corpus reale, 10 frasi (2026-09-20)
+
+Corpus in `data/corpus/`: WAV + riferimento. Riutilizzabile senza rifare le
+registrazioni, e base di partenza per le 50 frasi che NFR-5 chiede in M7.
+
+| Configurazione | WER | Errori | STT medio | p95 |
+| :-- | ---: | ---: | ---: | ---: |
+| `small` baseline | 11,4 % | 6/70 | 207 ms | 261 ms |
+| **`small` + vocabolario dominio** | **8,6 %** | **6/70** | **205 ms** | **253 ms** |
+| `medium` | non provato — non serve | | | |
+
+**Decisione:** `small` + `initial_prompt` di dominio, in `config/stt.toml`.
+
+### Errori residui — tutti dello stesso tipo
+
+| Atteso | Ottenuto | Natura |
+| :-- | :-- | :-- |
+| "Aprimi le news" | "Apri mille news" | confine di parola |
+| "Apri Visual Studio" | "Apreviso studio" | confine di parola + termine inglese |
+| **"No, annulla"** | **"No, nulla"** | ⚠️ **vedi nota** |
+
+> **Due correzioni di misura, di nuovo.**
+> 1. Il WER contava `diciassette → 17` come errore. Non lo e': Whisper normalizza
+>    i numeri in cifre e per un assistente vocale le forme sono equivalenti.
+>    Corretto in `metis/stt/metrics.py` con `num2words`. Da 14,3% a 11,4%.
+> 2. `diff_words` confrontava posizione per posizione: su una frase con 2 errori
+>    ne mostrava 7, perche' dopo una cancellazione tutto slitta. Ora ricostruisce
+>    l'allineamento dalla matrice di Levenshtein.
+
+> ⚠️ **NOTA PER M2 — "annulla" → "nulla".** E' l'errore piu' pericoloso del
+> corpus: un comando di annullamento che non viene riconosciuto come tale,
+> proprio nel momento in cui l'utente sta cercando di fermare qualcosa. Il
+> fast-path dei comandi di stop/annulla deve tollerare l'errore di una parola,
+> non fare confronto esatto.
+
+> ℹ️ **Il vocabolario di dominio ha risolto "Metis" → "Mattis".** Whisper
+> sbagliava il nome dell'assistente. Ora e' attivo per default e va esteso
+> ogni volta che emerge un termine ricorrente sbagliato.
 
 ---
 

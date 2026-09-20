@@ -1,0 +1,19 @@
+# Configurazione STT — decisa in M0 giorno 3 sulla base del corpus reale.
+#
+# small + vocabolario di dominio: WER 8,6% contro 11,4% senza.
+# 'medium' NON serve: costerebbe VRAM e latenza per un target gia' rispettato.
+
+[model]
+size         = "small"
+device       = "cuda"
+compute_type = "int8_float16"
+language     = "it"
+
+[domain_vocabulary]
+# Passato come initial_prompt. Non vincola l'uscita: sposta le probabilita'
+# verso parole che il modello non puo' indovinare. Senza questo, 'Metis'
+# veniva trascritto 'Mattis' — il nome stesso dell'assistente.
+# Va esteso man mano che emergono termini ricorrenti sbagliati.
+prompt = """Metis. Visual Studio Code. GitHub Desktop. Ollama. \
+friggitrice ad aria. Banca Centrale Europea. investing punto com. \
+schermo, finestra, monitor, promemoria, commercialista."""
