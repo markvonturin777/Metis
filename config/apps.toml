@@ -1,0 +1,12 @@
+# Allowlist eseguibili — serve in M2 (Capability Broker).
+# Percorsi rilevati automaticamente sulla macchina il 2026-09-20.
+# Il modello puo' nominare SOLO le chiavi di questa tabella, e il broker
+# verifica comunque il percorso. Doppia barriera, voluta.
+
+[apps]
+vscode         = "C:/Users/Marco/AppData/Local/Programs/Microsoft VS Code/Code.exe"
+github_desktop = "C:/Users/Marco/AppData/Local/GitHubDesktop/GitHubDesktop.exe"
+
+# Da completare quando i percorsi saranno verificati:
+# chrome = "C:/Program Files/Google/Chrome/Application/chrome.exe"
+#   nota M4: aggiungere --remote-debugging-port=9222 per Playwright via CDP

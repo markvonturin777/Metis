@@ -1,0 +1,47 @@
+[project]
+name = "metis"
+version = "0.1.0"
+description = "Assistente personale vocale locale per Windows"
+requires-python = ">=3.12,<3.13"
+
+# Dipendenze della sola M0 (walking skeleton).
+# Le altre si aggiungono iterazione per iterazione, non tutte subito:
+# serve sapere quale pacchetto ha rotto cosa.
+dependencies = [
+    # audio
+    "sounddevice",
+    "soundfile",
+    "numpy",
+    "silero-vad",
+    "pynput",
+    # percezione
+    "faster-whisper",
+    # inferenza
+    "ollama",
+    # sintesi
+    "kokoro",
+    # telemetria
+    "nvidia-ml-py",
+    "psutil",
+    # osservabilita
+    "structlog",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-cov", "ruff"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+# Senza questo, l'autodiscovery scambia SPECS/, TRACKING/, Claude/ e config/
+# per pacchetti Python e rifiuta di procedere.
+include = ["metis*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -9,7 +9,8 @@
 | **Fine** | — |
 | **Tag** | `m0-skeleton` |
 
-**Avanzamento:** `█░░░░░░░░░░░░░░░░░░░` 5% — attività 2/37 · criteri di uscita 0/8
+**Avanzamento:** `████░░░░░░░░░░░░░░░░` 24% — attività 9/38 · criteri di uscita 0/8
+**Giorno 1 di 7: completato.**
 
 > **Obiettivo:** rispondere con numeri misurati a *sta in 8 GB?* e *risponde in meno di 2 secondi?*
 
@@ -26,19 +27,19 @@
 | VS Code | `%LOCALAPPDATA%\Programs\Microsoft VS Code\Code.exe` | Già in `config/apps.toml` per M2 |
 | GitHub Desktop | `%LOCALAPPDATA%\GitHubDesktop\GitHubDesktop.exe` | Idem |
 | Git | 2.25.0 | OK |
-| Python | **assente** | Presente solo l'alias Microsoft Store |
-| Ollama | **assente** | Da installare |
-| Disco C: | **27 GB liberi** su 233 GB | ⚠️ Sotto la soglia di 30 GB. Basta per M0 (~14 GB), ma è stretto |
+| Python | **3.12.10** installato | Inizialmente presente solo l'alias Microsoft Store |
+| Ollama | **0.34.2** installato, server su :11434 | Nessun account necessario: il sign-in serve solo ai modelli cloud |
+| Disco C: | 27 GB → **34,9 GB liberi** dopo pulizia | Rientrato. Venv 1,14 GB + modello 5,2 GB |
 
 ---
 
 ## 1. Prerequisiti
 
 - [x] Windows aggiornato, driver NVIDIA recenti — driver 581.08
-- [ ] Python 3.12 installato — `py -3.12 --version`
+- [x] Python 3.12 installato — 3.12.10
 - [x] Git configurato — 2.25.0
 - [ ] Microfono e cuffie funzionanti a livello di sistema
-- [ ] ≥ 30 GB liberi su disco — **27 GB: liberarne un po', oppure procedere accettando il margine stretto**
+- [x] ≥ 30 GB liberi su disco — 34,9 GB dopo pulizia
 
 ---
 
@@ -46,16 +47,16 @@
 
 ### Giorno 1 — Ambiente e infrastruttura di misura
 
-- [ ] venv creato e attivo
+- [x] venv creato e attivo — 1,14 GB
 - [x] `pyproject.toml` con le dipendenze M0 — *solo le dipendenze di M0, le altre si aggiungono iterazione per iterazione*
 - [x] Impalcatura creata: `metis/{core,audio,stt,tts,llm}`, `benchmarks/`, `config/`, `data/`, `.gitignore`
-- [ ] `torch` con CUDA installato **prima** delle altre dipendenze
-- [ ] `torch.cuda.is_available()` restituisce `True`
-- [ ] Ollama installato, `qwen3:8b` e `qwen3:4b` scaricati
-- [ ] Variabili di sistema impostate: `OLLAMA_KV_CACHE_TYPE=q8_0`, `OLLAMA_FLASH_ATTENTION=1`, `OLLAMA_KEEP_ALIVE=-1`
-- [ ] Servizio Ollama riavviato dopo le variabili
+- [x] `torch` installato — **CPU-only 2.9.1+cpu**: nulla nel nostro stack usa torch per la GPU, risparmiati ~4 GB
+- [x] ~~`torch.cuda.is_available()`~~ — **non applicabile**: la GPU la usano Ollama e CTranslate2, non torch
+- [x] Ollama installato, `qwen3:8b` scaricato — *4B rimandato: l'8B passa tutto con margine*
+- [x] Variabili impostate e **verificate nel log del server**: `FLASH_ATTENTION:true`, `KV_CACHE_TYPE:q8_0`, `KEEP_ALIVE:infinito`
+- [x] Servizio Ollama riavviato dopo le variabili
 - [x] `benchmarks/vram_latency.py` scritto — *da verificare all'esecuzione*
-- [ ] Prima misura VRAM + tok/s di `qwen3:8b` registrata
+- [x] Prima misura VRAM + tok/s di `qwen3:8b` registrata
 
 ### Giorno 2 — Cattura audio, VAD, push-to-talk
 
@@ -109,14 +110,38 @@
 
 ### 3.1 Risultati per modello
 
+Misurato il 2026-09-20, 10 run, `num_ctx=8192`, KV cache `q8_0`, flash attention on.
+Dettaglio: `benchmarks/results/bench_20260920_180904.json`
+
 | Metrica | Target | Qwen3 8B | Qwen3 4B | Esito |
 | :-- | :-- | :-- | :-- | :-: |
-| Picco VRAM | ≤ 7,2 GB | — | — | ⬜ |
-| TTFT p50 | < 400 ms | — | — | ⬜ |
-| tok/s | ≥ 45 | — | — | ⬜ |
-| Latenza e2e p50 | < 1,2 s | — | — | ⬜ |
-| Latenza e2e p95 | < 1,8 s | — | — | ⬜ |
-| Qualità italiano | soggettiva | — | — | ⬜ |
+| Picco VRAM | ≤ 7,2 GB | **6,08 GB** | non scaricato | ✅ |
+| TTFT p50 (prompt breve) | < 400 ms | **33 ms** | — | ✅ |
+| TTFT p95 (prompt breve) | — | 47 ms | — | ✅ |
+| tok/s | ≥ 45 | **67,1** | — | ✅ |
+| Temp GPU max | — | 54 °C | — | ✅ |
+| Caricamento a freddo | — | 57,8 s | — | ℹ️ rilevante per M7 |
+| Latenza e2e p50 | < 1,2 s | da misurare al giorno 6 | — | ⬜ |
+| Latenza e2e p95 | < 1,8 s | da misurare al giorno 6 | — | ⬜ |
+| Qualità italiano | soggettiva | da valutare al giorno 5 | — | ⬜ |
+
+> **Qwen3 4B non è stato scaricato.** L'8B passa tutti i criteri con ampio margine: il confronto serve solo se qualcosa peggiora. Risparmiati 2,6 GB.
+
+### 3.1-bis TTFT al crescere del contesto — `benchmarks/ctx_sweep.py`
+
+Il benchmark principale usa prompt da ~50 token, dove il TTFT è quasi nullo.
+NFR-2 parla di contesto ≤ 2k, quindi serviva lo sweep.
+
+| Prompt reale | TTFT medio | NFR-2 (< 400 ms) |
+| ---: | ---: | :-: |
+| 228 tok | 83 ms | ✅ |
+| 943 tok | 159 ms | ✅ |
+| 3.643 tok | 627 ms | ❌ |
+| 7.343 tok | 854 ms | ❌ |
+
+**Velocità di prefill ricavata: ~5.800 tok/s.** A 2k token il TTFT si colloca intorno ai 330–400 ms: NFR-2 è rispettato al limite, e la soglia "≤ 2k" nella sua formulazione si rivela ben scelta.
+
+**Conseguenza di progetto:** il percorso conversazionale (contesto breve) sta largamente dentro il budget. Il percorso RAG di M5, che il §10.3 della specifica prevede fino a ~3.500 token di contenuto web, paga **~600 ms di TTFT** — ma è interamente assorbito dal filler vocale, che copre già 1,5–4 s di rete. Il progetto regge; da verificare di nuovo in M5 con il contesto reale.
 
 ### 3.2 Ripartizione della latenza
 
@@ -134,13 +159,15 @@ Serve a sapere **dove** intervenire se il totale sfora.
 
 ### 3.3 Budget VRAM reale
 
-| Consumatore | Stimato | Misurato |
-| :-- | ---: | ---: |
-| Desktop Windows baseline | 0,8–1,5 GB | — |
-| LLM 8B Q4_K_M | ~4,7 GB | — |
-| KV cache q8_0, 8k | ~0,4 GB | — |
-| STT faster-whisper small | ~0,6 GB | — |
-| **Totale** | **6,5–7,2 GB** | — |
+| Consumatore | Stimato | Misurato | Delta |
+| :-- | ---: | ---: | :-- |
+| Desktop Windows baseline | 0,8–1,5 GB | **0,66 GB** | meglio del previsto |
+| LLM 8B Q4_K_M + KV cache q8_0 | ~5,1 GB | **5,42 GB** | +0,3 GB |
+| STT faster-whisper small | ~0,6 GB | da misurare al giorno 3 | — |
+| **Totale con LLM caricato** | 6,5–7,2 GB | **6,08 GB** | — |
+| **Totale previsto con STT** | — | **~6,7 GB** | margine ~1,3 GB su 8 |
+
+> Il budget di §3.2 della specifica regge. Kokoro e Silero restano su CPU come previsto, quindi non incidono.
 
 ---
 
