@@ -1,3 +1,7 @@
+> ⚠️ **DOCUMENTO ARCHIVIATO — non più normativo.**
+> Sostituito da [`Metis_V1.0_Specifica_Ufficiale.md`](Metis_V1.0_Specifica_Ufficiale.md) in data 2026-09-20.
+> Conservato come storico della fase di ideazione. Le correzioni applicate sono elencate nel §2 (Changelog) della specifica ufficiale, e motivate in [`report_bozza_Metis_V16.md`](report_bozza_Metis_V16.md).
+
 # **Bozza di Progetto: Assistente Personale "Metis" V16**
 
 ## **1\. Obiettivo del Progetto**
