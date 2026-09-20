@@ -1,0 +1,25 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Dati locali: modelli, log, database. Mai nel repository.
+data/*
+!data/.gitkeep
+!data/logs/.gitkeep
+
+# Risultati di benchmark: si committano solo quelli scelti, a mano
+benchmarks/results/*.json
+benchmarks/results/*.jsonl
+
+# Segreti — non dovrebbero mai esistere come file, ma per sicurezza
+.env
+*.key
+secrets.toml
+
+# Windows
+Thumbs.db
+desktop.ini
