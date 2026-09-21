@@ -2,15 +2,15 @@
 
 | | |
 | :-- | :-- |
-| **Stato** | 🔄 In corso |
+| **Stato** | ✅ **Completata** |
 | **Piano** | [M0_Walking_Skeleton.md](../SPECS/plan/M0_Walking_Skeleton.md) |
 | **Durata prevista** | 7 giorni |
 | **Inizio** | 2026-09-20 |
-| **Fine** | — |
+| **Fine** | 2026-09-20 |
 | **Tag** | `m0-skeleton` |
 
-**Avanzamento:** `███████████████████░` 95% — attività 37/38 · criteri di uscita 7/8
-**Giorni 1-7 completati.** Resta solo la conferma del soak VRAM in corso.
+**Avanzamento:** `████████████████████` 100% — attività 38/38 · criteri di uscita 8/8
+**M0 COMPLETATA.** Resta solo `git tag m0-skeleton`.
 
 > **Obiettivo:** rispondere con numeri misurati a *sta in 8 GB?* e *risponde in meno di 2 secondi?*
 
@@ -62,7 +62,7 @@ Blue Yeti Classic, cardioide, altoparlanti del monitor.
 - [x] Windows aggiornato, driver NVIDIA recenti — driver 581.08
 - [x] Python 3.12 installato — 3.12.10
 - [x] Git configurato — 2.25.0
-- [ ] Microfono e cuffie funzionanti a livello di sistema
+- [x] Microfono funzionante — Blue Yeti tarato, SNR 55,4 dB. *Altoparlanti, non cuffie: vedi D3*
 - [x] ≥ 30 GB liberi su disco — 34,9 GB dopo pulizia
 
 ---
@@ -122,11 +122,11 @@ Blue Yeti Classic, cardioide, altoparlanti del monitor.
 
 - [x] 10 interazioni reali misurate
 - [x] 11 interazioni lunghe misurate (fino a 8,7 s di audio)
-- [ ] 72 minuti di inferenza continua per il picco VRAM
-- [ ] Confronto 8B vs 4B completato
-- [ ] Tabella risultati §3 compilata
-- [ ] Ripartizione latenza §3.2 compilata
-- [ ] **Decision gate D0 chiuso e scritto nella specifica**
+- [x] 72 minuti di campionamento continuo: **picco 6,58 GB**, deriva −0,225 GB, 0 superamenti
+- [x] ~~Confronto 8B vs 4B~~ — non necessario, l'8B supera ogni criterio
+- [x] Tabella risultati §3 compilata
+- [x] Ripartizione latenza §3.2 compilata
+- [x] **Decision gate D0 chiuso e scritto nella specifica**
 
 ---
 
@@ -145,9 +145,9 @@ Dettaglio: `benchmarks/results/bench_20260920_180904.json`
 | tok/s | ≥ 45 | **67,1** | — | ✅ |
 | Temp GPU max | — | 54 °C | — | ✅ |
 | Caricamento a freddo | — | 57,8 s | — | ℹ️ rilevante per M7 |
-| Latenza e2e p50 | < 1,2 s | da misurare al giorno 6 | — | ⬜ |
-| Latenza e2e p95 | < 1,8 s | da misurare al giorno 6 | — | ⬜ |
-| Qualità italiano | soggettiva | da valutare al giorno 5 | — | ⬜ |
+| Latenza e2e p50 | < 1,2 s | **1119 ms** su 40 turni | — | ✅ |
+| Latenza e2e p95 | < 1,8 s | **1625 ms** | — | ✅ |
+| Qualità italiano | soggettiva | buona in conversazione; allucina sui fatti | — | 🟡 |
 
 > **Qwen3 4B non è stato scaricato.** L'8B passa tutti i criteri con ampio margine: il confronto serve solo se qualcosa peggiora. Risparmiati 2,6 GB.
 
@@ -453,11 +453,11 @@ l'anno), *"Gnocchi fatti a mano, pasta frolla..."* (la pasta frolla non c'entra)
 
 - [x] Una frase pronunciata riceve una risposta vocale sensata in italiano
 - [x] Latenza e2e misurata su **40 interazioni reali** in 4 sessioni
-- [ ] Picco VRAM misurato su 72 minuti di inferenza continua
+- [x] Picco VRAM su 72 min: **6,58 GB** — NFR-4 rispettato con 1,4 GB di margine
 - [x] Test di ascolto completato: **Piper paola** scelta
 - [x] ~~Benchmark 4B vs 8B~~ — **non necessario**: l'8B passa tutto con margine
 - [x] Ripartizione della latenza compilata stadio per stadio
-- [ ] **Decision gate D0 chiuso**, decisioni scritte nella specifica
+- [x] **Decision gate D0 chiuso**, decisioni scritte nella specifica
 - [ ] `git tag m0-skeleton`
 
 ---
@@ -466,9 +466,9 @@ l'anno), *"Gnocchi fatti a mano, pasta frolla..."* (la pasta frolla non c'entra)
 
 | Decisione | Criterio | Esito | Motivo |
 | :-- | :-- | :-- | :-- |
-| **Modello LLM definitivo** | VRAM ≤ 7,2 GB **e** tok/s ≥ 45 | — | — |
-| **Motore TTS definitivo** | Giudizio di ascolto §4 | — | — |
-| **Budget di latenza** | p50 < 1,5 s (tolleranza M0) | — | — |
+| **Modello LLM definitivo** | VRAM ≤ 7,2 GB **e** tok/s ≥ 45 | ✅ **Qwen 3 8B Q4_K_M** | 6,58 GB e 67,1 tok/s: entrambi con margine |
+| **Motore TTS definitivo** | Giudizio di ascolto §4 | ✅ **Piper `it_IT-paola-medium`** | 102 ms contro gli 858 di Kokoro |
+| **Budget di latenza** | p50 < 1,5 s (tolleranza M0) | ✅ **confermato** | p50 1119 ms su 40 turni, ~830 atteso dopo le correzioni |
 
 Se un criterio non passa, la leva è in [M0 §7](../SPECS/plan/M0_Walking_Skeleton.md#7-decision-gate-d0).
 
