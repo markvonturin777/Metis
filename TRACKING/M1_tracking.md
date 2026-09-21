@@ -2,14 +2,15 @@
 
 | | |
 | :-- | :-- |
-| **Stato** | ⬜ Non iniziata |
+| **Stato** | 🔄 In corso |
 | **Piano** | [M1_Fondamenta_Vocali.md](../SPECS/plan/M1_Fondamenta_Vocali.md) |
 | **Durata prevista** | 8 giorni |
-| **Inizio** | — |
+| **Inizio** | 2026-09-21 |
 | **Fine** | — |
 | **Tag** | `m1-voice` |
 
-**Avanzamento:** `░░░░░░░░░░░░░░░░░░░░` 0% — attività 0/31 · criteri di uscita 0/9
+**Avanzamento:** `██████░░░░░░░░░░░░░░` 30% — attività 7/31 · criteri di uscita 0/9
+**Macchina a stati completata** (giorni 5-6 anticipati). Wake word: in attesa del test di pronuncia.
 
 > **Obiettivo:** rendere il sistema capace di stare acceso senza impazzire.
 
@@ -17,10 +18,10 @@
 
 ## 1. Prerequisiti
 
-- [ ] M0 chiuso, D0 completato
-- [ ] Modello LLM e motore TTS definitivi scelti
-- [ ] Catena vocale funzionante da push-to-talk
-- [ ] Piper installato (serve per i dati sintetici della wake word)
+- [x] M0 chiuso, D0 completato
+- [x] Qwen 3 8B + Piper `it_IT-paola-medium`
+- [x] Catena vocale funzionante, 40 turni misurati
+- [x] Piper installato + **`en_US-libritts_r-medium`: 904 parlanti** per la varietà
 
 ---
 
@@ -42,13 +43,13 @@
 
 ### Giorni 5–6 — Macchina a stati
 
-- [ ] `State` enum con tutti gli 11 stati, inclusi quelli non ancora usati
-- [ ] `Event` enum
-- [ ] **Tabella `TRANSITIONS` come dato**, non catena di `if`
-- [ ] Transizione non prevista → log, **mai** eccezione
-- [ ] Timeout per stato implementati (8 s, 30 s, 5 s, 30 s, 20 s)
-- [ ] Macchina testabile senza audio, con eventi iniettati
-- [ ] Test: 100 eventi casuali fuori sequenza, nessuna eccezione
+- [x] `State` con 11 stati, inclusi quelli che serviranno a M2 e M5
+- [x] `Event` con 18 eventi
+- [x] **`TRANSITIONS` come dizionario**: 34 transizioni, testabili senza audio
+- [x] Transizione non prevista: registrata in `rejected`, stato invariato, mai eccezione
+- [x] Timeout per **ogni** stato. `ATTESA_CONFERMA`=20 s, uguale al broker di M2
+- [x] Macchina testabile senza audio: **20 test dedicati**
+- [x] Test: 100 eventi casuali fuori sequenza, nessuna eccezione
 
 ### Giorno 7 — Anti-eco e barge-in
 
@@ -67,6 +68,44 @@
 - [ ] Ogni transizione di stato produce una riga di log
 - [ ] Schema `audit` SQLite creato
 - [ ] Audit log append-only: nessun `UPDATE`/`DELETE` nel codice
+
+---
+
+## 2-bis. Note di esecuzione - 2026-09-21
+
+### Varietà dei parlanti: risolta
+
+Le due voci italiane di Piper sono a **parlante singolo**: un modello
+addestrato solo su quelle riconoscerebbe due timbri e nient'altro.
+`en_US-libritts_r-medium` ne ha **904**, ed è la fonte di varietà.
+
+`SynthesisConfig` espone `speaker_id`, `length_scale` (velocità),
+`noise_scale` e `noise_w_scale`: tutte le leve necessarie. Costo misurato
+**72 ms a campione**, quindi 4000 positivi in ~5 minuti.
+
+### Pronuncia: rischio aperto
+
+Un parlante inglese dice "Metis" come /ˈmiːtɪs/, un italiano /ˈmɛtis/.
+Addestrare sui 904 timbri inglesi con la pronuncia sbagliata darebbe un
+modello sordo a come l'utente parla davvero.
+
+Generato un set di confronto in `wakeword/pronuncia/` con 5 grafie
+alternative - Metis, Mettis, Mehtis, Metiss, Met-iss - da confrontare con le
+due voci italiane di riferimento. **In attesa del giudizio di ascolto.**
+
+Piano B se nessuna grafia funziona: ribilanciare verso le voci italiane e
+compensare la poca varietà con augmentation più aggressiva, più registrazioni
+reali dal Blue Yeti.
+
+### Anticipata la macchina a stati
+
+I giorni 5-6 sono stati fatti prima, perché il training della wake word
+dipende da una decisione dell'utente mentre la macchina a stati no.
+
+Due proprietà verificate **da test, non per ispezione**:
+- nessuno stato irraggiungibile e nessun vicolo cieco;
+- il timeout di `ATTESA_CONFERMA` (20 s) coincide con quello che userà il
+  broker in M2. Se divergessero, uno dei due si bloccherebbe.
 
 ---
 

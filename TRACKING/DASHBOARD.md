@@ -3,7 +3,7 @@
 > Stato vivo del progetto. Si aggiorna mentre si lavora.
 > Riferimento: [Specifica V1.0](../SPECS/Metis_V1.0_Specifica_Ufficiale.md) · [Piano](../SPECS/plan/README.md)
 
-**Ultimo aggiornamento:** 2026-09-20 — **M0 completata**
+**Ultimo aggiornamento:** 2026-09-21 — M1 avviata, macchina a stati completata
 
 ---
 
@@ -25,7 +25,7 @@ Un file per iterazione. Ogni file ha: prerequisiti, attività spuntabili, misure
 | # | Iterazione | Stato | Attività | Criteri uscita | Inizio | Fine | Tag |
 | :-- | :-- | :-: | ---: | ---: | :-- | :-- | :-- |
 | **M0** | [Walking Skeleton](M0_tracking.md) | ✅ | 38/38 | 8/8 | 2026-09-20 | 2026-09-20 | `m0-skeleton` |
-| **M1** | [Fondamenta Vocali](M1_tracking.md) | ⬜ | 0/30 | 0/9 | — | — | `m1-voice` |
+| **M1** | [Fondamenta Vocali](M1_tracking.md) | 🔄 | 7/31 | 0/9 | 2026-09-21 | — | `m1-voice` |
 | **M2** | [Capability Broker](M2_tracking.md) | ⬜ | 0/36 | 0/10 | — | — | `m2-broker` |
 | **M3** | [Interfaccia Grafica](M3_tracking.md) | ⬜ | 0/38 | 0/10 | — | — | `m3-gui` |
 | **M4** | [Automazione PC](M4_tracking.md) | ⬜ | 0/31 | 0/12 | — | — | `m4-automation` |
@@ -36,7 +36,7 @@ Un file per iterazione. Ogni file ha: prerequisiti, attività spuntabili, misure
 
 > Oltre a queste ci sono **30 caselle di prerequisito** e **131 esiti di test** nelle tabelle dei singoli file: 531 punti di controllo in totale.
 
-**Iterazione corrente:** M0 chiusa → **M1** · **Prossima attività:** training wake word, vedi [wakeword/README.md](../wakeword/README.md)
+**Iterazione corrente:** **M1** · **Prossima attività:** test di pronuncia in `wakeword/pronuncia/`, poi generazione del corpus
 
 ---
 
