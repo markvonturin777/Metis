@@ -1,0 +1,29 @@
+{
+ "sessione": "20260921_112545",
+ "ore": 0.007,
+ "blocchi": 747,
+ "soglia": 0.95,
+ "consecutive": 2,
+ "risvegli": 0,
+ "risvegli_per_8h": 0.0,
+ "punteggio_p50": 0.00038889050483703613,
+ "punteggio_p99": 0.6636898207664442,
+ "punteggio_p9999": 0.7678784132003784,
+ "punteggio_max": 0.7678784132003784,
+ "livello_medio_dbfs": -52.54041711639827,
+ "eventi": [
+  {
+   "t_s": 2.8,
+   "picco": 0.7678784132003784,
+   "risveglio": false,
+   "wav": "picco_00002.8s_0.768.wav"
+  },
+  {
+   "t_s": 18.3,
+   "picco": 0.7350651025772095,
+   "risveglio": false,
+   "wav": "picco_00018.3s_0.735.wav"
+  }
+ ],
+ "file_rumore": 0
+}

@@ -60,6 +60,16 @@ class Deps:
     tts_synth: Callable[[str], object]
     player: object
     system_prompt: str = ""
+    # Il rilevatore non riceve frame in TRASCRIZIONE ed ELABORAZIONE: al
+    # rientro il suo buffer interno conterrebbe audio di prima della pausa,
+    # incollato a quello di adesso. Si azzera prima di riprendere.
+    wake_reset: Callable[[], None] | None = None
+    on_error: Callable[[BaseException], None] | None = None
+    # Il turno gira su un thread proprio e le sue transizioni finiscono nel
+    # log insieme a quelle del thread audio. Senza l'identificativo, in una
+    # sessione lunga non si capisce piu' quale riga appartenga a quale turno.
+    on_turn_start: Callable[[str], None] | None = None
+    on_turn_end: Callable[[TurnMetrics], None] | None = None
 
 
 @dataclass
@@ -70,6 +80,7 @@ class Counters:
     frames_muted: int = 0
     turns: int = 0
     discarded: int = 0
+    errors: int = 0
     cancel_latency_ms: list[float] = field(default_factory=list)
 
 
@@ -86,6 +97,7 @@ class Orchestrator:
         )
         self._worker: threading.Thread | None = None
         self._lock = threading.Lock()
+        self._wake_gap = False        # il rilevatore ha saltato dei frame
         self.synchronous = False      # solo nei test: evita i thread
 
     # -- ingresso audio ----------------------------------------------------
@@ -101,10 +113,17 @@ class Orchestrator:
         # Il rilevatore di wake word riceve anche durante PARLATO: e' il
         # barge-in. Cerca un pattern specifico, quindi l'eco degli
         # altoparlanti non lo attiva come farebbe con un VAD generico.
-        if self.sm.wake_active and self.d.wakeword(block.pcm):
-            self.counters.wake_detections += 1
-            self._on_wake_word()
-            return
+        if self.sm.wake_active:
+            if self._wake_gap:
+                self._wake_gap = False
+                if self.d.wake_reset is not None:
+                    self.d.wake_reset()
+            if self.d.wakeword(block.pcm):
+                self.counters.wake_detections += 1
+                self._on_wake_word()
+                return
+        else:
+            self._wake_gap = True
 
         # Half-duplex: in PARLATO, DORMIENTE e INTERROTTO i frame NON
         # raggiungono VAD e STT. Lo stream resta aperto, i blocchi si
@@ -123,17 +142,35 @@ class Orchestrator:
             self.sm.fire(Event.SPEECH_START)
 
     def _on_wake_word(self) -> None:
+        self._attiva(Event.WAKE_WORD)
+
+    def on_ptt(self) -> None:
+        """Pressione del push-to-talk. Fa le stesse cose della wake word.
+
+        In V1.0, con la wake word spenta, questo e' l'UNICO modo di
+        interrompere Metis mentre parla. Il kill switch zittisce e riporta a
+        DORMIENTE: e' "taci", non "taci e ascoltami".
+        """
+        self._attiva(Event.PTT)
+
+    def _attiva(self, evento: Event) -> None:
+        """Wake word e push-to-talk sono due porte sullo stesso corridoio.
+
+        Tenere due implementazioni separate vorrebbe dire che un giorno il
+        barge-in da tastiera dimentica una delle tre cose da fermare, e il
+        difetto salterebbe fuori solo in uno dei due modi di usare Metis.
+        """
         st = self.sm.state
         if st in (State.PARLATO, State.GENERAZIONE):
             t0 = time.perf_counter()
-            self.sm.fire(Event.WAKE_WORD)          # -> INTERROTTO
+            self.sm.fire(evento)                   # -> INTERROTTO
             self._stop_everything()
             self.counters.barge_ins += 1
             self.counters.cancel_latency_ms.append((time.perf_counter() - t0) * 1000)
             self.sm.fire(Event.TTS_STOPPED)        # -> IN_ASCOLTO
             self.seg.reset()
-        elif st is State.DORMIENTE:
-            self.sm.fire(Event.WAKE_WORD)
+        elif self.sm.fire(evento) is not st:
+            # DORMIENTE -> IN_ASCOLTO, oppure il PTT che chiude l'ascolto.
             self.seg.reset()
 
     def _stop_everything(self) -> None:
@@ -155,12 +192,27 @@ class Orchestrator:
         """Il turno gira su un thread proprio: altrimenti `on_audio` resta
         bloccato e il barge-in non puo' essere rilevato."""
         if self.synchronous:
-            self._process(segment)
+            self._run_turn(segment)
             return
         self._worker = threading.Thread(
-            target=self._process, args=(segment,), daemon=True, name="metis-turn"
+            target=self._run_turn, args=(segment,), daemon=True, name="metis-turn"
         )
         self._worker.start()
+
+    def _run_turn(self, segment: Segment) -> None:
+        """Guscio del turno. Ollama va giu', il modello TTS manca un file, la
+        scheda audio sparisce: sul thread del turno un'eccezione passerebbe
+        inosservata e lascerebbe la macchina appesa fino al timeout, cioe' 30
+        secondi di Metis muto. Si chiude invece in ERRORE, che dura 5 s.
+        """
+        try:
+            self._process(segment)
+        except Exception as exc:                 # noqa: BLE001 - qui si cattura tutto
+            self.counters.errors += 1
+            self._stop_everything()
+            if self.d.on_error is not None:
+                self.d.on_error(exc)
+            self.sm.fire(Event.FAILED)
 
     # -- turno -------------------------------------------------------------
 
@@ -171,6 +223,8 @@ class Orchestrator:
             t_endpoint=segment.t_endpoint,
             audio_s=segment.duration_s,
         )
+        if self.d.on_turn_start is not None:
+            self.d.on_turn_start(m.turn_id)
         tr = self.d.stt(segment.pcm)
         m.t_stt_done = time.perf_counter()
         m.transcript = getattr(tr, "text", "")
@@ -217,11 +271,35 @@ class Orchestrator:
             self.history.append({"role": "assistant", "content": gm.text})
         self.counters.turns += 1
         m.append_to_log()
+        if self.d.on_turn_end is not None:
+            self.d.on_turn_end(m)
 
         self.d.player.wait_drained()
-        self.sm.fire(Event.PLAYBACK_DONE)
+
+        # Solo se questo turno e' ancora quello corrente. Durante l'attesa
+        # puo' essere arrivato un barge-in e l'utente puo' aver gia' iniziato
+        # un turno nuovo: PLAYBACK_DONE sparato adesso riporterebbe a
+        # IN_ASCOLTO una macchina che sta gia' parlando per il turno dopo, e
+        # il microfono riaprirebbe sull'eco.
+        with self._lock:
+            corrente = self._cancel is tok and not tok.cancelled
+        if corrente:
+            self.sm.fire(Event.PLAYBACK_DONE)
 
     # -- manutenzione ------------------------------------------------------
+
+    def panic(self) -> None:
+        """Kill switch: silenzio immediato e ritorno a DORMIENTE.
+
+        Non passa dalla tabella delle transizioni di proposito: deve
+        funzionare da QUALUNQUE stato, compresi quelli in cui la macchina
+        fosse bloccata. E' l'unica scorciatoia ammessa, e c'e' perche'
+        l'utente deve poter zittire Metis senza dipendere dal fatto che la
+        macchina a stati sia sana.
+        """
+        self._stop_everything()
+        self.seg.reset()
+        self.sm.reset()
 
     def tick(self) -> None:
         """Da chiamare ~1 Hz: fa scattare i timeout degli stati."""

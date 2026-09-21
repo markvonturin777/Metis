@@ -1,5 +1,25 @@
 # M1 — Fondamenta Vocali
 
+> ## ⏸️ Esito: wake word rimandata alla v2 — D1, 2026-09-21
+>
+> Questo piano è stato eseguito per intero, ma **la wake word non entra in
+> V1.0**: 57 auto-inneschi in 125 minuti di prova NFR-7, contro un requisito
+> di zero. L'attivazione della V1.0 è il **push-to-talk**, che la specifica
+> prevedeva già come permanente.
+>
+> Il modello (v3, riaddestrato con negativi duri reali), i banchi di prova e
+> i dati restano in repository. Si riaccende con `enabled = true` in
+> `config/wakeword.toml`.
+>
+> Tutto ciò che questo piano descrive su macchina a stati, gating
+> half-duplex, `WAKE_ACTIVE` e barge-in **resta valido e in produzione**: è
+> quello che rende la riaccensione una riga di configurazione. Il barge-in in
+> V1.0 passa dal push-to-talk e percorre lo stesso codice.
+>
+> Decisione completa: [§21 della specifica](../Metis_V1.0_Specifica_Ufficiale.md) ·
+> misure: [TRACKING/M1_tracking.md](../../TRACKING/M1_tracking.md)
+
+
 > **Maturità:** P1 Attento · **Durata:** 1,5 settimane (8 giorni) · **Tag:** `m1-voice`
 
 ---

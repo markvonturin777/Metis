@@ -1,0 +1,1323 @@
+{
+ "sessione": "20260921_114628",
+ "minuti": 125.0,
+ "soglia": 0.95,
+ "consecutive": 2,
+ "db_silenzio": -84.1,
+ "db_voce": -48.7,
+ "delta_db": 35.4,
+ "frasi_pronunciate": 2464,
+ "secondi_di_voce": 7329.1,
+ "fase_A": {
+  "blocchi": 206286,
+  "scatti": 57,
+  "scatti_doppia_fase": 20,
+  "p99": 0.04110005497932434,
+  "max": 0.9972414970397949
+ },
+ "fase_B": {
+  "blocchi": 3703,
+  "scatti": 3,
+  "scatti_doppia_fase": 2,
+  "p99": 0.036420345306396484,
+  "max": 0.9949806332588196
+ },
+ "eventi": [
+  {
+   "fase": "A",
+   "t_s": 78.4,
+   "picco": 0.5496371388435364,
+   "scatto": false,
+   "frase": "Il documento conta quarantadue pagine, indice escluso.",
+   "wav": "A_picco_00078.4s_0.550.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 99.4,
+   "picco": 0.9153616428375244,
+   "scatto": false,
+   "frase": "Non ho capito bene, puoi ripetere la seconda parte?",
+   "wav": "A_picco_00099.4s_0.915.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 108.7,
+   "picco": 0.5414251685142517,
+   "scatto": false,
+   "frase": "Ho notato che il grafico non include gli ultimi due mesi.",
+   "wav": "A_picco_00108.7s_0.541.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 117.4,
+   "picco": 0.9151419997215271,
+   "scatto": false,
+   "frase": "Metti pure quel foglio dove preferisci, tanto lo rivedo domani.",
+   "wav": "A_picco_00117.4s_0.915.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 195.1,
+   "picco": 0.8692600727081299,
+   "scatto": false,
+   "frase": "Mattia ha scritto poco fa, chiede conferma per giovedi'.",
+   "wav": "A_picco_00195.1s_0.869.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 226.6,
+   "picco": 0.6443644762039185,
+   "scatto": false,
+   "frase": "Non sono sicuro di aver capito la domanda, la riformulo.",
+   "wav": "A_picco_00226.6s_0.644.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 235.7,
+   "picco": 0.9319322109222412,
+   "scatto": false,
+   "frase": "Nel frattempo ho preparato una bozza, la trovi in allegato.",
+   "wav": "A_picco_00235.7s_0.932.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 241.9,
+   "picco": 0.9752994775772095,
+   "scatto": true,
+   "frase": "Preferisci che te lo riassuma o che te lo legga per intero?",
+   "wav": "A_SCATTO_00241.9s_0.975.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 263.8,
+   "picco": 0.9770472645759583,
+   "scatto": true,
+   "frase": "La batteria del portatile e' al ventidue per cento.",
+   "wav": "A_SCATTO_00263.8s_0.977.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 272.1,
+   "picco": 0.7887516021728516,
+   "scatto": false,
+   "frase": "Se serve posso cercare qualcosa di piu' aggiornato in rete.",
+   "wav": "A_picco_00272.1s_0.789.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 293.5,
+   "picco": 0.9763844013214111,
+   "scatto": true,
+   "frase": "Ammettiamo per un attimo che l'ipotesi sia corretta.",
+   "wav": "A_SCATTO_00293.5s_0.976.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 375.4,
+   "picco": 0.9209809303283691,
+   "scatto": false,
+   "frase": "La batteria del portatile e' al ventidue per cento.",
+   "wav": "A_picco_00375.4s_0.921.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 402.0,
+   "picco": 0.6748247742652893,
+   "scatto": false,
+   "frase": "Purtroppo quel collegamento non funziona piu', e' scaduto.",
+   "wav": "A_picco_00402.0s_0.675.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 417.7,
+   "picco": 0.8774725198745728,
+   "scatto": false,
+   "frase": "Quel progetto e' fermo da settimane per mancanza di tempo.",
+   "wav": "A_picco_00417.7s_0.877.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 427.1,
+   "picco": 0.980383574962616,
+   "scatto": true,
+   "frase": "Il meteo per il fine settimana prevede pioggia e sedici gradi.",
+   "wav": "A_SCATTO_00427.1s_0.980.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 433.1,
+   "picco": 0.9971319437026978,
+   "scatto": true,
+   "frase": "Ho trovato tre articoli sull'argomento, il piu' recente e' di marzo.",
+   "wav": "A_SCATTO_00433.1s_0.997.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 448.9,
+   "picco": 0.820502519607544,
+   "scatto": false,
+   "frase": "Sono le undici e dodici, ti restano venti minuti.",
+   "wav": "A_picco_00448.9s_0.821.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 520.0,
+   "picco": 0.6091362237930298,
+   "scatto": false,
+   "frase": "L'aggiornamento richiedera' circa dieci minuti, poi si riavvia.",
+   "wav": "A_picco_00520.0s_0.609.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 544.2,
+   "picco": 0.9421891570091248,
+   "scatto": false,
+   "frase": "Non ho capito bene, puoi ripetere la seconda parte?",
+   "wav": "A_picco_00544.2s_0.942.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 592.9,
+   "picco": 0.789324939250946,
+   "scatto": false,
+   "frase": "Ti ricordo che alle diciotto hai una chiamata con il fornitore.",
+   "wav": "A_picco_00592.9s_0.789.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 614.3,
+   "picco": 0.962661623954773,
+   "scatto": true,
+   "frase": "Il meteo per il fine settimana prevede pioggia e sedici gradi.",
+   "wav": "A_SCATTO_00614.3s_0.963.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 662.4,
+   "picco": 0.9783228635787964,
+   "scatto": true,
+   "frase": "L'aggiornamento richiedera' circa dieci minuti, poi si riavvia.",
+   "wav": "A_SCATTO_00662.4s_0.978.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 664.9,
+   "picco": 0.6525167226791382,
+   "scatto": false,
+   "frase": "L'aggiornamento richiedera' circa dieci minuti, poi si riavvia.",
+   "wav": "A_picco_00664.9s_0.653.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 693.1,
+   "picco": 0.9502041339874268,
+   "scatto": true,
+   "frase": "Non ho capito bene, puoi ripetere la seconda parte?",
+   "wav": "A_SCATTO_00693.1s_0.950.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 696.3,
+   "picco": 0.6445469856262207,
+   "scatto": false,
+   "frase": "Ho trovato tre articoli sull'argomento, il piu' recente e' di marzo.",
+   "wav": "A_picco_00696.3s_0.645.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 769.6,
+   "picco": 0.9862585067749023,
+   "scatto": true,
+   "frase": "L'aggiornamento richiedera' circa dieci minuti, poi si riavvia.",
+   "wav": "A_SCATTO_00769.6s_0.986.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 775.8,
+   "picco": 0.945923924446106,
+   "scatto": false,
+   "frase": "Mettiamoci d'accordo su un orario che vada bene a tutti.",
+   "wav": "A_picco_00775.8s_0.946.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 793.9,
+   "picco": 0.6697210669517517,
+   "scatto": false,
+   "frase": "Ho trovato tre articoli sull'argomento, il piu' recente e' di marzo.",
+   "wav": "A_picco_00793.9s_0.670.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 803.3,
+   "picco": 0.828015923500061,
+   "scatto": false,
+   "frase": "Preferisci che te lo riassuma o che te lo legga per intero?",
+   "wav": "A_picco_00803.3s_0.828.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 838.9,
+   "picco": 0.5824636220932007,
+   "scatto": false,
+   "frase": "Ti ricordo che alle diciotto hai una chiamata con il fornitore.",
+   "wav": "A_picco_00838.9s_0.582.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 842.1,
+   "picco": 0.9145084619522095,
+   "scatto": false,
+   "frase": "Preferisci che te lo riassuma o che te lo legga per intero?",
+   "wav": "A_picco_00842.1s_0.915.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 894.7,
+   "picco": 0.9609067440032959,
+   "scatto": true,
+   "frase": "Ti ricordo che alle diciotto hai una chiamata con il fornitore.",
+   "wav": "A_SCATTO_00894.7s_0.961.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 930.1,
+   "picco": 0.9676337242126465,
+   "scatto": true,
+   "frase": "Mettiamoci d'accordo su un orario che vada bene a tutti.",
+   "wav": "A_SCATTO_00930.1s_0.968.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 967.9,
+   "picco": 0.826720654964447,
+   "scatto": false,
+   "frase": "Metti pure quel foglio dove preferisci, tanto lo rivedo domani.",
+   "wav": "A_picco_00967.9s_0.827.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 982.3,
+   "picco": 0.534850001335144,
+   "scatto": false,
+   "frase": "Mi sembra che manchi ancora la firma sull'ultimo documento.",
+   "wav": "A_picco_00982.3s_0.535.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1017.5,
+   "picco": 0.8589787483215332,
+   "scatto": false,
+   "frase": "L'aggiornamento richiedera' circa dieci minuti, poi si riavvia.",
+   "wav": "A_picco_01017.5s_0.859.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1022.5,
+   "picco": 0.8612252473831177,
+   "scatto": false,
+   "frase": "Direi che possiamo chiudere qui e riprendere lunedi'.",
+   "wav": "A_picco_01022.5s_0.861.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1058.7,
+   "picco": 0.9816395044326782,
+   "scatto": true,
+   "frase": "Ho messo da parte gli appunti, sono nella stessa cartella di prima.",
+   "wav": "A_SCATTO_01058.7s_0.982.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1080.5,
+   "picco": 0.9915575385093689,
+   "scatto": true,
+   "frase": "Smettila di preoccuparti, il backup e' andato a buon fine.",
+   "wav": "A_SCATTO_01080.5s_0.992.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1099.0,
+   "picco": 0.9353955984115601,
+   "scatto": false,
+   "frase": "Non sono sicuro di aver capito la domanda, la riformulo.",
+   "wav": "A_picco_01099.0s_0.935.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1182.8,
+   "picco": 0.6210991740226746,
+   "scatto": false,
+   "frase": "Ho trovato tre articoli sull'argomento, il piu' recente e' di marzo.",
+   "wav": "A_picco_01182.8s_0.621.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1188.4,
+   "picco": 0.9938618540763855,
+   "scatto": true,
+   "frase": "Metti pure quel foglio dove preferisci, tanto lo rivedo domani.",
+   "wav": "A_SCATTO_01188.4s_0.994.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1382.2,
+   "picco": 0.5952606797218323,
+   "scatto": false,
+   "frase": "La stampante segnala carta esaurita nel cassetto inferiore.",
+   "wav": "A_picco_01382.2s_0.595.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1444.7,
+   "picco": 0.9860472679138184,
+   "scatto": true,
+   "frase": "Non sono sicuro di aver capito la domanda, la riformulo.",
+   "wav": "A_SCATTO_01444.7s_0.986.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1467.3,
+   "picco": 0.9779495000839233,
+   "scatto": true,
+   "frase": "Preferisci che te lo riassuma o che te lo legga per intero?",
+   "wav": "A_SCATTO_01467.3s_0.978.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1486.6,
+   "picco": 0.6772618293762207,
+   "scatto": false,
+   "frase": "Mettiamoci d'accordo su un orario che vada bene a tutti.",
+   "wav": "A_picco_01486.6s_0.677.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1528.8,
+   "picco": 0.6744423508644104,
+   "scatto": false,
+   "frase": "Se serve posso cercare qualcosa di piu' aggiornato in rete.",
+   "wav": "A_picco_01528.8s_0.674.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1557.2,
+   "picco": 0.9935352802276611,
+   "scatto": true,
+   "frase": "Mi sembra che manchi ancora la firma sull'ultimo documento.",
+   "wav": "A_SCATTO_01557.2s_0.994.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1584.3,
+   "picco": 0.8056042194366455,
+   "scatto": false,
+   "frase": "Secondo i dati, il consumo e' calato del sette per cento.",
+   "wav": "A_picco_01584.3s_0.806.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1605.9,
+   "picco": 0.5212138295173645,
+   "scatto": false,
+   "frase": "Secondo i dati, il consumo e' calato del sette per cento.",
+   "wav": "A_picco_01605.9s_0.521.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1612.8,
+   "picco": 0.9412319660186768,
+   "scatto": false,
+   "frase": "Non sono sicuro di aver capito la domanda, la riformulo.",
+   "wav": "A_picco_01612.8s_0.941.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1642.3,
+   "picco": 0.9581340551376343,
+   "scatto": true,
+   "frase": "Non ho capito bene, puoi ripetere la seconda parte?",
+   "wav": "A_SCATTO_01642.3s_0.958.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1662.9,
+   "picco": 0.8778557777404785,
+   "scatto": false,
+   "frase": "La stampante segnala carta esaurita nel cassetto inferiore.",
+   "wav": "A_picco_01662.9s_0.878.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1675.2,
+   "picco": 0.9199373126029968,
+   "scatto": false,
+   "frase": "Non ho capito bene, puoi ripetere la seconda parte?",
+   "wav": "A_picco_01675.2s_0.920.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1725.7,
+   "picco": 0.9549206495285034,
+   "scatto": true,
+   "frase": "Mattia ha scritto poco fa, chiede conferma per giovedi'.",
+   "wav": "A_SCATTO_01725.7s_0.955.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1734.7,
+   "picco": 0.9467978477478027,
+   "scatto": false,
+   "frase": "Il file si trova nella cartella dei documenti condivisi.",
+   "wav": "A_picco_01734.7s_0.947.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1738.0,
+   "picco": 0.9209389686584473,
+   "scatto": false,
+   "frase": "Il file si trova nella cartella dei documenti condivisi.",
+   "wav": "A_picco_01738.0s_0.921.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1741.4,
+   "picco": 0.9588685035705566,
+   "scatto": true,
+   "frase": "Se serve posso cercare qualcosa di piu' aggiornato in rete.",
+   "wav": "A_SCATTO_01741.4s_0.959.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1763.0,
+   "picco": 0.9772520065307617,
+   "scatto": true,
+   "frase": "La riunione di domani e' stata spostata alle quattordici e trenta.",
+   "wav": "A_SCATTO_01763.0s_0.977.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1771.0,
+   "picco": 0.977934718132019,
+   "scatto": true,
+   "frase": "Mattia ha scritto poco fa, chiede conferma per giovedi'.",
+   "wav": "A_SCATTO_01771.0s_0.978.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1773.5,
+   "picco": 0.8893309831619263,
+   "scatto": false,
+   "frase": "Il documento conta quarantadue pagine, indice escluso.",
+   "wav": "A_picco_01773.5s_0.889.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1781.8,
+   "picco": 0.9920591115951538,
+   "scatto": true,
+   "frase": "Smettila di preoccuparti, il backup e' andato a buon fine.",
+   "wav": "A_SCATTO_01781.8s_0.992.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1790.7,
+   "picco": 0.6383984088897705,
+   "scatto": false,
+   "frase": "Se serve posso cercare qualcosa di piu' aggiornato in rete.",
+   "wav": "A_picco_01790.7s_0.638.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1806.8,
+   "picco": 0.8516205549240112,
+   "scatto": false,
+   "frase": "Ehi, mi senti bene adesso o c'e' ancora un'eco?",
+   "wav": "A_picco_01806.8s_0.852.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1811.2,
+   "picco": 0.5435949563980103,
+   "scatto": false,
+   "frase": "Il file si trova nella cartella dei documenti condivisi.",
+   "wav": "A_picco_01811.2s_0.544.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1821.4,
+   "picco": 0.8536938428878784,
+   "scatto": false,
+   "frase": "Ho aggiornato il foglio di calcolo con i numeri di ieri sera.",
+   "wav": "A_picco_01821.4s_0.854.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1836.1,
+   "picco": 0.9831959009170532,
+   "scatto": true,
+   "frase": "Mettiamoci d'accordo su un orario che vada bene a tutti.",
+   "wav": "A_SCATTO_01836.1s_0.983.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1853.3,
+   "picco": 0.9773430824279785,
+   "scatto": true,
+   "frase": "Preferisci che te lo riassuma o che te lo legga per intero?",
+   "wav": "A_SCATTO_01853.3s_0.977.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1860.9,
+   "picco": 0.7862732410430908,
+   "scatto": false,
+   "frase": "Ho notato che il grafico non include gli ultimi due mesi.",
+   "wav": "A_picco_01860.9s_0.786.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1879.6,
+   "picco": 0.8631718158721924,
+   "scatto": false,
+   "frase": "Non ho capito bene, puoi ripetere la seconda parte?",
+   "wav": "A_picco_01879.6s_0.863.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1905.2,
+   "picco": 0.9644162654876709,
+   "scatto": true,
+   "frase": "Ho messo da parte gli appunti, sono nella stessa cartella di prima.",
+   "wav": "A_SCATTO_01905.2s_0.964.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1955.0,
+   "picco": 0.9648593068122864,
+   "scatto": true,
+   "frase": "L'aggiornamento richiedera' circa dieci minuti, poi si riavvia.",
+   "wav": "A_SCATTO_01955.0s_0.965.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1960.4,
+   "picco": 0.6533865928649902,
+   "scatto": false,
+   "frase": "Purtroppo quel collegamento non funziona piu', e' scaduto.",
+   "wav": "A_picco_01960.4s_0.653.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 1974.1,
+   "picco": 0.6417708396911621,
+   "scatto": false,
+   "frase": "Purtroppo quel collegamento non funziona piu', e' scaduto.",
+   "wav": "A_picco_01974.1s_0.642.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 2040.0,
+   "picco": 0.990605354309082,
+   "scatto": true,
+   "frase": "Metti pure quel foglio dove preferisci, tanto lo rivedo domani.",
+   "wav": "A_SCATTO_02040.0s_0.991.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 2081.3,
+   "picco": 0.983173131942749,
+   "scatto": true,
+   "frase": "Preferisci che te lo riassuma o che te lo legga per intero?",
+   "wav": "A_SCATTO_02081.3s_0.983.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 2198.5,
+   "picco": 0.977796196937561,
+   "scatto": true,
+   "frase": "Se serve posso cercare qualcosa di piu' aggiornato in rete.",
+   "wav": "A_SCATTO_02198.5s_0.978.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 2231.4,
+   "picco": 0.9845997095108032,
+   "scatto": true,
+   "frase": "Secondo i dati, il consumo e' calato del sette per cento.",
+   "wav": "A_SCATTO_02231.4s_0.985.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 2264.4,
+   "picco": 0.9754674434661865,
+   "scatto": true,
+   "frase": "Ho aggiornato il foglio di calcolo con i numeri di ieri sera.",
+   "wav": "A_SCATTO_02264.4s_0.975.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 2275.7,
+   "picco": 0.9850521087646484,
+   "scatto": true,
+   "frase": "Non sono sicuro di aver capito la domanda, la riformulo.",
+   "wav": "A_SCATTO_02275.7s_0.985.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 2312.3,
+   "picco": 0.660068154335022,
+   "scatto": false,
+   "frase": "Metti pure quel foglio dove preferisci, tanto lo rivedo domani.",
+   "wav": "A_picco_02312.3s_0.660.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 2330.0,
+   "picco": 0.5769028067588806,
+   "scatto": false,
+   "frase": "Secondo i dati, il consumo e' calato del sette per cento.",
+   "wav": "A_picco_02330.0s_0.577.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 2563.9,
+   "picco": 0.5479490160942078,
+   "scatto": false,
+   "frase": "Secondo i dati, il consumo e' calato del sette per cento.",
+   "wav": "A_picco_02563.9s_0.548.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 2599.9,
+   "picco": 0.7055206298828125,
+   "scatto": false,
+   "frase": "Purtroppo quel collegamento non funziona piu', e' scaduto.",
+   "wav": "A_picco_02599.9s_0.706.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 2657.5,
+   "picco": 0.930547297000885,
+   "scatto": false,
+   "frase": "Ho trovato tre articoli sull'argomento, il piu' recente e' di marzo.",
+   "wav": "A_picco_02657.5s_0.931.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 2670.7,
+   "picco": 0.7001729607582092,
+   "scatto": false,
+   "frase": "La mattina presto il traffico e' molto piu' scorrevole.",
+   "wav": "A_picco_02670.7s_0.700.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 2679.9,
+   "picco": 0.9535914659500122,
+   "scatto": true,
+   "frase": "La riunione di domani e' stata spostata alle quattordici e trenta.",
+   "wav": "A_SCATTO_02679.9s_0.954.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 3193.8,
+   "picco": 0.7015883922576904,
+   "scatto": false,
+   "frase": "Ho messo da parte gli appunti, sono nella stessa cartella di prima.",
+   "wav": "A_picco_03193.8s_0.702.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 3379.7,
+   "picco": 0.8288443088531494,
+   "scatto": false,
+   "frase": "Quel progetto e' fermo da settimane per mancanza di tempo.",
+   "wav": "A_picco_03379.7s_0.829.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 3419.4,
+   "picco": 0.9641721248626709,
+   "scatto": true,
+   "frase": "La riunione di domani e' stata spostata alle quattordici e trenta.",
+   "wav": "A_SCATTO_03419.4s_0.964.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 3428.2,
+   "picco": 0.7495845556259155,
+   "scatto": false,
+   "frase": "Mattia ha scritto poco fa, chiede conferma per giovedi'.",
+   "wav": "A_picco_03428.2s_0.750.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 3441.2,
+   "picco": 0.8684216737747192,
+   "scatto": false,
+   "frase": "Mattia ha scritto poco fa, chiede conferma per giovedi'.",
+   "wav": "A_picco_03441.2s_0.868.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 3493.1,
+   "picco": 0.9229276180267334,
+   "scatto": false,
+   "frase": "Mi sembra che manchi ancora la firma sull'ultimo documento.",
+   "wav": "A_picco_03493.1s_0.923.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 3538.1,
+   "picco": 0.993951678276062,
+   "scatto": true,
+   "frase": "Secondo i dati, il consumo e' calato del sette per cento.",
+   "wav": "A_SCATTO_03538.1s_0.994.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 3723.2,
+   "picco": 0.5742367506027222,
+   "scatto": false,
+   "frase": "Mettiamoci d'accordo su un orario che vada bene a tutti.",
+   "wav": "A_picco_03723.2s_0.574.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 3794.5,
+   "picco": 0.6381062269210815,
+   "scatto": false,
+   "frase": "Non sono sicuro di aver capito la domanda, la riformulo.",
+   "wav": "A_picco_03794.5s_0.638.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 3822.3,
+   "picco": 0.9055981040000916,
+   "scatto": false,
+   "frase": "Ho aggiornato il foglio di calcolo con i numeri di ieri sera.",
+   "wav": "A_picco_03822.3s_0.906.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 3855.7,
+   "picco": 0.6975580453872681,
+   "scatto": false,
+   "frase": "Ehi, mi senti bene adesso o c'e' ancora un'eco?",
+   "wav": "A_picco_03855.7s_0.698.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 3898.1,
+   "picco": 0.8376436233520508,
+   "scatto": false,
+   "frase": "Sono le undici e dodici, ti restano venti minuti.",
+   "wav": "A_picco_03898.1s_0.838.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 3948.1,
+   "picco": 0.9037582874298096,
+   "scatto": false,
+   "frase": "Preferisci che te lo riassuma o che te lo legga per intero?",
+   "wav": "A_picco_03948.1s_0.904.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 4041.4,
+   "picco": 0.5575539469718933,
+   "scatto": false,
+   "frase": "Ehi, mi senti bene adesso o c'e' ancora un'eco?",
+   "wav": "A_picco_04041.4s_0.558.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 4106.0,
+   "picco": 0.9309399724006653,
+   "scatto": false,
+   "frase": "Ho trovato tre articoli sull'argomento, il piu' recente e' di marzo.",
+   "wav": "A_picco_04106.0s_0.931.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 4135.5,
+   "picco": 0.5176215767860413,
+   "scatto": false,
+   "frase": "Il meteo per il fine settimana prevede pioggia e sedici gradi.",
+   "wav": "A_picco_04135.5s_0.518.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 4156.2,
+   "picco": 0.9254804849624634,
+   "scatto": false,
+   "frase": "Direi che possiamo chiudere qui e riprendere lunedi'.",
+   "wav": "A_picco_04156.2s_0.925.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 4195.3,
+   "picco": 0.5995824933052063,
+   "scatto": false,
+   "frase": "Metti pure quel foglio dove preferisci, tanto lo rivedo domani.",
+   "wav": "A_picco_04195.3s_0.600.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 4215.9,
+   "picco": 0.980365514755249,
+   "scatto": true,
+   "frase": "La riunione di domani e' stata spostata alle quattordici e trenta.",
+   "wav": "A_SCATTO_04215.9s_0.980.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 4218.6,
+   "picco": 0.9858735799789429,
+   "scatto": true,
+   "frase": "Ammettiamo per un attimo che l'ipotesi sia corretta.",
+   "wav": "A_SCATTO_04218.6s_0.986.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 4324.0,
+   "picco": 0.7111425399780273,
+   "scatto": false,
+   "frase": "La mattina presto il traffico e' molto piu' scorrevole.",
+   "wav": "A_picco_04324.0s_0.711.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 4389.8,
+   "picco": 0.9534403085708618,
+   "scatto": true,
+   "frase": "Smettila di preoccuparti, il backup e' andato a buon fine.",
+   "wav": "A_SCATTO_04389.8s_0.953.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 4402.1,
+   "picco": 0.5346472263336182,
+   "scatto": false,
+   "frase": "Ehi, mi senti bene adesso o c'e' ancora un'eco?",
+   "wav": "A_picco_04402.1s_0.535.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 4419.4,
+   "picco": 0.9588395357131958,
+   "scatto": true,
+   "frase": "Ho trovato tre articoli sull'argomento, il piu' recente e' di marzo.",
+   "wav": "A_SCATTO_04419.4s_0.959.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 4440.9,
+   "picco": 0.789105236530304,
+   "scatto": false,
+   "frase": "Non sono sicuro di aver capito la domanda, la riformulo.",
+   "wav": "A_picco_04440.9s_0.789.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 4456.1,
+   "picco": 0.6400808095932007,
+   "scatto": false,
+   "frase": "Ehi, mi senti bene adesso o c'e' ancora un'eco?",
+   "wav": "A_picco_04456.1s_0.640.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 4459.1,
+   "picco": 0.9742395877838135,
+   "scatto": true,
+   "frase": "Non ho capito bene, puoi ripetere la seconda parte?",
+   "wav": "A_SCATTO_04459.1s_0.974.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 4592.0,
+   "picco": 0.9408428072929382,
+   "scatto": false,
+   "frase": "L'aggiornamento richiedera' circa dieci minuti, poi si riavvia.",
+   "wav": "A_picco_04592.0s_0.941.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 4655.7,
+   "picco": 0.8399949073791504,
+   "scatto": false,
+   "frase": "Purtroppo quel collegamento non funziona piu', e' scaduto.",
+   "wav": "A_picco_04655.7s_0.840.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 4676.0,
+   "picco": 0.7853214740753174,
+   "scatto": false,
+   "frase": "Secondo i dati, il consumo e' calato del sette per cento.",
+   "wav": "A_picco_04676.0s_0.785.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 4704.8,
+   "picco": 0.9360369443893433,
+   "scatto": false,
+   "frase": "Ho aggiornato il foglio di calcolo con i numeri di ieri sera.",
+   "wav": "A_picco_04704.8s_0.936.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 4745.7,
+   "picco": 0.5805329084396362,
+   "scatto": false,
+   "frase": "Ho messo da parte gli appunti, sono nella stessa cartella di prima.",
+   "wav": "A_picco_04745.7s_0.581.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 4795.7,
+   "picco": 0.790810227394104,
+   "scatto": false,
+   "frase": "Mettiamoci d'accordo su un orario che vada bene a tutti.",
+   "wav": "A_picco_04795.7s_0.791.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 4799.1,
+   "picco": 0.9787616729736328,
+   "scatto": true,
+   "frase": "Direi che possiamo chiudere qui e riprendere lunedi'.",
+   "wav": "A_SCATTO_04799.1s_0.979.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 4802.1,
+   "picco": 0.9610297679901123,
+   "scatto": true,
+   "frase": "Ho aggiornato il foglio di calcolo con i numeri di ieri sera.",
+   "wav": "A_SCATTO_04802.1s_0.961.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 4804.9,
+   "picco": 0.9696694612503052,
+   "scatto": true,
+   "frase": "Il meteo per il fine settimana prevede pioggia e sedici gradi.",
+   "wav": "A_SCATTO_04804.9s_0.970.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 4822.9,
+   "picco": 0.7698827981948853,
+   "scatto": false,
+   "frase": "Direi che possiamo chiudere qui e riprendere lunedi'.",
+   "wav": "A_picco_04822.9s_0.770.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 4876.8,
+   "picco": 0.7873370051383972,
+   "scatto": false,
+   "frase": "Nel frattempo ho preparato una bozza, la trovi in allegato.",
+   "wav": "A_picco_04876.8s_0.787.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 4892.6,
+   "picco": 0.7808198928833008,
+   "scatto": false,
+   "frase": "Non sono sicuro di aver capito la domanda, la riformulo.",
+   "wav": "A_picco_04892.6s_0.781.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 4939.8,
+   "picco": 0.8505477905273438,
+   "scatto": false,
+   "frase": "Ho trovato tre articoli sull'argomento, il piu' recente e' di marzo.",
+   "wav": "A_picco_04939.8s_0.851.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 4949.7,
+   "picco": 0.9728792905807495,
+   "scatto": true,
+   "frase": "Nel frattempo ho preparato una bozza, la trovi in allegato.",
+   "wav": "A_SCATTO_04949.7s_0.973.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 4952.0,
+   "picco": 0.9852874279022217,
+   "scatto": true,
+   "frase": "La batteria del portatile e' al ventidue per cento.",
+   "wav": "A_SCATTO_04952.0s_0.985.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 4962.0,
+   "picco": 0.9680641889572144,
+   "scatto": true,
+   "frase": "Smettila di preoccuparti, il backup e' andato a buon fine.",
+   "wav": "A_SCATTO_04962.0s_0.968.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 5043.3,
+   "picco": 0.9897128343582153,
+   "scatto": true,
+   "frase": "Ho trovato tre articoli sull'argomento, il piu' recente e' di marzo.",
+   "wav": "A_SCATTO_05043.3s_0.990.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 5266.3,
+   "picco": 0.8364700078964233,
+   "scatto": false,
+   "frase": "La stampante segnala carta esaurita nel cassetto inferiore.",
+   "wav": "A_picco_05266.3s_0.836.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 5275.2,
+   "picco": 0.9861305952072144,
+   "scatto": true,
+   "frase": "Ti ricordo che alle diciotto hai una chiamata con il fornitore.",
+   "wav": "A_SCATTO_05275.2s_0.986.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 5402.9,
+   "picco": 0.7795604467391968,
+   "scatto": false,
+   "frase": "Se serve posso cercare qualcosa di piu' aggiornato in rete.",
+   "wav": "A_picco_05402.9s_0.780.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 5468.1,
+   "picco": 0.9687905311584473,
+   "scatto": true,
+   "frase": "Nel frattempo ho preparato una bozza, la trovi in allegato.",
+   "wav": "A_SCATTO_05468.1s_0.969.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 5494.6,
+   "picco": 0.5313900113105774,
+   "scatto": false,
+   "frase": "Nel frattempo ho preparato una bozza, la trovi in allegato.",
+   "wav": "A_picco_05494.6s_0.531.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 5571.4,
+   "picco": 0.7393767833709717,
+   "scatto": false,
+   "frase": "Sono le undici e dodici, ti restano venti minuti.",
+   "wav": "A_picco_05571.4s_0.739.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 5600.1,
+   "picco": 0.927838921546936,
+   "scatto": false,
+   "frase": "Sono le undici e dodici, ti restano venti minuti.",
+   "wav": "A_picco_05600.1s_0.928.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 5645.4,
+   "picco": 0.5839503407478333,
+   "scatto": false,
+   "frase": "Mettiamoci d'accordo su un orario che vada bene a tutti.",
+   "wav": "A_picco_05645.4s_0.584.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 5705.1,
+   "picco": 0.7123628854751587,
+   "scatto": false,
+   "frase": "Sono le undici e dodici, ti restano venti minuti.",
+   "wav": "A_picco_05705.1s_0.712.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 5967.3,
+   "picco": 0.7428731322288513,
+   "scatto": false,
+   "frase": "Purtroppo quel collegamento non funziona piu', e' scaduto.",
+   "wav": "A_picco_05967.3s_0.743.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 6085.9,
+   "picco": 0.5774494409561157,
+   "scatto": false,
+   "frase": "L'aggiornamento richiedera' circa dieci minuti, poi si riavvia.",
+   "wav": "A_picco_06085.9s_0.577.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 6182.6,
+   "picco": 0.9972414970397949,
+   "scatto": true,
+   "frase": "Ho aggiornato il foglio di calcolo con i numeri di ieri sera.",
+   "wav": "A_SCATTO_06182.6s_0.997.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 6209.8,
+   "picco": 0.9731943011283875,
+   "scatto": true,
+   "frase": "Mi sembra che manchi ancora la firma sull'ultimo documento.",
+   "wav": "A_SCATTO_06209.8s_0.973.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 6238.6,
+   "picco": 0.9685772657394409,
+   "scatto": true,
+   "frase": "Il file si trova nella cartella dei documenti condivisi.",
+   "wav": "A_SCATTO_06238.6s_0.969.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 6266.4,
+   "picco": 0.9724682569503784,
+   "scatto": true,
+   "frase": "Non ho capito bene, puoi ripetere la seconda parte?",
+   "wav": "A_SCATTO_06266.4s_0.972.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 6449.5,
+   "picco": 0.838834822177887,
+   "scatto": false,
+   "frase": "La stampante segnala carta esaurita nel cassetto inferiore.",
+   "wav": "A_picco_06449.5s_0.839.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 6522.7,
+   "picco": 0.9733466506004333,
+   "scatto": true,
+   "frase": "Ti ricordo che alle diciotto hai una chiamata con il fornitore.",
+   "wav": "A_SCATTO_06522.7s_0.973.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 6557.0,
+   "picco": 0.9512789249420166,
+   "scatto": true,
+   "frase": "Se serve posso cercare qualcosa di piu' aggiornato in rete.",
+   "wav": "A_SCATTO_06557.0s_0.951.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 6581.6,
+   "picco": 0.549019455909729,
+   "scatto": false,
+   "frase": "Preferisci che te lo riassuma o che te lo legga per intero?",
+   "wav": "A_picco_06581.6s_0.549.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 6596.4,
+   "picco": 0.9253597259521484,
+   "scatto": false,
+   "frase": "La mattina presto il traffico e' molto piu' scorrevole.",
+   "wav": "A_picco_06596.4s_0.925.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 6642.6,
+   "picco": 0.6709997653961182,
+   "scatto": false,
+   "frase": "Ehi, mi senti bene adesso o c'e' ancora un'eco?",
+   "wav": "A_picco_06642.6s_0.671.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 6714.4,
+   "picco": 0.67514967918396,
+   "scatto": false,
+   "frase": "Direi che possiamo chiudere qui e riprendere lunedi'.",
+   "wav": "A_picco_06714.4s_0.675.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 6803.6,
+   "picco": 0.6142253875732422,
+   "scatto": false,
+   "frase": "Mi sembra che manchi ancora la firma sull'ultimo documento.",
+   "wav": "A_picco_06803.6s_0.614.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 6857.1,
+   "picco": 0.9836372137069702,
+   "scatto": true,
+   "frase": "Non ho capito bene, puoi ripetere la seconda parte?",
+   "wav": "A_SCATTO_06857.1s_0.984.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 6950.9,
+   "picco": 0.7940469980239868,
+   "scatto": false,
+   "frase": "Mi sembra che manchi ancora la firma sull'ultimo documento.",
+   "wav": "A_picco_06950.9s_0.794.wav"
+  },
+  {
+   "fase": "A",
+   "t_s": 7084.2,
+   "picco": 0.9108113050460815,
+   "scatto": false,
+   "frase": "Mattia ha scritto poco fa, chiede conferma per giovedi'.",
+   "wav": "A_picco_07084.2s_0.911.wav"
+  },
+  {
+   "fase": "B",
+   "t_s": 7389.9,
+   "picco": 0.7696472406387329,
+   "scatto": false,
+   "frase": "Direi che possiamo chiudere qui e riprendere lunedi'.",
+   "wav": "B_picco_07389.9s_0.770.wav"
+  },
+  {
+   "fase": "B",
+   "t_s": 7418.6,
+   "picco": 0.9854736924171448,
+   "scatto": true,
+   "frase": "Il nome Metis viene dalla mitologia greca, significa saggezza astuta.",
+   "wav": "B_SCATTO_07418.6s_0.985.wav"
+  },
+  {
+   "fase": "B",
+   "t_s": 7437.5,
+   "picco": 0.8265867233276367,
+   "scatto": false,
+   "frase": "Mi chiamo Metis e sono il tuo assistente su questo computer.",
+   "wav": "B_picco_07437.5s_0.827.wav"
+  },
+  {
+   "fase": "B",
+   "t_s": 7449.2,
+   "picco": 0.9949806332588196,
+   "scatto": true,
+   "frase": "Se dici Hey Metis mentre sto parlando, mi interrompo.",
+   "wav": "B_SCATTO_07449.2s_0.995.wav"
+  },
+  {
+   "fase": "B",
+   "t_s": 7463.3,
+   "picco": 0.9694337844848633,
+   "scatto": true,
+   "frase": "Il nome Metis viene dalla mitologia greca, significa saggezza astuta.",
+   "wav": "B_SCATTO_07463.3s_0.969.wav"
+  }
+ ]
+}

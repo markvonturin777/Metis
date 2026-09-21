@@ -75,6 +75,10 @@ class Player:
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self.speaking = threading.Event()
+        # Che cosa sta suonando ADESSO. Serve a chi deve attribuire un evento
+        # acustico alla frase giusta: la coda tiene due frasi di anticipo,
+        # quindi "l'ultima sintetizzata" e' un'etichetta sbagliata.
+        self.now_playing = None
 
     def start(self) -> None:
         self._stop.clear()
@@ -84,21 +88,48 @@ class Player:
     def _loop(self) -> None:
         while not self._stop.is_set():
             try:
-                pcm = self._q.get(timeout=0.1)
+                item = self._q.get(timeout=0.1)
             except queue.Empty:
                 continue
+            if item is None:
+                continue
+            pcm, etichetta = item
             if pcm is None:
                 continue
             self.speaking.set()
+            self.now_playing = etichetta
             try:
                 sd.play(pcm, self.sample_rate)
                 sd.wait()
             finally:
                 if self._q.empty():
                     self.speaking.clear()
+                    self.now_playing = None
 
-    def enqueue(self, pcm: np.ndarray) -> None:
-        self._q.put(pcm)
+    def enqueue(self, pcm: np.ndarray, etichetta=None) -> None:
+        """L'etichetta e' facoltativa: chi deve sapere cosa sta suonando la
+        passa, gli altri no."""
+        self._q.put((pcm, etichetta))
+
+    def pending(self) -> int:
+        """Frasi ancora in coda. Serve a chi deve tenerla piena."""
+        return self._q.qsize()
+
+    def wait_drained(self, timeout: float = 120.0) -> bool:
+        """Attende che la coda sia vuota e l'ultima frase finita di suonare.
+
+        Serve a sapere QUANDO Metis ha smesso di parlare: e' il momento in cui
+        lo stato torna a IN_ASCOLTO e il microfono riprende. Senza, PLAYBACK_DONE
+        scatterebbe mentre gli altoparlanti stanno ancora suonando e i frame
+        dell'eco rientrerebbero nel VAD — esattamente il loop che M1 esiste per
+        rompere.
+        """
+        t0 = time.perf_counter()
+        while time.perf_counter() - t0 < timeout:
+            if self._q.empty() and not self.speaking.is_set():
+                return True
+            time.sleep(0.02)
+        return False
 
     def stop(self) -> None:
         """Interruzione immediata: audio fermo E coda svuotata.
@@ -107,6 +138,7 @@ class Player:
         Metis riprende a parlare con la frase successiva gia' accodata.
         """
         sd.stop()
+        self.now_playing = None
         while not self._q.empty():
             try:
                 self._q.get_nowait()

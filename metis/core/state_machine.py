@@ -68,6 +68,11 @@ STT_MUTED = frozenset({State.DORMIENTE, State.PARLATO, State.INTERROTTO})
 # Gli stati in cui il rilevatore di wake word resta attivo. Include PARLATO:
 # e' il livello L2, il barge-in. Il rilevatore cerca un pattern specifico ed
 # e' quindi intrinsecamente robusto all'eco dei propri altoparlanti.
+#
+# In V1.0 la wake word e' SPENTA e il barge-in passa dal push-to-talk, che
+# emette PTT negli stessi stati. L'insieme resta: e' il contratto che dice
+# "qui il microfono e' aperto mentre Metis parla", e cancellarlo renderebbe
+# caro riaccendere la wake word in v2.
 WAKE_ACTIVE = frozenset(
     {State.DORMIENTE, State.IN_ASCOLTO, State.PARLATO, State.GENERAZIONE}
 )
@@ -97,6 +102,7 @@ TRANSITIONS: dict[tuple[State, Event], State] = {
 
     (State.GENERAZIONE, Event.FIRST_AUDIO): State.PARLATO,
     (State.GENERAZIONE, Event.WAKE_WORD): State.INTERROTTO,    # barge-in precoce
+    (State.GENERAZIONE, Event.PTT): State.INTERROTTO,          # barge-in da tastiera
     (State.GENERAZIONE, Event.TIMEOUT): State.ERRORE,
     (State.GENERAZIONE, Event.FAILED): State.ERRORE,
 
@@ -110,7 +116,9 @@ TRANSITIONS: dict[tuple[State, Event], State] = {
     (State.ATTESA_CONFERMA, Event.TIMEOUT): State.PARLATO,     # rifiuto implicito
 
     (State.PARLATO, Event.WAKE_WORD): State.INTERROTTO,        # barge-in
+    (State.PARLATO, Event.PTT): State.INTERROTTO,              # barge-in da tastiera
     (State.PARLATO, Event.PLAYBACK_DONE): State.IN_ASCOLTO,
+    (State.PARLATO, Event.FAILED): State.ERRORE,              # riproduzione fallita
     (State.PARLATO, Event.TIMEOUT): State.IN_ASCOLTO,
 
     (State.INTERROTTO, Event.TTS_STOPPED): State.IN_ASCOLTO,

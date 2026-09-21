@@ -196,3 +196,153 @@ def test_trascrizione_sospetta_scartata():
     o._process(_segmento())
     assert o.counters.discarded == 1
     assert o.sm.state is State.IN_ASCOLTO
+
+
+# --- robustezza (aggiunti con l'integrazione end-to-end) ---------------------
+
+def test_il_rilevatore_si_azzera_dopo_una_pausa():
+    """Durante TRASCRIZIONE il rilevatore non riceve frame. Al rientro il suo
+    buffer interno contiene ancora l'audio di prima della pausa: incollato a
+    quello nuovo puo' formare un pattern che non e' mai stato pronunciato."""
+    azzeramenti = {"n": 0}
+    o, _ = make()
+    o.d.wake_reset = lambda: azzeramenti.__setitem__("n", azzeramenti["n"] + 1)
+
+    o.on_audio(blocco())                       # DORMIENTE: riceve, nessuna pausa
+    assert azzeramenti["n"] == 0
+
+    o.sm.fire(Event.WAKE_WORD); o.sm.fire(Event.SPEECH_START)
+    assert o.sm.wake_active is False
+    o.on_audio(blocco())                       # pausa: il rilevatore salta
+
+    o.sm.fire(Event.SPEECH_END); o.sm.fire(Event.INTENT_CHAT)
+    assert o.sm.wake_active is True
+    o.on_audio(blocco())
+    assert azzeramenti["n"] == 1, "il buffer non e' stato azzerato al rientro"
+    o.on_audio(blocco())
+    assert azzeramenti["n"] == 1, "azzerato di nuovo senza che ci fosse una pausa"
+
+
+def test_un_errore_nel_turno_non_appende_la_macchina():
+    """Ollama giu' a meta' generazione. Senza guscio lo stato resterebbe in
+    GENERAZIONE fino al timeout: 30 secondi di Metis muto."""
+    visti = []
+    o, player = make()
+    o.d.on_error = visti.append
+    def llm_rotto(history, cancel=None, **kw):
+        raise ConnectionError("ollama non risponde")
+        yield  # pragma: no cover - rende la funzione un generatore
+    o.d.llm_stream = llm_rotto
+
+    o.sm.fire(Event.WAKE_WORD); o.sm.fire(Event.SPEECH_START); o.sm.fire(Event.SPEECH_END)
+    o._run_turn(_segmento())
+
+    assert o.counters.errors == 1
+    assert isinstance(visti[0], ConnectionError)
+    assert o.sm.state is State.ERRORE, "la macchina e' rimasta appesa"
+    assert player.stopped == 1, "l'audio gia' accodato continuerebbe a suonare"
+
+
+def test_errore_durante_la_riproduzione_finisce_in_errore():
+    """Da PARLATO: senza la transizione PARLATO+FAILED si aspetterebbero 120 s."""
+    o, _ = make()
+    for ev in (Event.WAKE_WORD, Event.SPEECH_START, Event.SPEECH_END,
+               Event.INTENT_CHAT, Event.FIRST_AUDIO):
+        o.sm.fire(ev)
+    assert o.sm.state is State.PARLATO
+    assert o.sm.fire(Event.FAILED) is State.ERRORE
+
+
+def test_panic_zittisce_da_qualunque_stato():
+    """Il kill switch non puo' dipendere dalla salute della macchina a stati."""
+    from metis.llm.client import CancelToken
+    for stato in State:
+        o, player = make()
+        o.sm._state = stato
+        o._cancel = CancelToken()
+        o.panic()
+        assert o.sm.state is State.DORMIENTE, f"panic non ha funzionato da {stato.name}"
+        assert player.stopped == 1
+        assert o.cancelled
+
+
+def test_playback_done_di_un_turno_superato_non_passa():
+    """Il turno 1 finisce di attendere DOPO che il turno 2 e' gia' partito.
+    Sparare PLAYBACK_DONE allora riaprirebbe il microfono sull'eco del turno 2."""
+    o, player = make(n_chunks=1)
+    o.sm.fire(Event.WAKE_WORD); o.sm.fire(Event.SPEECH_START); o.sm.fire(Event.SPEECH_END)
+
+    class PlayerLento(FakePlayer):
+        """Mentre il turno 1 attende, arriva il turno 2."""
+        def wait_drained(self):
+            self.drained += 1
+            o._cancel = __import__("metis.llm.client", fromlist=["x"]).CancelToken()
+    o.d.player = PlayerLento()
+
+    o._process(_segmento())
+    assert o.sm.state is State.PARLATO, "il turno superato ha riaperto il microfono"
+
+
+# --- push-to-talk come unica via in V1.0 -------------------------------------
+
+def test_il_ptt_interrompe_metis_mentre_parla():
+    """Con la wake word spenta e' l'unico modo di interrompere.
+
+    Prima di D1 questo non funzionava: (PARLATO, PTT) non era in tabella,
+    quindi premere la scorciatoia mentre Metis parlava non faceva nulla.
+    """
+    from metis.llm.client import CancelToken
+    o, player = make()
+    for ev in (Event.PTT, Event.SPEECH_START, Event.SPEECH_END,
+               Event.INTENT_CHAT, Event.FIRST_AUDIO):
+        o.sm.fire(ev)
+    assert o.sm.state is State.PARLATO
+    o._cancel = CancelToken()
+    player.queue.extend([1, 2, 3])
+
+    o.on_ptt()
+
+    assert player.stopped == 1, "l'audio non e' stato fermato"
+    assert player.queue == [], "la coda non e' stata svuotata"
+    assert o.cancelled, "lo stream LLM non e' stato annullato"
+    assert o.sm.state is State.IN_ASCOLTO, "non e' tornato in ascolto"
+    assert o.counters.barge_ins == 1
+
+
+def test_il_ptt_interrompe_anche_durante_la_generazione():
+    from metis.llm.client import CancelToken
+    o, player = make()
+    for ev in (Event.PTT, Event.SPEECH_START, Event.SPEECH_END, Event.INTENT_CHAT):
+        o.sm.fire(ev)
+    assert o.sm.state is State.GENERAZIONE
+    o._cancel = CancelToken()
+    o.on_ptt()
+    assert o.cancelled and o.sm.state is State.IN_ASCOLTO
+
+
+def test_il_ptt_resta_un_interruttore():
+    """Il comportamento di sempre non deve essersi rotto."""
+    o, _ = make()
+    assert o.sm.state is State.DORMIENTE
+    o.on_ptt()
+    assert o.sm.state is State.IN_ASCOLTO
+    o.on_ptt()
+    assert o.sm.state is State.DORMIENTE
+
+
+def test_ptt_e_wake_word_percorrono_la_stessa_strada():
+    """Due implementazioni separate del barge-in divergono: una delle due
+    dimenticherebbe una delle tre cose da fermare."""
+    from metis.llm.client import CancelToken
+    esiti = []
+    for via in ("ptt", "wake"):
+        o, player = make(wake_on_call=1 if via == "wake" else None)
+        for ev in (Event.PTT, Event.SPEECH_START, Event.SPEECH_END,
+                   Event.INTENT_CHAT, Event.FIRST_AUDIO):
+            o.sm.fire(ev)
+        o._cancel = CancelToken()
+        player.queue.extend([1, 2])
+        o.on_ptt() if via == "ptt" else o.on_audio(blocco())
+        esiti.append((player.stopped, player.queue, o.cancelled,
+                      o.sm.state, o.counters.barge_ins))
+    assert esiti[0] == esiti[1], f"le due strade divergono: {esiti}"

@@ -27,3 +27,9 @@ desktop.ini
 # Ambiente separato per l'addestramento della wake word (vedi wakeword/README.md)
 .venv-train/
 wakeword/data/
+
+# Banchi di prova: i WAV restano locali (8 ore di NFR-6 sono centinaia di MB),
+# i report JSON no — sono la misura, e vanno nella storia del repository.
+# wakeword/live/ fa eccezione: e' il corpus di riferimento, e un test lo usa.
+wakeword/ambient/**/*.wav
+wakeword/nfr7/**/*.wav

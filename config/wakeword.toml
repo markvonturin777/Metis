@@ -1,0 +1,35 @@
+# Wake word "Hey Metis" — addestrata in M1 il 2026-09-21.
+#
+# ADDESTRAMENTO
+#   4000 positivi sintetici  (34% voci italiane, 866 parlanti inglesi distinti)
+#   4000 negativi mirati     (70% italiani: "metti", "mettiamo", "Mattia"...)
+#   x3 e x8 varianti augmentate -> 12.000 / 32.000 campioni
+#   AUC 0,9995 | mancati 0,56% a FPR 1% sul set sintetico
+#
+# PERCHE' LA SOGLIA E' ALTA E NON QUELLA "OTTIMA"
+# Il FPR misurato sui dati sintetici non predice i falsi risvegli reali: in
+# esecuzione il rilevatore valuta 900.000 blocchi in 8 ore, quindi NFR-6
+# richiederebbe un FPR < 0,00011%, due ordini di grandezza sotto la
+# risoluzione del set di validazione. La soglia parte alta e si tara dal vivo.
+
+[wakeword]
+model_path   = "data/wakeword/hey_metis.onnx"
+threshold    = 0.95      # da tarare con le 8 ore di NFR-6
+consecutive  = 2         # blocchi consecutivi sopra soglia: abbatte i picchi isolati
+refractory_s = 2.0       # dopo un rilevamento, silenzio imposto
+# SPENTA IN V1.0 — decisione D1 del 2026-09-21.
+# "Hey Metis" non ha superato NFR-7: 57 auto-inneschi in 125 minuti con la
+# voce di Piper negli altoparlanti. Il riaddestramento con negativi duri
+# REALI (v3) azzera i falsi sulle clip tenute da parte e mantiene 14/15
+# rilevamenti, ma non e' ancora verificato su una seduta nuova.
+# Non e' "fallita": e' rimandata. Si riaccende mettendo true, e il
+# push-to-talk continua a funzionare in parallelo come ha sempre fatto.
+enabled      = false
+
+# DOPPIA FASE — due rilevatori sfasati di 256 campioni, scatta solo se sono
+# d'accordo. Nasce da una misura del 2026-09-21: spostare lo stesso audio di
+# 4 ms cambia il punteggio di +0,95 su un rumore ambientale e di appena +0,04
+# su un "Hey Metis" vero. La stabilita' distingue i due casi meglio del
+# punteggio. Resta false finche' le 8 ore di NFR-6 non lo confermano:
+# record_ambient.py misura le due regole in parallelo.
+dual_phase   = false

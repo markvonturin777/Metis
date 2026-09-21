@@ -77,6 +77,31 @@ NEGATIVE_IT = [
     "Mattia ha telefonato", "la mattina presto", "mettiamoci al lavoro",
     "ehi, mi senti", "hey, guarda qui", "metti la musica",
 ]
+# --- NEGATIVI DURI -----------------------------------------------------------
+# Aggiunti il 2026-09-21 dopo la prova dal vivo: "Ehi, mi senti? Ti sento male"
+# ha prodotto un punteggio di 0,986, indistinguibile da una wake word vera.
+#
+# Foneticamente si capisce perche':
+#     "Hey Metis"     /'ei 'mEtis/
+#     "Ehi mi senti"  /'ei mi 'sEnti/
+# Condividono l'attacco /ei/ + /m/ e uno scheletro consonantico simile.
+#
+# La frase ERA gia' nei negativi sintetici. Non e' bastata: il TTS la pronuncia
+# diversamente da come la dice l'utente. Serve saturare l'intera famiglia
+# fonetica, non la singola frase.
+NEGATIVE_HARD_IT = [
+    "ehi mi senti", "ehi, mi senti?", "ehi mi senti bene",
+    "mi senti", "mi senti adesso", "non mi senti",
+    "ehi senti", "ehi, senti una cosa", "ehi ma senti",
+    "ehi mi sente", "ehi ci senti", "ehi mi dici",
+    "ehi mi metti", "ehi mettici", "ehi me lo dici",
+    "ehi Matteo", "ehi Mattia", "ehi mamma",
+    "ehi mi serve", "ehi mi segui", "ehi mi sembra",
+    "ti sento male", "non ti sento", "mi sentite",
+    "hey mi senti", "hey senti", "hey mettici",
+    "ehi, mi senti? ti sento male",
+]
+
 NEGATIVE_EN = [
     "hey there", "hey you", "hey Chris", "hey Betty", "hey medics",
     "metrics", "meters", "mattress", "Matthias", "notice", "melodies",
@@ -126,6 +151,10 @@ def generate(kind: str, n: int, seed: int) -> None:
         # Un terzo dai due timbri italiani: pronuncia corretta. Due terzi dai
         # 904 inglesi: varieta' di voce.
         frac_it = 0.34
+    elif kind == "hard":
+        # Solo voci italiane: la confusione nasce dalla pronuncia italiana.
+        texts_en, texts_it = NEGATIVE_HARD_IT, NEGATIVE_HARD_IT
+        frac_it = 1.0
     else:
         texts_en, texts_it = NEGATIVE_EN, NEGATIVE_IT
         frac_it = 0.70          # i negativi che contano sono quelli italiani
@@ -164,7 +193,7 @@ def generate(kind: str, n: int, seed: int) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("kind", choices=["positive", "negative", "both"])
+    ap.add_argument("kind", choices=["positive", "negative", "hard", "both"])
     ap.add_argument("-n", type=int, default=3000)
     ap.add_argument("--seed", type=int, default=1337)
     a = ap.parse_args()

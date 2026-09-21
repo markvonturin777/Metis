@@ -92,8 +92,8 @@ Dichiarato esplicitamente per evitare espansione incontrollata:
 | ID | Cosa cambia | Da (V16) | A (V1.0) |
 | :-- | :-- | :-- | :-- |
 | **C1** | Modello LLM primario | Qwen 3 14B / 30B | **Qwen 3 8B Q4_K_M** — la 14B non entra in 8 GB di VRAM |
-| **C2** | Attivazione | Ascolto continuo indiscriminato | **Wake word "Hey Metis"** + push-to-talk come fallback |
-| **C3** | Gestione eco | Assente | **Half-duplex gating + barge-in via wake word**, AEC come layer opzionale |
+| **C2** | Attivazione | Ascolto continuo indiscriminato | **Push-to-talk** in V1.0; wake word "Hey Metis" pronta ma spenta (D1) |
+| **C3** | Gestione eco | Assente | **Half-duplex gating + barge-in** (da PTT in V1.0, da wake word in v2), AEC come layer opzionale |
 | **C4** | Guardrail file system | Blocco di `os`/`shutil` nel codice | **Capability Broker** con livelli T0–T3 e denylist finestre |
 | **C5** | Framework GUI | "PyQt6 / PySide6" | **PySide6** — LGPL, nessun vincolo di distribuzione |
 | **C6** | Localizzazione elementi UI | Coordinate `pyautogui` non specificate | **UI Automation + Playwright**, coordinate grezze vietate |
@@ -306,13 +306,35 @@ Decisione di progetto: **non si implementa l'AEC nella V1.0.** Il problema si ri
 
 ## 6. Pipeline vocale
 
-### 6.1 Wake word "Hey Metis"
+### 6.1 Attivazione — push-to-talk in V1.0, wake word rimandata
 
-| Aspetto | Decisione |
+> **Decisione D1, 2026-09-21.** La wake word "Hey Metis" **non entra in
+> V1.0**: non ha superato NFR-7. In V1.0 l'attivazione è il push-to-talk, che
+> era già previsto come permanente. Il rilevatore, il modello v3, i banchi di
+> prova e i dati restano in repository e si riaccendono con
+> `enabled = true` in `config/wakeword.toml`.
+>
+> **Non è un fallimento del modello, è una verifica non ancora superata.**
+> Il riaddestramento con negativi duri reali (v3) azzera i falsi sulle clip
+> tenute da parte mantenendo 14/15 rilevamenti, ma non è stato confermato su
+> una seduta nuova. Vedi §21.
+
+Tutto l'impianto che la wake word richiedeva resta in piedi e **non va
+semplificato**: il gating half-duplex, l'insieme `WAKE_ACTIVE`, lo stream
+audio sempre aperto, il barge-in. È ciò che rende la riaccensione in v2 una
+riga di configurazione invece di una riscrittura, ed è anche ciò che tiene in
+vita la domanda sull'AEC (D3): il microfono resta aperto mentre Metis parla.
+
+In V1.0 il barge-in passa dal push-to-talk: `Ctrl+Alt+M` durante il parlato
+interrompe e rimette in ascolto, percorrendo **lo stesso codice** della wake
+word.
+
+| Aspetto (per la v2) | Decisione |
 | :-- | :-- |
 | **Frase** | "Hey Metis" — due sillabe accentate + nome trisillabico: buon rapporto tra riconoscibilità e falsi positivi. Le parole singole vanno evitate. |
 | **Motore** | **openWakeWord** (Apache 2.0), modello custom addestrato su dati sintetici generati via Piper |
 | **Fallback** | Porcupine, se il tasso di mancato riconoscimento supera il 10% |
+| **Stato in V1.0** | **spenta**, `enabled = false`. Modello v3 pronto, verifica NFR-7 da rifare |
 | **Escape hatch** | **Hotkey globale push-to-talk** (default `Ctrl+Alt+M`), disponibile **da M0**, prima ancora che il modello wake word esista |
 | **Soglia** | Tarabile da GUI; default calibrato per < 1 falso risveglio ogni 8 ore |
 | **Collocazione** | CPU, sempre attivo, consumo trascurabile |
@@ -744,8 +766,8 @@ Sono **criteri di accettazione della V1.0**. Ognuno è verificato in M7.
 | **NFR-3** | Throughput generazione | ≥ 45 tok/s | ✅ **M0: 67,1 tok/s** |
 | **NFR-4** | Picco VRAM | ≤ 7,2 GB su 8 GB | ✅ **M0: 6,58 GB**, deriva negativa su 72 min |
 | **NFR-5** | WER italiano (STT finale) | < 12% | 🟡 **M0: 8,6%** su 10 frasi. Ne servono 50 per NFR-5 pieno |
-| **NFR-6** | Falsi risvegli | < 1 ogni 8 h di uso normale | Conteggio nell'audit log |
-| **NFR-7** | Auto-inneschi da eco | **0** | Test dedicato: 2 h di TTS continuo con microfono aperto |
+| **NFR-6** | Falsi risvegli | < 1 ogni 8 h di uso normale | ⏸️ **non applicabile in V1.0**: senza wake word non esistono risvegli. Torna in v2 |
+| **NFR-7** | Auto-inneschi da eco | **0** | ❌ **57 in 125 min** con il modello di M1 → D1: wake word rimandata. In V1.0 non applicabile |
 | **NFR-8** | Reattività GUI | ≥ 30 fps, nessun freeze > 100 ms | Profiling Qt sotto inferenza |
 | **NFR-9** | Azioni T3 non confermate | **0** | Audit log — verifica obbligatoria, nessuna tolleranza |
 | **NFR-10** | Stabilità | > 72 h senza crash né crescita RSS > 10% | Soak test con monitoraggio |
@@ -820,18 +842,22 @@ Catena: push-to-talk → microfono → Silero VAD → faster-whisper → Ollama 
 > **Obiettivo:** rendere il sistema capace di stare acceso senza impazzire.
 
 **Deliverable:**
-- Modello wake word **"Hey Metis"** addestrato con openWakeWord su dati sintetici.
+- Modello wake word **"Hey Metis"** addestrato: fatto, tre versioni, v3 la migliore.
 - **Macchina a stati completa** di §5.
-- **Half-duplex gating** (L1) e **barge-in via wake word** (L2).
+- **Half-duplex gating** (L1) e **barge-in** (L2), da wake word e da push-to-talk.
 - Logging strutturato `structlog` + audit log SQLite.
+- Banchi di prova: NFR-7, ambientale/NFR-6, rivalutatore offline, replay end-to-end.
 
 **Criteri di uscita:**
-- [ ] **NFR-7: zero auto-inneschi** in 2 h di TTS continuo con microfono aperto.
-- [ ] **NFR-6: < 1 falso risveglio** in 8 h di uso normale.
-- [ ] Mancato riconoscimento della wake word < 10% su 50 tentativi.
-- [ ] Barge-in: "Hey Metis" interrompe il parlato entro 200 ms.
-- [ ] Push-to-talk funzionante in parallelo.
-- [ ] Ogni transizione di stato è tracciata nel log.
+- [x] Barge-in entro 200 ms, e **Metis non riprende da solo** dopo l'interruzione.
+- [x] Push-to-talk funzionante, e **unica** via di attivazione in V1.0.
+- [x] Ogni transizione di stato è tracciata nel log.
+- [x] Macchina a stati: nessuno stato irraggiungibile, nessun vicolo cieco.
+- [x] Schema audit log creato, append-only verificato via AST.
+- [x] **D1 deciso**: wake word rimandata alla v2, vedi §21.
+- [ ] ~~NFR-7: zero auto-inneschi~~ → rimandato con la wake word.
+- [ ] ~~NFR-6: < 1 falso risveglio in 8 h~~ → rimandato con la wake word.
+- [ ] ~~Mancato riconoscimento < 10% su 50~~ → 6,7% su 15, misura sospesa.
 
 ---
 
@@ -1066,7 +1092,7 @@ quadrantChart
 | :-- | :-- | :-- | :-- |
 | **R1** | Latenza p50 > 2 s nonostante le ottimizzazioni | Misurata in M0, non in M7 | Qwen 3 4B come router; STT `base` invece di `small` |
 | **R2** | Qualità italiana di Kokoro insufficiente | Test di ascolto in M0, non dopo | Piper `it_IT`; XTTSv2 se serve qualità |
-| **R3** | Wake word con troppi mancati riconoscimenti | Training su più dati sintetici, soglia tarabile | Porcupine; push-to-talk copre comunque il caso |
+| **R3** | ~~Wake word con troppi mancati riconoscimenti~~ **Si è materializzato al contrario**: non mancati riconoscimenti (6,7%) ma **auto-inneschi**, 57 in 125 min | Negativi duri **reali** invece che sintetici: v3 azzera i falsi sulle clip tenute da parte | ✅ **Mitigazione applicata**: wake word spenta in V1.0, push-to-talk unica via. Il progetto non si è fermato un minuto |
 | **R4** | Prompt injection da contenuto web | §8.5: nessun T2/T3 nel turno successivo a un fetch | Regola applicata dal broker, non dal modello |
 | **R5** | Coordinate errate con scaling DPI misto | DPI awareness esplicita, test su entrambi i monitor in M4 | Geometria via API Win32 anziché `pyautogui` |
 | **R6** | UI Automation non vede l'elemento target | Playwright copre il browser, che è il caso principale | OCR come ultima risorsa, accettando la latenza |
@@ -1080,6 +1106,82 @@ quadrantChart
 ---
 
 # APPENDICI
+
+## 21. Registro delle decisioni
+
+Le decisioni prese a un cancello, con la misura che le ha determinate. Serve
+a non ridiscuterle a memoria fra sei mesi, e a poterle ribaltare sapendo cosa
+andrebbe rimisurato.
+
+### D0 — Modelli e budget · 2026-09-20 · chiusa
+
+| Decisione | Esito | Misura |
+| :-- | :-- | :-- |
+| Modello LLM | **Qwen 3 8B Q4_K_M**, `think=False` sul percorso vocale | TTFT 87 ms contro 5-20 s in thinking mode |
+| Motore TTS | **Piper `it_IT-paola-medium`**, non Kokoro | latenza, e nessuna dipendenza da torch |
+| Budget di latenza | confermato, **con riserva** | la latenza correla 0,95 con la durata dell'enunciato: frasi ≤ 4,4 s p50 789 ms, lunghe p50 1251 ms |
+
+### D1 — Wake word · 2026-09-21 · **rimandata alla v2**
+
+**Esito: la wake word non entra in V1.0. L'attivazione è il push-to-talk.**
+
+Cosa è stato misurato, in ordine:
+
+1. **Addestramento e prova dal vivo.** 4000 positivi sintetici (866 parlanti
+   inglesi più le due voci italiane), 4000 negativi mirati. AUC 0,9995.
+   Dal vivo: **14 rilevamenti su 15**, 6,7% di mancati contro un budget del
+   10%. Da questo lato il modello andava bene.
+2. **NFR-7, 125 minuti di TTS continuo** con il microfono aperto e gli
+   altoparlanti a +35,4 dB sul silenzio. **57 auto-inneschi** contro un
+   requisito di zero. La seduta è parzialmente contaminata da voci umane in
+   stanza (circa 14-18 scatti), ma restano almeno 27 confermati dalla voce di
+   Piper. Su una clip Whisper stesso trascrive *"Metis pure quel fuori"* dove
+   Piper diceva *"Metti pure quel foglio"*.
+3. **Nessuna soglia separa le due popolazioni.** A 0,99 restano 5 falsi e si
+   perdono 8 pronunce su 15.
+4. **Riaddestramento con negativi duri reali (v3).** Su 39 clip tenute fuori
+   dall'addestramento: **0 falsi** contro 18, **14/15** rilevamenti invariati,
+   margine da +0,000 a **+0,953**. Promettente, **non verificato** su una
+   seduta nuova.
+
+**Perché rimandare e non insistere.** Il push-to-talk era già previsto come
+permanente in §6.1: la V1.0 non perde una funzione, ne perde una comodità.
+Confermare v3 richiede due sedute (2 h e 8 h) che sono quasi tutta attesa, e
+tenerle sul percorso critico di V1.0 non compra niente.
+
+**Perché non è caro riaccenderla.** Il rilevatore è un modulo isolato di
+236 righe che nessuno importa tranne il cablaggio; nell'orchestratore tocca
+tre punti, tutti già dietro un callable iniettato. Riaccenderla è
+`enabled = true`.
+
+**Cosa NON va semplificato nel frattempo** — è la parte cara da disfare:
+
+| Da conservare | Perché |
+| :-- | :-- |
+| gating half-duplex (`STT_MUTED`) | senza, l'eco rientra nel VAD |
+| `WAKE_ACTIVE` | è il contratto "qui il microfono è aperto mentre Metis parla" |
+| stream audio sempre aperto | riaprire il device costa 50-200 ms e a volte fallisce |
+| barge-in a tre pezzi | token, audio corrente, coda di riproduzione |
+| D3 sull'AEC **aperta** | senza wake word l'AEC sembra inutile, e quella conclusione si sedimenta |
+
+**Cosa invecchia.** I 1272 negativi duri sono legati a *questo* microfono, a
+*questa* stanza e a *questa* voce TTS. Cambiarne uno ne svaluta una parte:
+è l'unica cosa che decade davvero aspettando.
+
+**Per riprendere in v2**, nell'ordine: `enabled = true`; una seduta
+`nfr7_test.py --minutes 120` che ora salva l'audio integrale; poi ogni
+modello successivo si rivaluta con `rescore_session.py` in sette minuti di
+CPU e senza altoparlanti. La seduta va fatta **a stanza vuota**.
+
+### D2 — UIA o OCR · fine M4 · aperta
+
+### D3 — AEC necessario o superfluo · inizio M6 · aperta
+
+Resta aperta **di proposito** anche senza wake word: la seduta NFR-7 ha
+misurato +35,4 dB di altoparlanti dentro il microfono. Il problema esiste, è
+solo silente finché non si riascolta mentre si parla.
+
+---
 
 ## Appendice A — System prompt Metis
 

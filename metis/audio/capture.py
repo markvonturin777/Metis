@@ -143,6 +143,35 @@ class AudioCapture:
 
     # -- lettura -----------------------------------------------------------
 
+    def read(self, timeout: float = 0.25) -> Block | None:
+        """Un blocco, o None se entro `timeout` non ne arrivano.
+
+        Diversa da `blocks()`, che a coda vuota termina: il ciclo principale
+        deve invece restare vivo e usare le pause per far scattare i timeout
+        della macchina a stati.
+        """
+        try:
+            return self.q.get(timeout=timeout)
+        except queue.Empty:
+            return None
+
+    def drain(self) -> int:
+        """Butta via i blocchi accumulati. Ritorna quanti erano.
+
+        Lo stream non si ferma mai: se il programma resta fermo — un
+        `input()`, il caricamento di un modello — la coda continua a
+        riempirsi, e la lettura successiva riceverebbe audio di alcuni
+        secondi prima. Per una misura di livello significa misurare il
+        momento sbagliato.
+        """
+        n = 0
+        while True:
+            try:
+                self.q.get_nowait()
+                n += 1
+            except queue.Empty:
+                return n
+
     def blocks(self, timeout: float | None = None):
         """Generatore di Block. Consuma la coda finche' lo stream e' attivo."""
         while self._stream is not None:

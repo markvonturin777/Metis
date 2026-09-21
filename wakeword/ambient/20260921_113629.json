@@ -1,0 +1,19 @@
+{
+ "sessione": "20260921_113629",
+ "ore": 0.004,
+ "blocchi": 465,
+ "soglia": 0.95,
+ "consecutive": 2,
+ "risvegli": 0,
+ "risvegli_per_8h": 0.0,
+ "risvegli_doppia_fase": 0,
+ "dual_p9999": 0.004853010177612305,
+ "dual_max": 0.004853010177612305,
+ "punteggio_p50": 0.00029522180557250977,
+ "punteggio_p99": 0.011673946380615545,
+ "punteggio_p9999": 0.03828752040863037,
+ "punteggio_max": 0.03828752040863037,
+ "livello_medio_dbfs": -58.472950454506496,
+ "eventi": [],
+ "file_rumore": 0
+}

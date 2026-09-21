@@ -1,0 +1,35 @@
+{
+ "sessione": "20260921_113655",
+ "minuti": 0.5,
+ "soglia": 0.95,
+ "consecutive": 2,
+ "db_silenzio": -61.9,
+ "db_voce": -39.7,
+ "delta_db": 22.2,
+ "frasi_pronunciate": 15,
+ "secondi_di_voce": 43.7,
+ "fase_A": {
+  "blocchi": 562,
+  "scatti": 0,
+  "scatti_doppia_fase": 0,
+  "p99": 0.009784340858459473,
+  "max": 0.05579248070716858
+ },
+ "fase_B": {
+  "blocchi": 375,
+  "scatti": 0,
+  "scatti_doppia_fase": 0,
+  "p99": 0.37342512607574463,
+  "max": 0.6686990261077881
+ },
+ "eventi": [
+  {
+   "fase": "B",
+   "t_s": 21.7,
+   "picco": 0.6686990261077881,
+   "scatto": false,
+   "frase": "Metis e' pronto, dimmi pure cosa ti serve.",
+   "wav": "B_picco_00021.7s_0.669.wav"
+  }
+ ]
+}

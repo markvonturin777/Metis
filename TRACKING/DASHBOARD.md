@@ -3,7 +3,7 @@
 > Stato vivo del progetto. Si aggiorna mentre si lavora.
 > Riferimento: [Specifica V1.0](../SPECS/Metis_V1.0_Specifica_Ufficiale.md) · [Piano](../SPECS/plan/README.md)
 
-**Ultimo aggiornamento:** 2026-09-21 — M1 avviata, macchina a stati completata
+**Ultimo aggiornamento:** 2026-09-21 — **M1 chiusa.** D1: wake word rimandata alla v2, push-to-talk unica via di attivazione
 
 ---
 
@@ -25,18 +25,23 @@ Un file per iterazione. Ogni file ha: prerequisiti, attività spuntabili, misure
 | # | Iterazione | Stato | Attività | Criteri uscita | Inizio | Fine | Tag |
 | :-- | :-- | :-: | ---: | ---: | :-- | :-- | :-- |
 | **M0** | [Walking Skeleton](M0_tracking.md) | ✅ | 38/38 | 8/8 | 2026-09-20 | 2026-09-20 | `m0-skeleton` |
-| **M1** | [Fondamenta Vocali](M1_tracking.md) | 🔄 | 7/31 | 0/9 | 2026-09-21 | — | `m1-voice` |
+| **M1** | [Fondamenta Vocali](M1_tracking.md) | ✅ | 33/37 | 6/6 | 2026-09-21 | 2026-09-21 | `m1-voice` |
 | **M2** | [Capability Broker](M2_tracking.md) | ⬜ | 0/36 | 0/10 | — | — | `m2-broker` |
 | **M3** | [Interfaccia Grafica](M3_tracking.md) | ⬜ | 0/38 | 0/10 | — | — | `m3-gui` |
 | **M4** | [Automazione PC](M4_tracking.md) | ⬜ | 0/31 | 0/12 | — | — | `m4-automation` |
 | **M5** | [Conoscenza](M5_tracking.md) | ⬜ | 0/30 | 0/13 | — | — | `m5-knowledge` |
 | **M6** | [Integrazioni](M6_tracking.md) | ⬜ | 0/34 | 0/15 | — | — | `m6-integrations` |
 | **M7** | [Consolidamento V1.0](M7_tracking.md) | ⬜ | 0/44 | 0/13 | — | — | `v1.0` |
-| | **Totale** | | **38/281** | **8/90** | | | |
+| | **Totale** | | **71/287** | **14/87** | | | |
 
 > Oltre a queste ci sono **30 caselle di prerequisito** e **131 esiti di test** nelle tabelle dei singoli file: 531 punti di controllo in totale.
 
-**Iterazione corrente:** **M1** · **Prossima attività:** test di pronuncia in `wakeword/pronuncia/`, poi generazione del corpus
+**Iterazione corrente:** **M2 — Capability Broker.** L'audit log è già scritto e
+verificato da M1, quindi il broker ci scrive dentro dal primo strumento.
+
+**Rimandato alla v2:** la wake word. Banchi pronti, modello v3 pronto, si
+riaccende con `enabled = true` in `config/wakeword.toml`. Vedi §21 della
+specifica per cosa non va semplificato nel frattempo.
 
 ---
 
@@ -51,10 +56,10 @@ I valori si riempiono man mano. La colonna "misurato" va aggiornata a ogni misur
 | 3 | Throughput | ≥ 45 tok/s | **67,1 tok/s** | M0 ✅ | ✅ |
 | 4 | Picco VRAM | ≤ 7,2 GB | **6,58 GB** con LLM+STT, soak 72 min | M0 ✅ | ✅ |
 | 5 | WER italiano | < 12% | **8,6%** su 10 frasi | M0 parziale | 🟡 |
-| 6 | Falsi risvegli | < 1 / 8 h | — | M1, M7 | ⬜ |
-| 7 | Auto-inneschi da eco | **0** | — | M1, M7 | ⬜ |
+| 6 | Falsi risvegli | < 1 / 8 h | ⏸️ non applicabile in V1.0: senza wake word non ci sono risvegli | v2 | ⏸️ |
+| 7 | Auto-inneschi da eco | **0** | ❌ **57 in 125 min** → D1. Non applicabile in V1.0 | v2 | ⏸️ |
 | 8 | Reattività GUI | ≥ 30 fps, no freeze > 100 ms | — | M3, M4, M7 | ⬜ |
-| 9 | Azioni T3 non confermate | **0** | — | M2, M7 | ⬜ |
+| 9 | Azioni T3 non confermate | **0** | query scritta e testata, tabella vuota | M1 (impianto) | ⬜ |
 | 10 | Stabilità 72 h | RSS < +10% | 72 **min**: deriva −0,2 GB | M0 indicativo | 🟡 |
 
 ---
@@ -66,7 +71,7 @@ I valori si riempiono man mano. La colonna "misurato" va aggiornata a ogni misur
 | **D0** | Fine M0 | Modello LLM definitivo | ✅ Qwen 3 8B Q4_K_M | 2026-09-20 |
 | **D0** | Fine M0 | Motore TTS definitivo | ✅ **Piper paola** (non Kokoro) | 2026-09-20 |
 | **D0** | Fine M0 | Budget di latenza confermato | ✅ con riserva sulle frasi lunghe | 2026-09-20 |
-| **D1** | Fine M1 | Wake word promossa o sostituita | — | — |
+| **D1** | Fine M1 | Wake word promossa o sostituita | ⏸️ **rimandata alla v2** — NFR-7 non superato (57 auto-inneschi), v3 promettente ma non verificato. PTT unica via | 2026-09-21 |
 | **D2** | Fine M4 | UIA sufficiente o serve OCR | — | — |
 | **D3** | Inizio M6 | AEC necessario o superfluo | 🔄 orientamento: **serve valutarlo** — uscita su altoparlanti, non cuffie | 2026-09-20 |
 

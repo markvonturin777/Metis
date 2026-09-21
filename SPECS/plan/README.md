@@ -69,7 +69,7 @@ M3 (GUI) e M5 (conoscenza) sono parallelizzabili: dipendono da componenti divers
 | Gate | Quando | Cosa si decide | Documento |
 | :-- | :-- | :-- | :-- |
 | **D0** | Fine M0 | Modello LLM definitivo, motore TTS definitivo, validità del budget di latenza | [M0](M0_Walking_Skeleton.md#7-decision-gate-d0) |
-| **D1** | Fine M1 | Wake word promossa o sostituita da Porcupine | [M1](M1_Fondamenta_Vocali.md#criteri-di-uscita) |
+| **D1** | Fine M1 | ⏸️ **Rimandata alla v2** — NFR-7 non superato, push-to-talk unica via in V1.0 | [§21 specifica](../Metis_V1.0_Specifica_Ufficiale.md) |
 | **D2** | Fine M4 | Strategia di localizzazione elementi: UIA sufficiente o serve OCR | [M4](M4_Automazione_PC.md#criteri-di-uscita) |
 | **D3** | Inizio M6 | AEC necessario (altoparlanti) o superfluo (cuffie) | [M6](M6_Integrazioni.md#step-7--aec-opzionale) |
 
@@ -80,7 +80,7 @@ M3 (GUI) e M5 (conoscenza) sono parallelizzabili: dipendono da componenti divers
 | Iterazione | Stato | Tag git | Note |
 | :-- | :-- | :-- | :-- |
 | M0 | ⬜ Da iniziare | `m0-skeleton` | — |
-| M1 | ⬜ Da iniziare | `m1-voice` | — |
+| M1 | ✅ Chiusa | `m1-voice` | 2026-09-21 |
 | M2 | ⬜ Da iniziare | `m2-broker` | — |
 | M3 | ⬜ Da iniziare | `m3-gui` | — |
 | M4 | ⬜ Da iniziare | `m4-automation` | — |
