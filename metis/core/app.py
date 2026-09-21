@@ -1,31 +1,22 @@
-"""Metis M1 — l'applicazione vera, sostituisce lo scheletro di M0.
+"""Metis da riga di comando.
 
     microfono -> [wake word] -> VAD -> Whisper -> Qwen -> Piper -> altoparlanti
-                      |                                              |
-                      +------------- barge-in / PTT -----------------+
+                      |                     |                        |
+                      +--- barge-in / PTT --+       router -> broker -+
 
 IN V1.0 LA WAKE WORD E' SPENTA
 Decisione D1: "Hey Metis" non ha superato NFR-7 nella seduta del 21 settembre
 e viene rimandata alla v2. Si riaccende con `enabled = true` in
-`config/wakeword.toml`; modello, banchi di prova e dati di addestramento
-restano in repository. Tutto il resto dell'impianto — il gating half-duplex,
-`WAKE_ACTIVE`, il barge-in — resta identico, perche' e' quello che rende la
+`config/wakeword.toml`; modello, banchi di prova e dati restano in
+repository, e con loro tutto l'impianto anti-eco, che e' quello che rende la
 riaccensione una riga di configurazione invece che una riscrittura.
 
-Lo scheletro di M0 era una catena sequenziale: serviva a misurare la latenza e
-ha fatto il suo lavoro. Qui il ciclo principale non sa nulla della catena, fa
-una cosa sola — passare blocchi all'orchestratore e far scattare i timeout — e
-tutte le decisioni stanno nella macchina a stati.
-
-QUESTO FILE E' IL CABLAGGIO, NON LA LOGICA
-Costruisce gli oggetti, li inietta e li spegne in ordine. Se qui dentro
-comparisse un `if` sullo stato, sarebbe nel posto sbagliato: quella e' roba
-della macchina a stati, dove e' verificabile senza microfono.
-
-L'AVVIO A FREDDO NON E' UN DETTAGLIO
-Whisper, Qwen e Piper caricati a freddo costano una settantina di secondi, e
-il grosso e' Qwen che sale in VRAM. Vanno scaldati PRIMA di dire all'utente
-che Metis e' pronto: il primo turno non deve mai pagare il caricamento.
+QUESTO FILE E' UN'INTERFACCIA, NON IL SISTEMA
+Da M3 esistono due modi di avviare Metis, questo e la GUI. Il sistema si
+costruisce in `metis/core/avvio.py`, una volta sola: due cablaggi
+divergerebbero in silenzio, e il punto in cui non ci si puo' permettere una
+divergenza e' la sicurezza. Qui restano solo le cose che sono davvero della
+console — le scorciatoie globali, cosa si stampa, il riepilogo finale.
 """
 
 from __future__ import annotations
@@ -38,172 +29,26 @@ warnings.filterwarnings("ignore")
 
 import numpy as np  # noqa: E402
 
-from metis.audio.capture import AudioCapture, find_input_device  # noqa: E402
+from metis.audio.capture import find_input_device  # noqa: E402
 from metis.audio.ptt import (  # noqa: E402
     DEFAULT_HOTKEY,
     DEFAULT_KILL_SWITCH,
     GlobalHotkeys,
 )
-from metis.audio.wakeword import WakeWordConfig, WakeWordDetector  # noqa: E402
-from metis.core.logging import (  # noqa: E402
-    JSONL,
-    bind_turn,
-    clear_turn,
-    configure,
-    get_logger,
-    log_transition,
+from metis.core.avvio import (  # noqa: E402
+    SYSTEM,  # noqa: F401  (ri-esportato: lo importano i banchi di prova)
+    CicloAudio,
+    Opzioni,
+    Sistema,
+    costruisci_sistema,
 )
-from metis.core.orchestrator import Azioni, Deps, Orchestrator  # noqa: E402
-from metis.core.risposte import descrivi  # noqa: E402
-from metis.core.router import Router  # noqa: E402
-from metis.llm.toolcall import ToolRouter  # noqa: E402
-from metis.security.audit import AuditLog  # noqa: E402
-from metis.security.broker import Broker  # noqa: E402
-from metis.security.conferma import scegli_conferma  # noqa: E402
+from metis.core.logging import JSONL, clear_turn, configure, get_logger  # noqa: E402
 from metis.security.killswitch import KILL_SWITCH  # noqa: E402
-from metis.security.policies import Context, richiede_conferma  # noqa: E402
-from metis.tools.registry import carica_tutti  # noqa: E402
-from metis.llm.client import LlmClient  # noqa: E402
-from metis.stt.whisper_engine import WhisperEngine  # noqa: E402
-from metis.tts import create_engine  # noqa: E402
-from metis.tts.kokoro_engine import Player  # noqa: E402
-
-SYSTEM = (
-    "Sei Metis, assistente personale su questo PC. Rispondi in italiano, "
-    "formale ma con ironia discreta. MASSIMO DUE FRASI BREVI: l'utente ti "
-    "ascolta, non ti legge. Niente preamboli, niente 'Certamente'."
-)
-
-TICK_S = 0.5          # ogni quanto si controllano i timeout degli stati
 
 
-def costruisci_azioni(args, log) -> tuple[Azioni | None, object]:
-    """Il perimetro d'azione: registro, broker, router. Oppure niente.
-
-    Con `--no-tools` Metis torna a essere solo una voce: utile per provare la
-    catena vocale senza che possa aprire niente, e per capire subito se un
-    difetto sta nel parlato o nell'agire.
-    """
-    if not args.tools:
-        return None, None
-
-    reg = carica_tutti()
-    audit = AuditLog()
-    broker = Broker(registry=reg, audit=audit, kill=KILL_SWITCH)
-    tool_router = ToolRouter(reg)
-    router = Router(reg, tool_router=tool_router)
-    chiedi = scegli_conferma()
-
-    # Ollama compila la grammatica dell'output strutturato alla prima
-    # richiesta: 3,8 s contro 250 ms. Si paga adesso.
-    print(f"  router       : {tool_router.warmup():6.0f} ms (a freddo)")
-
-    disponibili = [s.name for s in reg.disponibili()]
-    print(f"  strumenti    : {len(disponibili)} attivi "
-          f"({', '.join(disponibili)})")
-    print(f"  perimetro    : {len(reg)} registrati, "
-          f"{len(reg) - len(disponibili)} senza capacita' (M4/M6)")
-    print(f"  comandi rapidi: {router.stats()['comandi_configurati']} frasi")
-
-    def esegui(call: dict):
-        r = broker.execute(call, Context(turn_id=None, chiedi_conferma=chiedi,
-                                         origine="orchestratore"))
-        log.info("strumento", tool=r.tool, esito=r.outcome.value,
-                 stadio=r.stage, motivo=r.detail[:80], ms=round(r.duration_ms))
-        return r
-
-    def conferma_serve(nome: str) -> bool:
-        spec = reg.get(nome)
-        return spec is not None and richiede_conferma(spec.tier)
-
-    azioni = Azioni(
-        decidi=lambda testo, storia: router.decidi(testo, storia),
-        esegui=esegui,
-        descrivi=descrivi,
-        richiede_conferma=conferma_serve,
-    )
-    return azioni, audit
-
-
-def costruisci(args, log) -> tuple[Orchestrator, Player, WakeWordDetector | None]:
-    """Carica i motori, li scalda e li cabla nell'orchestratore."""
-    t0 = time.perf_counter()
-
-    stt = WhisperEngine(args.whisper)
-    llm = LlmClient()
-    tts = create_engine()
-    player = Player(sample_rate=tts.sample_rate)
-
-    print(f"  STT {args.whisper:<8} : {stt.warmup():6.0f} ms")
-    print(f"  LLM {llm.model:<8} : {llm.warmup():6.0f} ms")
-    print(f"  TTS          : {tts.warmup():6.0f} ms")
-
-    det: WakeWordDetector | None = None
-    cfg_ww = WakeWordConfig.load()
-    if args.wakeword and cfg_ww.enabled:
-        cfg = cfg_ww
-        det = WakeWordDetector(cfg)
-        # La prima inferenza ONNX include l'allocazione delle arene: costa
-        # decine di millisecondi contro 1,7. Si paga adesso, non al primo
-        # "Hey Metis" dell'utente.
-        muto = np.zeros(512, dtype=np.float32)
-        t_w = time.perf_counter()
-        for _ in range(8):
-            det.feed(muto)
-        caldo = time.perf_counter()
-        for _ in range(20):
-            det.feed(muto)
-        # Due numeri diversi: il primo include l'allocazione delle arene ONNX,
-        # il secondo e' il costo vero a regime. Riportare solo la media dei
-        # primi blocchi farebbe sembrare il rilevatore sette volte piu' caro.
-        print(f"  wake word    : {(caldo - t_w) * 1000 / 8:6.2f} ms primo blocco, "
-              f"{(time.perf_counter() - caldo) * 1000 / 20:.2f} ms a regime (budget 80)")
-        print(f"                 soglia {cfg.threshold}  x{cfg.consecutive} blocchi"
-              + ("  DOPPIA FASE" if cfg.dual_phase else ""))
-        det.reset()
-        det.scores.clear()
-        det.scores_dual.clear()
-
-    print(f"  pronti in {time.perf_counter() - t0:.1f} s")
-    player.start()
-
-    # I motori si avvolgono qui, non dentro l'orchestratore: l'orchestratore
-    # deve restare ignaro di quale STT o TTS stia usando.
-    def stt_loggato(pcm):
-        tr = stt.transcribe(pcm)
-        log.info("trascritto", testo=tr.text, sospetto=tr.suspect, rtf=round(tr.rtf, 2))
-        return tr
-
-    def tts_loggato(testo: str):
-        log.info("dice", testo=testo)
-        return tts.synth(testo)
-
-    def fine_turno(m) -> None:
-        b = m.breakdown()
-        log.info("turno", totale_ms=round(b["totale"]), stt_ms=round(b["stt"]),
-                 ttft_ms=round(b["ttft"]), tts_ms=round(b["tts"]), tokens=m.tokens)
-        clear_turn()
-
-    deps = Deps(
-        wakeword=(det.feed if det is not None else (lambda pcm: False)),
-        stt=stt_loggato,
-        llm_stream=llm.stream_sentences,
-        tts_synth=tts_loggato,
-        player=player,
-        system_prompt=SYSTEM,
-        wake_reset=(det.reset if det is not None else None),
-        on_error=lambda e: log.error("turno fallito", errore=f"{type(e).__name__}: {e}"),
-        on_turn_start=bind_turn,
-        on_turn_end=fine_turno,
-        azioni=costruisci_azioni(args, log)[0],
-    )
-    orch = Orchestrator(deps, on_transition=lambda tr: log_transition(log, tr))
-    return orch, player, det
-
-
-def riepilogo(orch: Orchestrator, det: WakeWordDetector | None,
-              cap: AudioCapture, durata_s: float) -> None:
-    c = orch.counters
+def riepilogo(sis: Sistema, ciclo: CicloAudio) -> None:
+    c = sis.orchestrator.counters
+    durata_s = ciclo.durata_s
     ore = durata_s / 3600.0
     print("\n" + "=" * 62)
     print(f"  SESSIONE  {durata_s / 60:.1f} minuti")
@@ -222,20 +67,24 @@ def riepilogo(orch: Orchestrator, det: WakeWordDetector | None,
     print(f"  errori               : {c.errors}")
     print(f"  frame al VAD         : {c.frames_to_vad}")
     print(f"  frame silenziati     : {c.frames_muted}   (half-duplex, L1)")
-    print(f"  blocchi persi        : {cap.dropped}")
-    if det is not None and det.scores:
-        s = det.stats()
+    if ciclo.capture is not None:
+        print(f"  blocchi persi        : {ciclo.capture.dropped}")
+    if sis.detector is not None and sis.detector.scores:
+        s = sis.detector.stats()
         print(f"  punteggi wake word   : p50 {s['p50']:.3f}  p99 {s['p99']:.3f}  "
               f"max {s['max']:.3f}   su {s['blocchi']} blocchi")
-    if orch.sm.rejected:
+    if sis.audit is not None:
+        print(f"  audit                : {sis.audit.stats()}")
+    if sis.orchestrator.sm.rejected:
         # Eventi fuori sequenza: un blocco in coda, un timeout scattato un
         # istante dopo la transizione. Sono attesi, si contano e basta.
-        print(f"  transizioni rifiutate: {len(orch.sm.rejected)}   (fuori sequenza)")
+        print(f"  transizioni rifiutate: {len(sis.orchestrator.sm.rejected)}"
+              "   (fuori sequenza)")
     print(f"\n  log: {JSONL}   turni: data/logs/turns.jsonl")
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Metis - assistente vocale locale (M1)")
+    ap = argparse.ArgumentParser(description="Metis - assistente vocale locale")
     ap.add_argument("--minutes", type=float, default=0.0,
                     help="ferma la sessione dopo N minuti (0 = finche' non esci)")
     ap.add_argument("--no-wakeword", dest="wakeword", action="store_false",
@@ -258,12 +107,15 @@ def main() -> None:
         print(f"  microfono    : {e}")
         return
 
-    orch, player, det = costruisci(args, log)
+    sis = costruisci_sistema(Opzioni.da_args(args), log,
+                             riporta=lambda r: print(f"  {r}"))
+    orch = sis.orchestrator
 
     # Il push-to-talk resta anche con la wake word attiva: serve quando c'e'
     # rumore, quando si e' in chiamata, o quando non si vuole parlare forte.
     hk = GlobalHotkeys()
     hk.bind(DEFAULT_HOTKEY, orch.on_ptt)
+
     # Lo stesso tasto fa due cose perche' sono due effetti della stessa
     # intenzione: "fermati". Chi lo preme non deve ricordarsi quale dei due
     # gli serve mentre sta cercando di fermare qualcosa.
@@ -277,45 +129,28 @@ def main() -> None:
     hk.bind(DEFAULT_KILL_SWITCH, kill_switch)
     hk.start()
 
-    if det is not None:
+    if sis.detector is not None:
         print('\n  Di\' "Hey Metis", oppure usa il push-to-talk.')
     else:
         print("\n  Wake word spenta (D1: rimandata alla v2). Push-to-talk:")
     print(f"  {DEFAULT_HOTKEY:<24} parla, e interrompi Metis mentre parla")
-    print(f"  {DEFAULT_KILL_SWITCH:<24} kill switch: zittisce e torna in attesa")
+    print(f"  {DEFAULT_KILL_SWITCH:<24} kill switch: zittisce e sospende T2/T3")
     print(f"  {'Ctrl+C':<24} esci\n")
 
-    t_inizio = time.perf_counter()
-    limite = args.minutes * 60 if args.minutes else None
-    ultimo_tick = t_inizio
-    cap = AudioCapture()
-
+    ciclo = CicloAudio(orch)
     try:
-        with cap:
-            while True:
-                blocco = cap.read(timeout=0.25)
-                if blocco is not None:
-                    orch.on_audio(blocco)
-
-                ora = time.perf_counter()
-                if ora - ultimo_tick >= TICK_S:
-                    # I timeout scattano qui, non dal flusso audio: se il
-                    # microfono smettesse di consegnare blocchi, la macchina
-                    # resterebbe appesa nello stato corrente per sempre.
-                    orch.tick()
-                    ultimo_tick = ora
-                if limite is not None and ora - t_inizio > limite:
-                    print("\n  tempo scaduto")
-                    break
+        ciclo.esegui(limite_s=args.minutes * 60 if args.minutes else None)
+        if args.minutes:
+            print("\n  tempo scaduto")
     except KeyboardInterrupt:
         print("\n  interrotto")
     finally:
         hk.stop()
         orch.panic()
-        player.close()
+        sis.player.close()
         clear_turn()
 
-    riepilogo(orch, det, cap, time.perf_counter() - t_inizio)
+    riepilogo(sis, ciclo)
 
 
 if __name__ == "__main__":

@@ -33,15 +33,12 @@ LOG_DIR = Path("data/logs")
 JSONL = LOG_DIR / "metis.jsonl"
 _configured = False
 
-# Colori per stato: lo stesso codice della GUI di M3, cosi' console e
-# interfaccia raccontano la stessa storia.
-_STATE_COLOR = {
-    "DORMIENTE": "\033[90m", "IN_ASCOLTO": "\033[94m", "TRASCRIZIONE": "\033[96m",
-    "ELABORAZIONE": "\033[93m", "GENERAZIONE": "\033[93m", "RICERCA_WEB": "\033[95m",
-    "ESECUZIONE": "\033[95m", "ATTESA_CONFERMA": "\033[33m", "PARLATO": "\033[92m",
-    "INTERROTTO": "\033[91m", "ERRORE": "\033[91m",
-}
-_RESET = "\033[0m"
+# I colori stanno in `metis/core/palette.py`, insieme a quelli della GUI.
+# Finche' erano due tabelle, "console e interfaccia raccontano la stessa
+# storia" era un'intenzione: bastava che qualcuno ne toccasse una. Ora e'
+# una tabella sola, e l'ambra del terminale e' lo stesso ambra dell'overlay.
+from metis.core.palette import RESET as _RESET  # noqa: E402
+from metis.core.palette import ansi as _ansi  # noqa: E402
 
 
 class _JsonlSink:
@@ -70,7 +67,7 @@ def _console(logger, name, event_dict):
     d.pop("level", None)
     d.pop("logger", None)
 
-    color = _STATE_COLOR.get(state, "")
+    color = _ansi(state)
     head = f"{ts} {color}{state:<15}{_RESET} {msg}" if state else f"{ts} {msg}"
     if turn:
         head += f" [{turn}]"

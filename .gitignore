@@ -38,3 +38,6 @@ wakeword/nfr7/**/*.wav
 .coverage
 coverage.xml
 htmlcov/
+
+# Posizione della finestra: e della macchina, non del progetto.
+config/settings.toml
