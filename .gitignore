@@ -33,3 +33,8 @@ wakeword/data/
 # wakeword/live/ fa eccezione: e' il corpus di riferimento, e un test lo usa.
 wakeword/ambient/**/*.wav
 wakeword/nfr7/**/*.wav
+
+# Copertura test
+.coverage
+coverage.xml
+htmlcov/

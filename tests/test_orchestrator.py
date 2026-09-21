@@ -346,3 +346,113 @@ def test_ptt_e_wake_word_percorrono_la_stessa_strada():
         esiti.append((player.stopped, player.queue, o.cancelled,
                       o.sm.state, o.counters.barge_ins))
     assert esiti[0] == esiti[1], f"le due strade divergono: {esiti}"
+
+
+# --- ramo strumenti (M2) -----------------------------------------------------
+
+class FintaDecisione:
+    def __init__(self, call):
+        self.call = call
+        self.e_strumento = call is not None
+
+
+class FintoResult:
+    def __init__(self, ok=True, detail="eseguito"):
+        self.ok = ok
+        self.detail = detail
+        self.outcome = type("O", (), {"value": "ok" if ok else "denied"})()
+
+
+def con_azioni(o, call, *, ok=True, conferma=False, eseguiti=None):
+    from metis.core.orchestrator import Azioni
+
+    eseguiti = [] if eseguiti is None else eseguiti
+
+    def esegui(c):
+        eseguiti.append(c)
+        return FintoResult(ok)
+
+    o.d.azioni = Azioni(
+        decidi=lambda testo, storia: FintaDecisione(call),
+        esegui=esegui,
+        descrivi=lambda r: "Ho aperto l'editor." if r.ok else f"Non lo faccio: {r.detail}",
+        richiede_conferma=lambda nome: conferma,
+    )
+    return eseguiti
+
+
+def stati(o):
+    return [t.to.name for t in o.sm.history]
+
+
+def test_uno_strumento_attraversa_esecuzione_e_parlato():
+    o, player = make()
+    eseguiti = con_azioni(o, {"tool": "open_application", "app": "vscode"})
+    o.sm.fire(Event.PTT); o.sm.fire(Event.SPEECH_START); o.sm.fire(Event.SPEECH_END)
+    o._process(_segmento())
+
+    assert eseguiti == [{"tool": "open_application", "app": "vscode"}]
+    assert stati(o)[-4:] == ["ESECUZIONE", "PARLATO", "IN_ASCOLTO"][-4:] or \
+           stati(o)[-3:] == ["ESECUZIONE", "PARLATO", "IN_ASCOLTO"]
+    assert o.counters.tools_ok == 1 and o.counters.turns == 1
+    assert len(player.queue) == 1, "l'esito non e' stato pronunciato"
+
+
+def test_una_t3_passa_da_attesa_conferma():
+    """La sequenza di stati e' quella vera gia' in M2: in M3 cambia il
+    dialogo, non l'orchestratore."""
+    o, _ = make()
+    con_azioni(o, {"tool": "send_email"}, conferma=True)
+    o.sm.fire(Event.PTT); o.sm.fire(Event.SPEECH_START); o.sm.fire(Event.SPEECH_END)
+    o._process(_segmento())
+
+    percorso = stati(o)
+    assert "ATTESA_CONFERMA" in percorso
+    assert percorso.index("ATTESA_CONFERMA") < percorso.index("PARLATO")
+    assert o.counters.tools_ok == 1
+
+
+def test_una_t3_rifiutata_lo_dice_e_non_resta_appesa():
+    o, player = make()
+    eseguiti = con_azioni(o, {"tool": "send_email"}, ok=False, conferma=True)
+    o.sm.fire(Event.PTT); o.sm.fire(Event.SPEECH_START); o.sm.fire(Event.SPEECH_END)
+    o._process(_segmento())
+
+    assert eseguiti, "il broker non e' stato nemmeno interpellato"
+    assert o.counters.tools_denied == 1 and o.counters.tools_ok == 0
+    assert "ATTESA_CONFERMA" in stati(o)
+    assert o.sm.state is State.IN_ASCOLTO, "rimasta appesa dopo il rifiuto"
+    assert len(player.queue) == 1, "il rifiuto non e' stato pronunciato"
+
+
+def test_se_il_router_dice_conversazione_si_parla_come_prima():
+    o, player = make(n_chunks=2)
+    con_azioni(o, None)
+    o.sm.fire(Event.PTT); o.sm.fire(Event.SPEECH_START); o.sm.fire(Event.SPEECH_END)
+    o._process(_segmento())
+    assert "GENERAZIONE" in stati(o) and o.counters.tools_ok == 0
+    assert o.counters.turns == 1
+
+
+def test_senza_azioni_l_orchestratore_si_comporta_come_in_m1():
+    """Il ramo strumenti e' interamente opzionale: spegnerlo riporta a M1."""
+    o, _ = make(n_chunks=1)
+    assert o.d.azioni is None
+    o.sm.fire(Event.PTT); o.sm.fire(Event.SPEECH_START); o.sm.fire(Event.SPEECH_END)
+    o._process(_segmento())
+    assert "GENERAZIONE" in stati(o)
+
+
+def test_un_errore_nel_broker_non_appende_il_turno():
+    o, _ = make()
+    from metis.core.orchestrator import Azioni
+    o.d.azioni = Azioni(
+        decidi=lambda t, s: FintaDecisione({"tool": "x"}),
+        esegui=lambda c: (_ for _ in ()).throw(RuntimeError("broker esploso")),
+        descrivi=lambda r: "",
+        richiede_conferma=lambda n: False,
+    )
+    o.sm.fire(Event.PTT); o.sm.fire(Event.SPEECH_START); o.sm.fire(Event.SPEECH_END)
+    o._run_turn(_segmento())
+    assert o.counters.errors == 1
+    assert o.sm.state in (State.ERRORE, State.IN_ASCOLTO)

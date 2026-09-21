@@ -53,7 +53,16 @@ from metis.core.logging import (  # noqa: E402
     get_logger,
     log_transition,
 )
-from metis.core.orchestrator import Deps, Orchestrator  # noqa: E402
+from metis.core.orchestrator import Azioni, Deps, Orchestrator  # noqa: E402
+from metis.core.risposte import descrivi  # noqa: E402
+from metis.core.router import Router  # noqa: E402
+from metis.llm.toolcall import ToolRouter  # noqa: E402
+from metis.security.audit import AuditLog  # noqa: E402
+from metis.security.broker import Broker  # noqa: E402
+from metis.security.conferma import scegli_conferma  # noqa: E402
+from metis.security.killswitch import KILL_SWITCH  # noqa: E402
+from metis.security.policies import Context, richiede_conferma  # noqa: E402
+from metis.tools.registry import carica_tutti  # noqa: E402
 from metis.llm.client import LlmClient  # noqa: E402
 from metis.stt.whisper_engine import WhisperEngine  # noqa: E402
 from metis.tts import create_engine  # noqa: E402
@@ -66,6 +75,54 @@ SYSTEM = (
 )
 
 TICK_S = 0.5          # ogni quanto si controllano i timeout degli stati
+
+
+def costruisci_azioni(args, log) -> tuple[Azioni | None, object]:
+    """Il perimetro d'azione: registro, broker, router. Oppure niente.
+
+    Con `--no-tools` Metis torna a essere solo una voce: utile per provare la
+    catena vocale senza che possa aprire niente, e per capire subito se un
+    difetto sta nel parlato o nell'agire.
+    """
+    if not args.tools:
+        return None, None
+
+    reg = carica_tutti()
+    audit = AuditLog()
+    broker = Broker(registry=reg, audit=audit, kill=KILL_SWITCH)
+    tool_router = ToolRouter(reg)
+    router = Router(reg, tool_router=tool_router)
+    chiedi = scegli_conferma()
+
+    # Ollama compila la grammatica dell'output strutturato alla prima
+    # richiesta: 3,8 s contro 250 ms. Si paga adesso.
+    print(f"  router       : {tool_router.warmup():6.0f} ms (a freddo)")
+
+    disponibili = [s.name for s in reg.disponibili()]
+    print(f"  strumenti    : {len(disponibili)} attivi "
+          f"({', '.join(disponibili)})")
+    print(f"  perimetro    : {len(reg)} registrati, "
+          f"{len(reg) - len(disponibili)} senza capacita' (M4/M6)")
+    print(f"  comandi rapidi: {router.stats()['comandi_configurati']} frasi")
+
+    def esegui(call: dict):
+        r = broker.execute(call, Context(turn_id=None, chiedi_conferma=chiedi,
+                                         origine="orchestratore"))
+        log.info("strumento", tool=r.tool, esito=r.outcome.value,
+                 stadio=r.stage, motivo=r.detail[:80], ms=round(r.duration_ms))
+        return r
+
+    def conferma_serve(nome: str) -> bool:
+        spec = reg.get(nome)
+        return spec is not None and richiede_conferma(spec.tier)
+
+    azioni = Azioni(
+        decidi=lambda testo, storia: router.decidi(testo, storia),
+        esegui=esegui,
+        descrivi=descrivi,
+        richiede_conferma=conferma_serve,
+    )
+    return azioni, audit
 
 
 def costruisci(args, log) -> tuple[Orchestrator, Player, WakeWordDetector | None]:
@@ -138,6 +195,7 @@ def costruisci(args, log) -> tuple[Orchestrator, Player, WakeWordDetector | None
         on_error=lambda e: log.error("turno fallito", errore=f"{type(e).__name__}: {e}"),
         on_turn_start=bind_turn,
         on_turn_end=fine_turno,
+        azioni=costruisci_azioni(args, log)[0],
     )
     orch = Orchestrator(deps, on_transition=lambda tr: log_transition(log, tr))
     return orch, player, det
@@ -158,6 +216,8 @@ def riepilogo(orch: Orchestrator, det: WakeWordDetector | None,
         v = np.array(c.cancel_latency_ms)
         print(f"     latenza stop      : p50 {np.percentile(v, 50):.0f} ms  "
               f"max {v.max():.0f} ms    (NFR: < 200)")
+    print(f"  strumenti eseguiti   : {c.tools_ok}")
+    print(f"  strumenti rifiutati  : {c.tools_denied}")
     print(f"  turni scartati       : {c.discarded}")
     print(f"  errori               : {c.errors}")
     print(f"  frame al VAD         : {c.frames_to_vad}")
@@ -180,6 +240,8 @@ def main() -> None:
                     help="ferma la sessione dopo N minuti (0 = finche' non esci)")
     ap.add_argument("--no-wakeword", dest="wakeword", action="store_false",
                     help="solo push-to-talk, rilevatore spento")
+    ap.add_argument("--no-tools", dest="tools", action="store_false",
+                    help="solo voce: nessuno strumento, nessun broker")
     ap.add_argument("--whisper", default="small")
     ap.add_argument("--log-level", default="INFO")
     args = ap.parse_args()
@@ -202,7 +264,17 @@ def main() -> None:
     # rumore, quando si e' in chiamata, o quando non si vuole parlare forte.
     hk = GlobalHotkeys()
     hk.bind(DEFAULT_HOTKEY, orch.on_ptt)
-    hk.bind(DEFAULT_KILL_SWITCH, lambda: (log.warning("kill switch"), orch.panic()))
+    # Lo stesso tasto fa due cose perche' sono due effetti della stessa
+    # intenzione: "fermati". Chi lo preme non deve ricordarsi quale dei due
+    # gli serve mentre sta cercando di fermare qualcosa.
+    def kill_switch() -> None:
+        orch.panic()
+        sospeso = KILL_SWITCH.commuta()
+        log.warning("kill switch", capacita="SOSPESE" if sospeso else "ripristinate")
+        stato = "SOSPESI" if sospeso else "ripristinati"
+        print(f"\n  [kill switch] T2 e T3 {stato}\n")
+
+    hk.bind(DEFAULT_KILL_SWITCH, kill_switch)
     hk.start()
 
     if det is not None:

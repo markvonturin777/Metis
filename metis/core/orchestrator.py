@@ -51,6 +51,23 @@ from metis.llm.client import CancelToken
 
 
 @dataclass
+class Azioni:
+    """Il ramo "strumenti" del turno. Assente = Metis sa solo conversare.
+
+    Un solo campo opzionale in `Deps` invece di quattro sparsi: cosi'
+    l'intera capacita' di agire sul mondo si accende e si spegne in un punto,
+    e l'orchestratore non impara mai cos'e' un broker. Sa che qualcuno decide
+    e qualcuno esegue; chi siano, e quali controlli applichino, non lo
+    riguarda.
+    """
+
+    decidi: Callable[[str, list], object]      # testo -> Decisione
+    esegui: Callable[[dict], object]           # tool call -> Result
+    descrivi: Callable[[object], str]          # Result -> frase da dire
+    richiede_conferma: Callable[[str], bool]   # nome strumento -> bool
+
+
+@dataclass
 class Deps:
     """Dipendenze iniettate: in test si sostituiscono con finti."""
 
@@ -70,6 +87,7 @@ class Deps:
     # sessione lunga non si capisce piu' quale riga appartenga a quale turno.
     on_turn_start: Callable[[str], None] | None = None
     on_turn_end: Callable[[TurnMetrics], None] | None = None
+    azioni: "Azioni | None" = None
 
 
 @dataclass
@@ -81,6 +99,8 @@ class Counters:
     turns: int = 0
     discarded: int = 0
     errors: int = 0
+    tools_ok: int = 0
+    tools_denied: int = 0
     cancel_latency_ms: list[float] = field(default_factory=list)
 
 
@@ -234,8 +254,17 @@ class Orchestrator:
             self.sm.fire(Event.NO_SPEECH)
             return
 
-        self.sm.fire(Event.INTENT_CHAT)
         self.history.append({"role": "user", "content": m.transcript})
+
+        # Strumento o conversazione? Il router decide, e nel dubbio sceglie
+        # la conversazione: rispondere a parole non fa danni, agire quando
+        # non era richiesto sì.
+        if self.d.azioni is not None:
+            decisione = self.d.azioni.decidi(m.transcript, self.history)
+            if getattr(decisione, "e_strumento", False):
+                return self._esegui_strumento(m, decisione)
+
+        self.sm.fire(Event.INTENT_CHAT)
 
         # Token NUOVO per questo turno. Se un barge-in e' gia' arrivato su un
         # token precedente, non contamina questo; e se arriva adesso, non puo'
@@ -285,6 +314,57 @@ class Orchestrator:
             corrente = self._cancel is tok and not tok.cancelled
         if corrente:
             self.sm.fire(Event.PLAYBACK_DONE)
+
+    # -- ramo strumenti ----------------------------------------------------
+
+    def _esegui_strumento(self, m: TurnMetrics, decisione) -> None:
+        """Esegue una tool call e ne pronuncia l'esito.
+
+        Gli stati sono quelli veri della macchina, conferma compresa: in M2
+        la conferma e' una domanda da console, in M3 diventera' una finestra,
+        e la sequenza di stati resta la stessa. Costruirla adesso significa
+        che in M3 cambia il dialogo, non l'orchestratore.
+        """
+        a = self.d.azioni
+        call = decisione.call
+        nome = call.get("tool", "?")
+
+        self.sm.fire(Event.INTENT_KNOWN)              # -> ESECUZIONE
+        conferma = a.richiede_conferma(nome)
+        if conferma:
+            self.sm.fire(Event.NEEDS_CONFIRM)         # -> ATTESA_CONFERMA
+
+        res = a.esegui(call)
+
+        if conferma:
+            # CONFIRMED torna in ESECUZIONE, DENIED va dritto a PARLATO:
+            # in entrambi i casi c'e' qualcosa da dire all'utente.
+            self.sm.fire(Event.CONFIRMED if res.ok else Event.DENIED)
+
+        if res.ok:
+            self.counters.tools_ok += 1
+        else:
+            self.counters.tools_denied += 1
+
+        frase = a.descrivi(res)
+        m.reply = frase
+        m.extra["tool"] = nome
+        m.extra["esito"] = getattr(res.outcome, "value", str(res.outcome))
+        self.history.append({"role": "assistant", "content": frase})
+
+        syn = self.d.tts_synth(frase)
+        m.t_first_audio = time.perf_counter()
+        self.d.player.enqueue(syn.pcm)
+        if self.sm.state is not State.PARLATO:
+            self.sm.fire(Event.DONE)                  # ESECUZIONE -> PARLATO
+
+        self.counters.turns += 1
+        m.append_to_log()
+        if self.d.on_turn_end is not None:
+            self.d.on_turn_end(m)
+
+        self.d.player.wait_drained()
+        self.sm.fire(Event.PLAYBACK_DONE)
 
     # -- manutenzione ------------------------------------------------------
 

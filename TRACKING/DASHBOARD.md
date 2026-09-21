@@ -3,7 +3,7 @@
 > Stato vivo del progetto. Si aggiorna mentre si lavora.
 > Riferimento: [Specifica V1.0](../SPECS/Metis_V1.0_Specifica_Ufficiale.md) · [Piano](../SPECS/plan/README.md)
 
-**Ultimo aggiornamento:** 2026-09-21 — **M1 chiusa.** D1: wake word rimandata alla v2, push-to-talk unica via di attivazione
+**Ultimo aggiornamento:** 2026-09-21 — **M2 chiusa.** Capability Broker in produzione, copertura 100%, NFR-9 verificato
 
 ---
 
@@ -26,18 +26,19 @@ Un file per iterazione. Ogni file ha: prerequisiti, attività spuntabili, misure
 | :-- | :-- | :-: | ---: | ---: | :-- | :-- | :-- |
 | **M0** | [Walking Skeleton](M0_tracking.md) | ✅ | 38/38 | 8/8 | 2026-09-20 | 2026-09-20 | `m0-skeleton` |
 | **M1** | [Fondamenta Vocali](M1_tracking.md) | ✅ | 33/37 | 6/6 | 2026-09-21 | 2026-09-21 | `m1-voice` |
-| **M2** | [Capability Broker](M2_tracking.md) | ⬜ | 0/36 | 0/10 | — | — | `m2-broker` |
+| **M2** | [Capability Broker](M2_tracking.md) | ✅ | 33/33 | 9/10 | 2026-09-21 | 2026-09-21 | `m2-broker` |
 | **M3** | [Interfaccia Grafica](M3_tracking.md) | ⬜ | 0/38 | 0/10 | — | — | `m3-gui` |
 | **M4** | [Automazione PC](M4_tracking.md) | ⬜ | 0/31 | 0/12 | — | — | `m4-automation` |
 | **M5** | [Conoscenza](M5_tracking.md) | ⬜ | 0/30 | 0/13 | — | — | `m5-knowledge` |
 | **M6** | [Integrazioni](M6_tracking.md) | ⬜ | 0/34 | 0/15 | — | — | `m6-integrations` |
 | **M7** | [Consolidamento V1.0](M7_tracking.md) | ⬜ | 0/44 | 0/13 | — | — | `v1.0` |
-| | **Totale** | | **71/287** | **14/87** | | | |
+| | **Totale** | | **104/284** | **23/87** | | | |
 
 > Oltre a queste ci sono **30 caselle di prerequisito** e **131 esiti di test** nelle tabelle dei singoli file: 531 punti di controllo in totale.
 
-**Iterazione corrente:** **M2 — Capability Broker.** L'audit log è già scritto e
-verificato da M1, quindi il broker ci scrive dentro dal primo strumento.
+**Iterazione corrente:** **M3 — Interfaccia grafica.** Il broker consegna tre
+cose pronte da mostrare: l'audit log, il flusso di conferma T3 e lo stato del
+kill switch.
 
 **Rimandato alla v2:** la wake word. Banchi pronti, modello v3 pronto, si
 riaccende con `enabled = true` in `config/wakeword.toml`. Vedi §21 della
@@ -59,7 +60,7 @@ I valori si riempiono man mano. La colonna "misurato" va aggiornata a ogni misur
 | 6 | Falsi risvegli | < 1 / 8 h | ⏸️ non applicabile in V1.0: senza wake word non ci sono risvegli | v2 | ⏸️ |
 | 7 | Auto-inneschi da eco | **0** | ❌ **57 in 125 min** → D1. Non applicabile in V1.0 | v2 | ⏸️ |
 | 8 | Reattività GUI | ≥ 30 fps, no freeze > 100 ms | — | M3, M4, M7 | ⬜ |
-| 9 | Azioni T3 non confermate | **0** | query scritta e testata, tabella vuota | M1 (impianto) | ⬜ |
+| 9 | Azioni T3 non confermate | **0** | **0** su 50 tentativi, 9 scenari avversariali | M2 ✅ | ✅ |
 | 10 | Stabilità 72 h | RSS < +10% | 72 **min**: deriva −0,2 GB | M0 indicativo | 🟡 |
 
 ---

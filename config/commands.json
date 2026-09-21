@@ -1,0 +1,37 @@
+{
+  "_nota": [
+    "Fast-path: frasi che non passano dall'LLM. 5-30 ms invece di 400+.",
+    "La chiamata costruita qui attraversa comunque TUTTO il broker:",
+    "validazione, policy, guardie, conferma, audit. Nessuna scorciatoia",
+    "salta i controlli, solo il modello.",
+    "",
+    "Le frasi si confrontano normalizzate: minuscole, senza accenti e senza",
+    "punteggiatura. 'Apri VS Code!' e 'apri vs code' sono la stessa cosa."
+  ],
+  "comandi": [
+    {
+      "frasi": ["apri visual studio code", "apri vs code", "apri vscode",
+                "apri il codice", "apri l editor"],
+      "call": {"tool": "open_application", "app": "vscode"}
+    },
+    {
+      "frasi": ["apri github desktop", "apri github", "apri il git"],
+      "call": {"tool": "open_application", "app": "github_desktop"}
+    },
+    {
+      "frasi": ["come stai messo", "come va la macchina", "stato del sistema",
+                "quanta vram stai usando", "telemetria"],
+      "call": {"tool": "get_telemetry"}
+    },
+    {
+      "frasi": ["che finestre ho aperte", "elenca le finestre",
+                "quali finestre sono aperte"],
+      "call": {"tool": "list_windows"}
+    },
+    {
+      "frasi": ["cosa ho davanti", "che finestra e in primo piano",
+                "su cosa sto lavorando"],
+      "call": {"tool": "get_active_window"}
+    }
+  ]
+}

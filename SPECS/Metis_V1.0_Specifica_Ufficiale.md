@@ -769,7 +769,7 @@ Sono **criteri di accettazione della V1.0**. Ognuno è verificato in M7.
 | **NFR-6** | Falsi risvegli | < 1 ogni 8 h di uso normale | ⏸️ **non applicabile in V1.0**: senza wake word non esistono risvegli. Torna in v2 |
 | **NFR-7** | Auto-inneschi da eco | **0** | ❌ **57 in 125 min** con il modello di M1 → D1: wake word rimandata. In V1.0 non applicabile |
 | **NFR-8** | Reattività GUI | ≥ 30 fps, nessun freeze > 100 ms | Profiling Qt sotto inferenza |
-| **NFR-9** | Azioni T3 non confermate | **0** | Audit log — verifica obbligatoria, nessuna tolleranza |
+| **NFR-9** | Azioni T3 non confermate | **0** | ✅ **M2: 0** su 50 tentativi con 9 scenari avversariali. Query sull'audit log |
 | **NFR-10** | Stabilità | > 72 h senza crash né crescita RSS > 10% | Soak test con monitoraggio |
 
 ---
