@@ -34,6 +34,19 @@ import warnings
 
 warnings.filterwarnings("ignore")
 
+# PRIMA DI QT, E NON E' UNA PREFERENZA DI STILE.
+# Il contesto DPI di un processo si fissa al primo uso e poi non cambia
+# piu': se `QApplication` nasce per prima, Windows ha gia' deciso che questo
+# processo non sa cos'e' il DPI, e da li' in avanti racconta coordinate
+# virtualizzate. Il sintomo sarebbe un clic sistematicamente spostato sul
+# monitor secondario e perfetto sul primario, cioe' invisibile a chi prova
+# di fretta. L'import sta qui in mezzo apposta, e `metis.tools.display` non
+# importa nulla che tocchi il display. Lo verifica
+# `test_il_dpi_si_dichiara_prima_di_qt`, leggendo l'ordine nell'AST.
+from metis.tools.display import set_dpi_awareness  # noqa: E402
+
+DPI_PER_MONITOR = set_dpi_awareness()
+
 from PySide6.QtCore import QObject, QThread, QTimer, Signal, Slot  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
@@ -221,8 +234,7 @@ class Applicazione(QObject):
         if sis is not None and sis.audit is not None:
             self.fullscreen.audit.collega(sis.audit)
         if sis is not None and sis.router is not None:
-            self.fullscreen.imposta_comandi(
-                [" · ".join(c.frasi[:2]) for c in sis.router.comandi])
+            self.fullscreen.collega_comandi(sis.libreria)
 
     @Slot(dict)
     def _contatori(self, d: dict) -> None:

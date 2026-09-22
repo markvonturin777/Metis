@@ -15,6 +15,10 @@ GLI STADI
     7 esecuzione  guardie immediate rivalutate, poi l'handler
     8 audit       sempre, in ogni esito
 
+Uno stadio in piu' compare solo nei rifiuti: `strumento`. E' l'handler che,
+pur autorizzato, non ha trovato cosa fare — il link che non esiste, la
+finestra che non c'e'. Vedi `Rifiuto` nel registro.
+
 SCOSTAMENTO DAL PIANO, VOLUTO
 Il piano metteva la validazione Pydantic prima del lookup nel registro. Con
 una union discriminata, pero', una chiamata a `delete_file` fallirebbe come
@@ -55,7 +59,7 @@ from metis.security.policies import (
     richiede_conferma,
     valuta_tier,
 )
-from metis.tools.registry import Registry, ToolSpec
+from metis.tools.registry import Registry, Rifiuto, ToolSpec
 
 
 @dataclass(frozen=True)
@@ -188,6 +192,12 @@ class Broker:
 
         try:
             valore = spec.handler(call)
+        except Rifiuto as r:
+            # Lo strumento ha scelto di non agire: non e' un guasto. Vedi la
+            # nota su `Rifiuto` nel registro — la distinzione fra "rotto" e
+            # "non l'ho fatto apposta" deve sopravvivere fino all'audit log.
+            return self._chiudi(nome, spec.tier, args, ctx, Outcome.DENIED,
+                                "strumento", str(r), t0, confirmed, None)
         except Exception as exc:                  # noqa: BLE001
             return self._chiudi(nome, spec.tier, args, ctx, Outcome.ERROR,
                                 "esecuzione",

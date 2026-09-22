@@ -44,6 +44,7 @@ from metis.core.avvio import (  # noqa: E402
 )
 from metis.core.logging import JSONL, clear_turn, configure, get_logger  # noqa: E402
 from metis.security.killswitch import KILL_SWITCH  # noqa: E402
+from metis.tools.display import set_dpi_awareness  # noqa: E402
 
 
 def riepilogo(sis: Sistema, ciclo: CicloAudio) -> None:
@@ -97,6 +98,11 @@ def main() -> None:
 
     configure(level=args.log_level)
     log = get_logger()
+
+    # Anche senza interfaccia grafica: le coordinate dei clic sintetici si
+    # calcolano sul desktop virtuale, e senza questa riga Windows le
+    # racconterebbe scalate. Vedi `metis/tools/display.py`.
+    set_dpi_awareness()
 
     print("=" * 62)
     print("  Metis V1.0 - push-to-talk, half-duplex, barge-in")

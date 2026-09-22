@@ -4,16 +4,27 @@ La proprieta' che conta non e' la velocita': e' che il fast-path salti il
 MODELLO e non i CONTROLLI. Se esistesse una via che aggira anche solo uno
 stadio del broker, sarebbe quella percorsa dai comandi piu' frequenti, cioe'
 esattamente quelli che vale la pena controllare.
+
+In M4 un comando puo' contenere piu' di un'azione, quindi `fast_path`
+restituisce un `Comando` invece di una singola chiamata. La proprieta'
+verificata qui sotto non cambia: cio' che esce di qui e' materiale per il
+broker, non un permesso di eseguire.
 """
 import json
 from pathlib import Path
 
 import pytest
 
-from metis.core.router import Comando, Router, carica_comandi, normalizza
+from metis.core.router import Comando, Router, normalizza
+from metis.memory.commands import Libreria, carica
 from metis.tools.registry import carica_tutti
 
 REG = carica_tutti()
+
+
+def comandi_veri():
+    c, _ = carica(REG)
+    return c
 
 
 # --- normalizzazione ---------------------------------------------------------
@@ -33,12 +44,12 @@ def test_normalizza(dato, atteso):
 
 @pytest.fixture
 def router():
-    return Router(REG, comandi=carica_comandi(), usa_llm=False)
+    return Router(REG, comandi=comandi_veri(), usa_llm=False)
 
 
 def test_corrispondenza_esatta(router):
-    assert router.fast_path("apri vs code") == {"tool": "open_application",
-                                                "app": "vscode"}
+    c = router.fast_path("apri vs code")
+    assert c.azioni == ({"tool": "open_application", "app": "vscode"},)
 
 
 def test_corrispondenza_con_cortesie_intorno(router):
@@ -63,12 +74,26 @@ def test_frase_estranea_non_corrisponde(router):
         assert router.fast_path(frase) is None, frase
 
 
-def test_la_chiamata_restituita_e_una_copia(router):
-    """Chi la riceve la passa al broker, che la muta durante la validazione:
+def test_vince_la_frase_configurata_piu_lunga():
+    """Con frasi che si contengono a vicenda, la piu' corta e' la meno
+    specifica: se vincesse lei, la piu' lunga non si attiverebbe mai."""
+    corto = Comando("corto", ("apri il codice",),
+                    ({"tool": "open_application", "app": "vscode"},))
+    lungo = Comando("lungo", ("apri il codice e il git",),
+                    ({"tool": "open_application", "app": "vscode"},
+                     {"tool": "open_application", "app": "github_desktop"}))
+    # L'ordine nella lista e' quello sfavorevole apposta.
+    r = Router(REG, comandi=[corto, lungo], usa_llm=False)
+    assert r.fast_path("apri il codice e il git").id == "lungo"
+    assert r.fast_path("apri il codice").id == "corto"
+
+
+def test_le_azioni_restituite_sono_copie(router):
+    """Chi le riceve le passa al broker, che le muta durante la validazione:
     senza copia, il secondo uso dello stesso comando sarebbe diverso."""
-    a = router.fast_path("apri vs code")
+    a = router.decidi("apri vs code").calls[0]
     a["app"] = "manomesso"
-    b = router.fast_path("apri vs code")
+    b = router.decidi("apri vs code").calls[0]
     assert b["app"] == "vscode"
 
 
@@ -78,28 +103,26 @@ def test_ogni_comando_configurato_esiste_davvero():
     """Un refuso in commands.json produrrebbe un comando che il broker
     rifiuta sempre, e l'utente lo scoprirebbe parlando."""
     adapter = REG.adapter()
-    for c in carica_comandi():
-        nome = c.call.get("tool")
-        assert nome in REG, f"{nome} non e' nel registro"
-        adapter.validate_python(c.call)      # solleva se gli argomenti non vanno
+    for c in comandi_veri():
+        for azione in c.azioni:
+            assert azione["tool"] in REG, f"{azione['tool']} non e' nel registro"
+            adapter.validate_python(azione)   # solleva se gli argomenti non vanno
 
 
 def test_i_comandi_configurati_sono_tutti_eseguibili():
     """Niente fast-path verso strumenti che in questa iterazione non hanno
     ancora un corpo: sarebbero promesse non mantenute."""
-    for c in carica_comandi():
-        spec = REG.get(c.call["tool"])
-        assert spec.implemented, f"{spec.name} non e' ancora implementato"
+    for c in comandi_veri():
+        for azione in c.azioni:
+            spec = REG.get(azione["tool"])
+            assert spec.implemented, f"{spec.name} non e' ancora implementato"
 
 
-def test_nessuna_frase_duplicata_fra_comandi_diversi():
-    """Due comandi che rispondono alla stessa frase: vince il primo, e quale
-    sia il primo dipende dall'ordine nel file. Meglio accorgersene qui."""
-    visto: dict[str, str] = {}
-    for c in carica_comandi():
-        for f in c.frasi:
-            assert f not in visto, f"{f!r} porta sia a {visto[f]} sia a {c.call['tool']}"
-            visto[f] = c.call["tool"]
+def test_il_file_dei_comandi_si_carica_senza_avvisi():
+    """Un avviso qui significa un comando che l'utente ha perso senza
+    accorgersene: la frase c'e' nel file e Metis non la riconosce."""
+    _, avvisi = carica(REG)
+    assert avvisi == []
 
 
 def test_il_file_dei_comandi_e_json_valido():
@@ -112,6 +135,13 @@ def test_il_file_dei_comandi_e_json_valido():
 def test_il_fast_path_ha_la_precedenza(router):
     d = router.decidi("apri vs code")
     assert d.e_strumento and d.origine == "fast_path"
+
+
+def test_un_comando_composto_produce_piu_azioni(router):
+    d = router.decidi("inizia a lavorare")
+    assert [a["tool"] for a in d.calls] == ["open_application",
+                                            "open_application"]
+    assert d.risposta, "il comando dichiara una frase sua e deve arrivare"
 
 
 def test_il_fast_path_e_rapido(router):
@@ -143,17 +173,13 @@ def test_llm_consultato_solo_se_il_fast_path_manca():
         def decidi(self, testo, storia=None):
             from metis.llm.toolcall import Decisione
             chiamate.append(testo)
-            return Decisione(None, "llm", 1.0)
+            return Decisione((), "llm", 1.0)
 
-    r = Router(REG, comandi=carica_comandi(), tool_router=FintoLlm())
+    r = Router(REG, comandi=comandi_veri(), tool_router=FintoLlm())
     r.decidi("apri vs code")
     assert chiamate == [], "l'LLM e' stato consultato per un comando noto"
     r.decidi("che ne pensi")
     assert chiamate == ["che ne pensi"]
-
-
-def test_comandi_da_file_mancante():
-    assert carica_comandi(Path("config/non_esiste.json")) == []
 
 
 def test_router_senza_comandi_manda_tutto_all_llm():
@@ -162,6 +188,24 @@ def test_router_senza_comandi_manda_tutto_all_llm():
 
 
 def test_comando_costruito_a_mano():
-    r = Router(REG, comandi=[Comando(("prova magica",), {"tool": "get_telemetry"})],
+    r = Router(REG, comandi=[Comando("magia", ("prova magica",),
+                                     ({"tool": "get_telemetry"},))],
                usa_llm=False)
-    assert r.fast_path("fai la prova magica adesso") == {"tool": "get_telemetry"}
+    c = r.fast_path("fai la prova magica adesso")
+    assert c is not None and c.azioni == ({"tool": "get_telemetry"},)
+
+
+# --- ricarica a caldo --------------------------------------------------------
+
+def test_i_comandi_salvati_valgono_subito(tmp_path):
+    """Il criterio di uscita "nuovo comando senza riavvio", dal lato del
+    router: nessun segnale, nessun riavvio, solo la libreria che cambia."""
+    percorso = tmp_path / "commands.json"
+    percorso.write_text('{"comandi": []}', encoding="utf-8")
+    lib = Libreria(REG, percorso)
+    r = Router(REG, libreria=lib, usa_llm=False)
+    assert r.fast_path("fai il caffe") is None
+
+    lib.aggiungi({"id": "caffe", "frasi": ["fai il caffe"],
+                  "azioni": [{"tool": "get_telemetry"}]})
+    assert r.fast_path("fai il caffe") is not None

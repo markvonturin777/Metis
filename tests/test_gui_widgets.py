@@ -357,3 +357,103 @@ def test_il_kill_switch_si_vede_in_entrambe(applicazione):
     a.segnali.kill_cambiato.emit(False)
     QApplication.processEvents()
     assert not a.minimal.kill.isVisibleTo(a.minimal)
+
+
+# --- M4: l'editor dei comandi custom ----------------------------------------
+
+@pytest.fixture
+def editor(qt, tmp_path):
+    from metis.gui.widgets.comandi import EditorComandi
+    from metis.memory.commands import Libreria
+    from metis.tools.registry import carica_tutti
+
+    percorso = tmp_path / "commands.json"
+    percorso.write_text('{"comandi": []}', encoding="utf-8")
+    lib = Libreria(carica_tutti(), percorso)
+    e = EditorComandi(lib)
+    yield e, lib, percorso
+    e.close()
+
+
+def _compila(e, ident, frasi, azioni, risposta=""):
+    e._nuovo()
+    e.campo_id.setText(ident)
+    e.campo_frasi.setPlainText(frasi)
+    e.campo_azioni.setPlainText(azioni)
+    e.campo_risposta.setText(risposta)
+
+
+def test_l_editor_salva_un_comando_valido(editor):
+    e, lib, percorso = editor
+    _compila(e, "caffe", "fai il caffe", '[{"tool": "get_telemetry"}]')
+    e._salva()
+    assert [c.id for c in lib] == ["caffe"]
+    assert "caffe" in percorso.read_text(encoding="utf-8")
+    assert "Salvato" in e.esito.text()
+
+
+def test_uno_strumento_inesistente_non_si_salva(editor):
+    """Criterio di uscita di M4. L'errore deve comparire NELL'EDITOR: un
+    comando rotto scoperto a voce fra tre settimane non si collega piu' al
+    momento in cui lo si e' scritto."""
+    e, lib, percorso = editor
+    prima = percorso.read_text(encoding="utf-8")
+    _compila(e, "rotto", "fai la cosa",
+             '[{"tool": "delete_file", "path": "C:/"}]')
+    e._salva()
+    assert len(lib) == 0
+    assert percorso.read_text(encoding="utf-8") == prima
+    assert "non esiste" in e.esito.text() and "delete_file" in e.esito.text()
+
+
+def test_argomenti_sbagliati_non_si_salvano(editor):
+    e, lib, _ = editor
+    _compila(e, "x", "prova",
+             '[{"tool": "open_application", "app": "photoshop"}]')
+    e._salva()
+    assert len(lib) == 0 and "argomenti non validi" in e.esito.text()
+
+
+def test_json_malformato_lo_dice_invece_di_esplodere(editor):
+    e, lib, _ = editor
+    _compila(e, "x", "prova", '[{"tool": "get_telemetry"')
+    e._salva()
+    assert len(lib) == 0 and "JSON" in e.esito.text()
+
+
+def test_una_azione_sola_senza_parentesi_quadre_viene_accettata(editor):
+    """Errore frequente e privo di ambiguita': si accetta e si continua."""
+    e, lib, _ = editor
+    _compila(e, "x", "prova", '{"tool": "get_telemetry"}')
+    e._salva()
+    assert len(lib) == 1
+
+
+def test_il_router_vede_il_comando_senza_riavvio(editor):
+    """L'altro criterio di uscita: ricarica a caldo. Nessun segnale, nessun
+    riavvio — il router conta le ricariche della libreria."""
+    from metis.core.router import Router
+
+    e, lib, _ = editor
+    r = Router(lib.registry, libreria=lib, usa_llm=False)
+    assert r.fast_path("fai il caffe") is None
+
+    _compila(e, "caffe", "fai il caffe", '[{"tool": "get_telemetry"}]')
+    e._salva()
+    assert r.fast_path("per favore fai il caffe") is not None
+
+
+def test_l_elenco_si_aggiorna_dopo_il_salvataggio(editor):
+    e, lib, _ = editor
+    assert e.elenco.count() == 0
+    _compila(e, "uno", "prova uno", '[{"tool": "get_telemetry"}]')
+    e._salva()
+    assert e.elenco.count() == 1
+
+
+def test_l_editor_mostra_gli_strumenti_disponibili(editor):
+    """Scrivere JSON a memoria e' un'altra cosa."""
+    e, lib, _ = editor
+    testo = e.strumenti.text()
+    assert "click_element" in testo and "T2" in testo
+    assert "send_email" not in testo, "non ha un corpo: non va offerto"

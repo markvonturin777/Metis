@@ -156,11 +156,22 @@ def test_solo_gli_strumenti_eseguibili_sono_offerti_al_modello():
 
 
 def test_lo_schema_json_per_ollama_si_genera():
+    """Nello schema offerto al modello ci sono tutti e soli gli implementati.
+
+    In M2 questo test elencava `type_text` e `press_hotkey` fra i vietati,
+    perche' allora erano perimetro senza capacita'. In M4 la capacita' e'
+    arrivata e l'elenco si e' accorciato: l'unico ancora fuori e'
+    `send_email`, che aspetta M6. La riga che conta non e' l'elenco — che
+    per costruzione cambia a ogni iterazione — ma il legame con
+    `implemented`, verificato qui sopra.
+    """
     schema = REG.json_schema()
     assert schema, "schema vuoto"
     testo = str(schema)
-    for vietato in ("send_email", "type_text", "press_hotkey"):
-        assert vietato not in testo, f"{vietato} non deve essere offerto in M2"
+    for nome in {s.name for s in REG if not s.implemented}:
+        assert nome not in testo, f"{nome} non ha un corpo e non va offerto"
+    assert "send_email" not in testo, "T3 senza capacita': arriva in M6"
+    assert "click_element" in testo
 
 
 @pytest.mark.parametrize("processo", ["explorer.exe", "cmd.exe", "powershell.exe",
@@ -230,3 +241,74 @@ def test_send_email_vero_senza_conferma_non_parte(tmp_path):
                    "body": "b"}, Context())
     assert r.denied and r.stage == "conferma"
     assert b.audit.unconfirmed_t3() == 0
+
+
+# --- M4: nessuna coordinata come parametro ----------------------------------
+
+COORDINATE = ("x", "y", "left", "top", "right", "bottom", "pixel",
+              "coord", "coords", "pos", "posizione", "punto", "cx", "cy")
+
+
+def test_nessuno_schema_accetta_delle_coordinate():
+    """La decisione centrale di M4, in forma eseguibile.
+
+    Se un campo `x` esistesse, il modello dovrebbe inventarsi un numero —
+    non ha modo di sapere dov'e' il pulsante Salva — e il clic partirebbe
+    comunque, in un punto che nessuno ha verificato. Le coordinate le
+    calcola il risolutore guardando l'albero di UI Automation o il DOM,
+    oppure non si clicca.
+    """
+    colpevoli = [f"{s.__name__}.{n}" for s in SCHEMI for n in s.model_fields
+                 if n.lower() in COORDINATE]
+    assert not colpevoli, ("campi con coordinate grezze: " + ", ".join(colpevoli))
+
+
+def test_gli_strumenti_che_cliccano_nominano_l_elemento():
+    """Il verso positivo del test qui sopra: non basta che le coordinate
+    manchino, deve esserci un modo semantico di dire cosa premere."""
+    for nome, campo in (("click_element", "elemento"), ("drag", "da")):
+        spec = REG.get(nome)
+        assert spec is not None and campo in spec.schema.model_fields
+
+
+def test_il_livello_che_preme_i_tasti_non_registra_strumenti():
+    """`sendinput.py` e' una libreria muta: se registrasse uno strumento,
+    esisterebbe una via per premere tasti senza passare dalle guardie."""
+    sorgente = Path("metis/tools/sendinput.py").read_text(encoding="utf-8")
+    assert "REGISTRY" not in sorgente
+
+
+# --- M4: il DPI si dichiara prima di Qt --------------------------------------
+
+def test_il_dpi_si_dichiara_prima_di_qt():
+    """Criterio di uscita di M4, che il piano chiedeva "per ispezione".
+
+    Il contesto DPI si fissa al primo uso: se `QApplication` nasce prima,
+    la chiamata non ha piu' effetto e non lo dice. Si legge l'ORDINE
+    nell'AST e non il testo, perche' una ricerca testuale troverebbe anche
+    questa docstring — e' gia' successo tre volte in questo progetto.
+    """
+    albero = ast.parse(Path("metis/gui/app.py").read_text(encoding="utf-8"))
+    riga_dpi = None
+    riga_qt = None
+    for n in ast.walk(albero):
+        if isinstance(n, ast.ImportFrom) and (n.module or "").startswith("PySide6"):
+            riga_qt = min(riga_qt or n.lineno, n.lineno)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) \
+                and n.func.id == "set_dpi_awareness":
+            riga_dpi = min(riga_dpi or n.lineno, n.lineno)
+    assert riga_dpi is not None, "metis/gui/app.py non dichiara il DPI"
+    assert riga_qt is not None, "il test non ha trovato gli import di Qt"
+    assert riga_dpi < riga_qt, (
+        f"set_dpi_awareness() alla riga {riga_dpi}, PySide6 alla {riga_qt}: "
+        "Qt fissa il contesto DPI per primo e la chiamata non ha effetto")
+
+
+def test_anche_la_console_dichiara_il_dpi():
+    """Senza GUI non c'e' Qt a rovinare le cose, ma i clic sintetici si
+    calcolano lo stesso sul desktop virtuale."""
+    sorgente = Path("metis/core/app.py").read_text(encoding="utf-8")
+    albero = ast.parse(sorgente)
+    chiamate = {n.func.id for n in ast.walk(albero)
+                if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
+    assert "set_dpi_awareness" in chiamate

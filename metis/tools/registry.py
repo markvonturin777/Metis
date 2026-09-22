@@ -33,6 +33,23 @@ from metis.security.audit import Tier
 from metis.security.guards import Guard
 
 
+class Rifiuto(Exception):
+    """Lo strumento poteva agire e ha scelto di non farlo.
+
+    Serve una via separata dall'eccezione normale perche' i due casi vanno
+    letti in modo diverso nell'audit log. "Playwright e' esploso" e' un
+    guasto: qualcosa nel codice o nell'ambiente non va, e va sistemato.
+    "Non ho trovato nessun link che si chiami Contatti" non e' un guasto: e'
+    il comportamento corretto, ed e' *preferibile* a un clic a caso in mezzo
+    allo schermo.
+
+    Il broker traduce questa eccezione in `DENIED` invece che in `ERROR`,
+    cosi' la distinzione resta anche nel log e nella frase pronunciata. Non
+    e' una scorciatoia per saltare controlli: si arriva qui solo dopo che
+    tutti gli stadi hanno detto sì, e l'unico effetto e' non fare niente.
+    """
+
+
 @dataclass(frozen=True)
 class ToolSpec:
     name: str

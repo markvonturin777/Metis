@@ -351,9 +351,14 @@ def test_ptt_e_wake_word_percorrono_la_stessa_strada():
 # --- ramo strumenti (M2) -----------------------------------------------------
 
 class FintaDecisione:
-    def __init__(self, call):
-        self.call = call
-        self.e_strumento = call is not None
+    def __init__(self, *calls, risposta=None):
+        self.calls = tuple(c for c in calls if c is not None)
+        self.risposta = risposta
+        self.e_strumento = bool(self.calls)
+
+    @property
+    def call(self):
+        return self.calls[0] if self.calls else None
 
 
 class FintoResult:
@@ -363,20 +368,33 @@ class FintoResult:
         self.outcome = type("O", (), {"value": "ok" if ok else "denied"})()
 
 
-def con_azioni(o, call, *, ok=True, conferma=False, eseguiti=None):
+def con_azioni(o, *calls, ok=True, conferma=False, eseguiti=None,
+               esiti=None, al_risveglio=None):
+    """`esiti` permette di dare un esito diverso a ogni azione della
+    sequenza: serve a verificare che la seconda non parta se la prima e'
+    stata rifiutata."""
     from metis.core.orchestrator import Azioni
 
     eseguiti = [] if eseguiti is None else eseguiti
+    coda = list(esiti) if esiti is not None else None
 
     def esegui(c):
         eseguiti.append(c)
-        return FintoResult(ok)
+        return FintoResult(coda.pop(0) if coda else ok)
+
+    def descrivi(risultati, risposta=None):
+        if risposta:
+            return risposta
+        ultimo = risultati[-1]
+        return ("Ho aperto l'editor." if ultimo.ok
+                else f"Non lo faccio: {ultimo.detail}")
 
     o.d.azioni = Azioni(
-        decidi=lambda testo, storia: FintaDecisione(call),
+        decidi=lambda testo, storia: FintaDecisione(*calls),
         esegui=esegui,
-        descrivi=lambda r: "Ho aperto l'editor." if r.ok else f"Non lo faccio: {r.detail}",
+        descrivi=descrivi,
         richiede_conferma=lambda nome: conferma,
+        al_risveglio=al_risveglio,
     )
     return eseguiti
 

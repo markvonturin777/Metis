@@ -184,3 +184,45 @@ def test_nessuna_lambda_sui_segnali_dei_worker():
     assert not colpevoli, (
         "lambda su segnali di worker (girerebbero sul thread sbagliato): "
         + "; ".join(colpevoli))
+
+
+# --- M4: l'automazione non gira sul thread della GUI -------------------------
+
+def test_nessun_modulo_della_gui_esegue_azioni():
+    """Il rischio che il piano di M4 chiama per nome: le operazioni sulle
+    finestre sono bloccanti, e sul thread dell'interfaccia diventerebbero
+    un freeze, cioe' una regressione di NFR-8.
+
+    La garanzia non e' una convenzione: gli strumenti si eseguono solo
+    dentro `Orchestrator._esegui_strumento`, che gira sul thread del turno.
+    Qui si verifica che nessun file di `metis/gui/` chiami il broker. Con
+    l'AST e non cercando la parola: le docstring che spiegano la regola —
+    questa compresa — la troverebbero.
+    """
+    import ast
+    from pathlib import Path
+
+    colpevoli = []
+    for f in sorted(Path("metis/gui").rglob("*.py")):
+        albero = ast.parse(f.read_text(encoding="utf-8"))
+        for n in ast.walk(albero):
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) \
+                    and n.func.attr == "execute":
+                colpevoli.append(f"{f.as_posix()}:{n.lineno}")
+    assert not colpevoli, ("la GUI esegue azioni: " + ", ".join(colpevoli))
+
+
+def test_l_editor_dei_comandi_valida_ma_non_esegue():
+    """L'editor deve poter dire "questo strumento non esiste" senza mai
+    invocarlo: la validazione passa dagli SCHEMI, non dagli handler."""
+    import ast
+    from pathlib import Path
+
+    sorgente = Path("metis/gui/widgets/comandi.py").read_text(encoding="utf-8")
+    albero = ast.parse(sorgente)
+    chiamate = {n.func.attr for n in ast.walk(albero)
+                if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)}
+    assert "execute" not in chiamate, "l'editor esegue invece di validare"
+    assert "handler" not in sorgente, "l'editor conosce gli handler"
+    # Il verso positivo: il salvataggio passa dalla Libreria, che valida.
+    assert {"aggiungi", "modifica", "elimina"} <= chiamate

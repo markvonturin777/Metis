@@ -1,12 +1,24 @@
-# Allowlist eseguibili — serve in M2 (Capability Broker).
-# Percorsi rilevati automaticamente sulla macchina il 2026-09-20.
+# Allowlist eseguibili — nata in M2 (Capability Broker), estesa in M4.
 # Il modello puo' nominare SOLO le chiavi di questa tabella, e il broker
 # verifica comunque il percorso. Doppia barriera, voluta.
+#
+# Da M4 ogni voce e' una tabella con `path` e, se servono, `args`. Gli
+# argomenti stanno QUI e non nello schema: sono una proprieta' della
+# macchina, non qualcosa che il modello possa scegliere. Un campo `args`
+# nominabile dal modello sarebbe una riga di comando libera, cioe' il
+# contrario di un'allowlist.
 
-[apps]
-vscode         = "C:/Users/Marco/AppData/Local/Programs/Microsoft VS Code/Code.exe"
-github_desktop = "C:/Users/Marco/AppData/Local/GitHubDesktop/GitHubDesktop.exe"
+[apps.vscode]
+path = "C:/Users/Marco/AppData/Local/Programs/Microsoft VS Code/Code.exe"
 
-# Da completare quando i percorsi saranno verificati:
-# chrome = "C:/Program Files/Google/Chrome/Application/chrome.exe"
-#   nota M4: aggiungere --remote-debugging-port=9222 per Playwright via CDP
+[apps.github_desktop]
+path = "C:/Users/Marco/AppData/Local/GitHubDesktop/GitHubDesktop.exe"
+
+# Il flag di debug remoto e' quello che permette a Playwright di collegarsi
+# alla sessione REALE (schede aperte, login attivi) invece di lanciare un
+# browser vuoto. Va passato al primo avvio di Chrome: se Chrome e' gia' in
+# esecuzione senza il flag, Windows riusa il processo esistente e la porta
+# non si apre. `metis/tools/browser.py` lo rileva e lo dice.
+[apps.chrome]
+path = "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe"
+args = ["--remote-debugging-port=9222"]

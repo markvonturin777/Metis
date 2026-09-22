@@ -8,6 +8,20 @@ modello sceglie fra gli strumenti disponibili e quella, con output
 strutturato, in una chiamata sola. Rispondere a parole e' una scelta
 esplicita come le altre, non l'assenza di scelta.
 
+M4 — UNA LISTA DI AZIONI, NON UNA SOLA
+"Metti Chrome sull'altro schermo e massimizzala" e' una frase sola e due
+azioni. Da M4 la risposta strutturata e' quindi una LISTA, con un tetto
+basso: al massimo tre. Il tetto non e' prudenza generica — e' che un
+modello da 8 miliardi di parametri, davanti a uno schema che accetta una
+lista, tende a riempirla, e ogni azione in piu' e' un'azione che l'utente
+non ha chiesto e che il broker eseguira' comunque, perche' e' valida.
+
+Le contromisure sono tre, e solo la terza regge da sola: il tetto, una
+riga esplicita nel prompt, e il fatto che ogni elemento della lista
+attraversa il broker per conto suo e la sequenza si ferma al primo
+rifiuto. Una lista sbagliata costa una frase di spiegazione, non una
+catena di azioni.
+
 L'OUTPUT STRUTTURATO NON BASTA
 `format=schema` vincola la GRAMMATICA, non il senso: il modello produrra'
 sempre un JSON valido per lo schema, e potra' comunque scegliere lo
@@ -49,6 +63,12 @@ Strumenti disponibili:
 {strumenti}
 
 Regole:
+- Rispondi con una lista "azioni".
+- QUASI SEMPRE la lista contiene UN SOLO elemento. Mettine due solo se
+  l'utente ha chiesto esplicitamente due cose ("... e poi ..."); tre quasi
+  mai. Un'azione che l'utente non ha chiesto verra' eseguita lo stesso.
+- Per le finestre: "window" e' un pezzo del TITOLO della finestra.
+  Lascialo VUOTO se l'utente dice "questa finestra" o non ne nomina una.
 - Se la richiesta corrisponde chiaramente a uno strumento, usalo.
 - Altrimenti usa "nessuno_strumento": conversazione, domande, saluti,
   richieste che nessuno strumento sopra puo' soddisfare.
@@ -66,17 +86,33 @@ class NessunoStrumento(BaseModel):
 
 @dataclass
 class Decisione:
-    """Cosa fare, e quanto e' costato deciderlo."""
+    """Cosa fare, e quanto e' costato deciderlo.
 
-    call: dict | None                 # None = conversazione
-    origine: str                      # "llm" | "fast_path"
+    `calls` e' una tupla anche quando l'azione e' una sola, che resta il
+    caso normale. `call` sopravvive come proprieta' perche' quasi tutti i
+    lettori vogliono la prima e unica azione, e obbligarli a scrivere `[0]`
+    avrebbe sparso indici nel codice per un caso che ricorre di rado.
+    """
+
+    calls: tuple[dict, ...] = ()      # vuota = conversazione
+    origine: str = "llm"              # "llm" | "fast_path" | "chat"
     latenza_ms: float = 0.0
     riparazioni: int = 0
     errore: str | None = None
+    # Frase gia' pronta, se la decisione viene da un comando custom che ne
+    # dichiara una. Altrimenti la compone `risposte.descrivi`.
+    risposta: str | None = None
+
+    @property
+    def call(self) -> dict | None:
+        return self.calls[0] if self.calls else None
 
     @property
     def e_strumento(self) -> bool:
-        return self.call is not None
+        return bool(self.calls)
+
+
+MAX_AZIONI = 3
 
 
 class ToolRouter:
@@ -89,9 +125,15 @@ class ToolRouter:
     def _union(self):
         schemi = [s.schema for s in self.registry.disponibili()]
         schemi.append(NessunoStrumento)
-        return TypeAdapter(
-            Annotated[Union[tuple(schemi)], Field(discriminator="tool")]
-        )
+        uno = Annotated[Union[tuple(schemi)], Field(discriminator="tool")]
+
+        class Piano(BaseModel):
+            """Cosa fare, in ordine."""
+
+            model_config = ConfigDict(extra="forbid")
+            azioni: list[uno] = Field(..., min_length=1, max_length=MAX_AZIONI)
+
+        return TypeAdapter(Piano)
 
     def _prompt(self) -> str:
         return PROMPT.format(strumenti=self.registry.descrizione_per_prompt())
@@ -134,7 +176,7 @@ class ToolRouter:
             except Exception as exc:              # noqa: BLE001
                 # Ollama giu' o modello assente: si degrada in conversazione,
                 # che e' il comportamento innocuo.
-                return Decisione(None, "llm", _ms(t0), riparazioni,
+                return Decisione((), "llm", _ms(t0), riparazioni,
                                  f"{type(exc).__name__}: {exc}")
 
             try:
@@ -150,13 +192,20 @@ class ToolRouter:
                                  " Riprova rispettando lo schema."})
                 continue
 
-            if isinstance(scelta, NessunoStrumento):
-                return Decisione(None, "llm", _ms(t0), riparazioni)
-            return Decisione(scelta.model_dump(), "llm", _ms(t0), riparazioni)
+            # "nessuno strumento" vale per l'intero turno anche quando
+            # compare in mezzo: un modello che scrive [apri_x,
+            # nessuno_strumento] ha finito le azioni, non ne ha chiesta una
+            # in piu'. Si tronca li'.
+            azioni: list[dict] = []
+            for a in scelta.azioni:
+                if isinstance(a, NessunoStrumento):
+                    break
+                azioni.append(a.model_dump())
+            return Decisione(tuple(azioni), "llm", _ms(t0), riparazioni)
 
         # Due tentativi falliti: si risponde a parole. Deny-by-default anche
         # qui — nel dubbio non si agisce.
-        return Decisione(None, "llm", _ms(t0), riparazioni, ultimo_errore)
+        return Decisione((), "llm", _ms(t0), riparazioni, ultimo_errore)
 
 
 def _ms(t0: float) -> float:

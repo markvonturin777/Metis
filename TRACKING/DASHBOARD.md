@@ -3,7 +3,7 @@
 > Stato vivo del progetto. Si aggiorna mentre si lavora.
 > Riferimento: [Specifica V1.0](../SPECS/Metis_V1.0_Specifica_Ufficiale.md) · [Piano](../SPECS/plan/README.md)
 
-**Ultimo aggiornamento:** 2026-09-21 — **M3 chiusa.** GUI con due viste, NFR-8 superato (max 3,7 ms in esercizio, 62 fps)
+**Ultimo aggiornamento:** 2026-09-21 — **M4 chiusa.** Metis controlla il PC: finestre su due schermi, clic per nome via UIA e Playwright, comandi custom modificabili a caldo
 
 ---
 
@@ -28,17 +28,18 @@ Un file per iterazione. Ogni file ha: prerequisiti, attività spuntabili, misure
 | **M1** | [Fondamenta Vocali](M1_tracking.md) | ✅ | 33/37 | 6/6 | 2026-09-21 | 2026-09-21 | `m1-voice` |
 | **M2** | [Capability Broker](M2_tracking.md) | ✅ | 33/33 | 9/10 | 2026-09-21 | 2026-09-21 | `m2-broker` |
 | **M3** | [Interfaccia Grafica](M3_tracking.md) | ✅ | 30/32 | 8/10 | 2026-09-21 | 2026-09-21 | `m3-gui` |
-| **M4** | [Automazione PC](M4_tracking.md) | ⬜ | 0/31 | 0/12 | — | — | `m4-automation` |
+| **M4** | [Automazione PC](M4_tracking.md) | ✅ | 28/31 | 10/12 | 2026-09-21 | 2026-09-21 | `m4-automation` |
 | **M5** | [Conoscenza](M5_tracking.md) | ⬜ | 0/30 | 0/13 | — | — | `m5-knowledge` |
 | **M6** | [Integrazioni](M6_tracking.md) | ⬜ | 0/34 | 0/15 | — | — | `m6-integrations` |
 | **M7** | [Consolidamento V1.0](M7_tracking.md) | ⬜ | 0/44 | 0/13 | — | — | `v1.0` |
-| | **Totale** | | **134/278** | **31/87** | | | |
+| | **Totale** | | **162/278** | **41/87** | | | |
 
 > Oltre a queste ci sono **30 caselle di prerequisito** e **131 esiti di test** nelle tabelle dei singoli file: 531 punti di controllo in totale.
 
-**Iterazione corrente:** **M4 — Automazione PC.** Gli strumenti T2 sono già
-registrati con le loro guardie: per accenderli si toglie `implemented=False`
-e si scrive il corpo. Non servono guardie nuove.
+**Iterazione corrente:** **M5 — Conoscenza.** Da qui entra in gioco la riga
+scritta in M2 e mai ancora attivata: nessuna azione T2 o T3 può nascere da un
+turno che contiene testo appena recuperato dal web. Quando comincerà a
+rifiutare cose, non sarà un difetto.
 
 **Rimandato alla v2:** la wake word. Banchi pronti, modello v3 pronto, si
 riaccende con `enabled = true` in `config/wakeword.toml`. Vedi §21 della
@@ -59,7 +60,7 @@ I valori si riempiono man mano. La colonna "misurato" va aggiornata a ogni misur
 | 5 | WER italiano | < 12% | **8,6%** su 10 frasi | M0 parziale | 🟡 |
 | 6 | Falsi risvegli | < 1 / 8 h | ⏸️ non applicabile in V1.0: senza wake word non ci sono risvegli | v2 | ⏸️ |
 | 7 | Auto-inneschi da eco | **0** | ❌ **57 in 125 min** → D1. Non applicabile in V1.0 | v2 | ⏸️ |
-| 8 | Reattività GUI | ≥ 30 fps, no freeze > 100 ms | **62 fps**, max 3,7 ms su 3778 campioni | M3 ✅ | ✅ |
+| 8 | Reattività GUI | ≥ 30 fps, no freeze > 100 ms | **62 fps**, max 13,1 ms su 10 373 campioni | M3 ✅ · M4 ✅ | ✅ |
 | 9 | Azioni T3 non confermate | **0** | **0** su 50 tentativi, 9 scenari avversariali | M2 ✅ | ✅ |
 | 10 | Stabilità 72 h | RSS < +10% | 72 **min**: deriva −0,2 GB | M0 indicativo | 🟡 |
 

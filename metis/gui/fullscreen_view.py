@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 
 from metis.core.palette import esadecimale
 from metis.gui.widgets.audit import VistaAudit
+from metis.gui.widgets.comandi import PannelloComandi
 from metis.gui.widgets.conversazione import Conversazione
 from metis.gui.widgets.stato import IndicatoreStato, VuMeter
 from metis.gui.widgets.telemetria import Telemetria
@@ -145,10 +146,10 @@ class FullscreenView(QWidget):
         lay.addWidget(self.corrente, 1)
 
         lay.addWidget(_titolo("COMANDI RAPIDI"))
-        self.comandi = QLabel("—")
-        self.comandi.setWordWrap(True)
-        self.comandi.setStyleSheet("color: #64748b; font-size: 11px;"
-                                   " font-family: Consolas, monospace;")
+        # In M3 era un'etichetta di sola lettura: il contenitore predisposto
+        # per M4. Adesso e' l'editor vero, e il resto della colonna non se
+        # ne accorge.
+        self.comandi = PannelloComandi()
         lay.addWidget(self.comandi)
         return box
 
@@ -166,8 +167,9 @@ class FullscreenView(QWidget):
     def imposta_kill(self, sospeso: bool) -> None:
         self.kill.setVisible(sospeso)
 
-    def imposta_comandi(self, righe: list[str]) -> None:
-        self.comandi.setText("\n".join(righe) if righe else "—")
+    def collega_comandi(self, libreria) -> None:
+        """La libreria dei comandi, quando il sistema e' pronto."""
+        self.comandi.collega(libreria)
 
 
 def _titolo(testo: str) -> QLabel:

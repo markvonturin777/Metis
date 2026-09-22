@@ -195,7 +195,7 @@ flowchart TB
     subgraph ACT["Strumenti"]
         T0["T0 Lettura<br/>telemetria, web, stato HA"]
         T1["T1 Reversibile<br/>app allowlist, finestre"]
-        T2["T2 Input sintetico<br/>UIA, Playwright, pyautogui"]
+        T2["T2 Input sintetico<br/>UIA, Playwright, SendInput"]
         T3["T3 Effetti esterni<br/>email, smart home"]
     end
 
@@ -577,8 +577,9 @@ Il registro è la superficie d'azione completa di Metis. **Ciò che non è elenc
 | `get_telemetry` | `() -> Telemetry` | CPU, RAM, VRAM, temperatura GPU |
 | `web_search` | `(query: str, max_results: int = 5) -> list[Result]` | `ddgs`, con caching |
 | `web_fetch` | `(url: HttpUrl) -> str` | Limite 200 KB, timeout 8 s, testo estratto |
-| `list_windows` | `() -> list[WindowInfo]` | Titolo, processo, monitor |
+| `list_windows` | `() -> list[WindowInfo]` | Titolo, processo, stato. **Senza id**: vedi la nota in fondo a §9 |
 | `get_active_window` | `() -> WindowInfo` | Usato anche dalle guardie T2 |
+| `list_monitors` | `() -> list[MonitorInfo]` | Posizione, risoluzione, scaling |
 | `list_reminders` | `() -> list[Reminder]` | Dal jobstore |
 | `get_home_state` | `(entity_id: str) -> State` | Home Assistant, lettura |
 
@@ -588,8 +589,9 @@ Il registro è la superficie d'azione completa di Metis. **Ciò che non è elenc
 | :-- | :-- | :-- |
 | `open_application` | `(app: Literal[...]) -> None` | **Allowlist** in `config/apps.toml` |
 | `open_url` | `(url: HttpUrl) -> None` | Schema `https` obbligatorio |
-| `move_window_to_monitor` | `(window_id: int, monitor: int) -> None` | Geometria via Win32, DPI-aware |
-| `resize_window` / `minimize` / `maximize` / `focus` | `(window_id: int, ...) -> None` | — |
+| `move_window_to_monitor` | `(window: str, monitor: MonitorRef) -> None` | Geometria via Win32, DPI-aware |
+| `resize_window` | `(window: str, disposizione: Disposizione) -> None` | Metà schermo, centrata, piena: mai pixel |
+| `minimize` / `maximize` / `restore` / `focus_window` | `(window: str) -> None` | — |
 | `set_volume` | `(level: int)` `0–100` | — |
 | `schedule_reminder` | `(when: datetime, text: str) -> int` | Notifica desktop, reversibile |
 
@@ -597,11 +599,11 @@ Il registro è la superficie d'azione completa di Metis. **Ciò che non è elenc
 
 | Strumento | Firma | Guardia |
 | :-- | :-- | :-- |
-| `click_element` | `(descriptor: ElementDescriptor) -> None` | Risolto via UIA o Playwright. **Coordinate grezze vietate.** |
+| `click_element` | `(elemento: str, tipo: TipoElemento) -> None` | Risolto via UIA o Playwright. **Coordinate grezze vietate.** |
 | `type_text` | `(text: str) -> None` | Denylist finestre |
 | `press_hotkey` | `(keys: list[Key]) -> None` | Denylist finestre + denylist combinazioni |
-| `scroll` | `(amount: int) -> None` | — |
-| `drag` | `(from_: ElementDescriptor, to: ElementDescriptor) -> None` | Denylist finestre |
+| `scroll` | `(verso: "su"\|"giu", quantita: 1-10) -> None` | Denylist finestre |
+| `drag` | `(da: str, a: str) -> None` | Denylist finestre |
 
 ### 9.4 T3 — Effetti esterni, conferma obbligatoria
 
@@ -616,6 +618,29 @@ Il registro è la superficie d'azione completa di Metis. **Ciò che non è elenc
 `read_file`, `write_file`, `move_file`, `delete_file`, `list_directory`, `run_command`, `run_python`, `install_package`.
 
 L'assenza è il meccanismo di sicurezza. Non serve altro.
+
+### 9.6 Due cose che il modello non può nominare, e perché
+
+**Gli handle di finestra.** Le prime stesure di questa specifica davano agli
+strumenti sulle finestre un `window_id: int` preso da `list_windows`. È il
+modo giusto fra due programmi e quello sbagliato con un modello linguistico
+in mezzo: **un handle inventato è un intero valido**, e ha buone
+probabilità di essere una finestra vera — solo non quella che l'utente
+intendeva. Un titolo inventato non corrisponde a niente e produce un
+rifiuto. Per la stessa ragione `list_windows` non restituisce più gli id:
+un id nell'elenco è un formato che il modello impara a produrre anche
+quando non ha un elenco da cui copiarlo.
+
+Il prezzo è che due finestre con lo stesso pezzo di titolo producono un
+rifiuto che le elenca, invece di una scelta. È il prezzo giusto: una scelta
+arbitraria fra due è un'azione sulla finestra sbagliata una volta su due.
+
+**Le coordinate.** Non esiste nessun campo `x` e nessun campo `y`, in nessuno
+strumento. Il modello dice *cosa* premere; *dove* si trovi lo scopre il
+risolutore guardando l'albero di UI Automation o il DOM della pagina. Se non
+lo trova, si rifiuta — ed è un esito corretto, non un fallimento.
+`test_nessuno_schema_accetta_delle_coordinate` lo verifica a ogni esecuzione
+della suite.
 
 ---
 
@@ -734,9 +759,9 @@ Il system prompt completo è in [Appendice A](#appendice-a--system-prompt-metis)
 | Audio I/O | `sounddevice` | — | Più pulito di PyAudio |
 | **Resampling** | **`soxr`** | 1.1 | **Necessario**: il Blue Yeti su WASAPI accetta solo 48 kHz, decimazione 3:1 |
 | **CUDA per CTranslate2** | `nvidia-cublas-cu12`, `nvidia-cudnn-cu12` | 12.9 / 9.26 | Servono perché torch è CPU-only; vanno registrate con `os.add_dll_directory` **e** nel PATH |
-| Finestre | `pywinctl` | — | **Sostituisce `pygetwindow`** |
-| Input | `pyautogui`, `pynput` | — | Con guardie §8.4 |
-| Cattura schermo | `mss` | — | Multi-monitor corretto |
+| Finestre | `pywin32` | — | Geometria e DPI da una sorgente sola: vedi §9.6 |
+| Input | `SendInput` via `ctypes`, `pynput` | — | Con guardie §8.4. Non `pyautogui`: dipende dal layout per gli accenti e sbaglia oltre il monitor primario |
+| Cattura schermo | — | — | Non serve in V1.0: la geometria viene da Win32, e OCR non è entrato (D2) |
 | UI Automation | `uiautomation` | — | Risoluzione elementi nativi |
 | Browser | `playwright` | — | **Nuovo**: automazione web |
 | Ricerca web | `ddgs` | — | **Rinominato** da `duckduckgo_search` |
@@ -1094,7 +1119,7 @@ quadrantChart
 | **R2** | Qualità italiana di Kokoro insufficiente | Test di ascolto in M0, non dopo | Piper `it_IT`; XTTSv2 se serve qualità |
 | **R3** | ~~Wake word con troppi mancati riconoscimenti~~ **Si è materializzato al contrario**: non mancati riconoscimenti (6,7%) ma **auto-inneschi**, 57 in 125 min | Negativi duri **reali** invece che sintetici: v3 azzera i falsi sulle clip tenute da parte | ✅ **Mitigazione applicata**: wake word spenta in V1.0, push-to-talk unica via. Il progetto non si è fermato un minuto |
 | **R4** | Prompt injection da contenuto web | §8.5: nessun T2/T3 nel turno successivo a un fetch | Regola applicata dal broker, non dal modello |
-| **R5** | Coordinate errate con scaling DPI misto | DPI awareness esplicita, test su entrambi i monitor in M4 | Geometria via API Win32 anziché `pyautogui` |
+| **R5** | Coordinate errate con scaling DPI misto | DPI awareness esplicita, verificata con l'AST che preceda Qt | Geometria via API Win32. **Residuo:** l'hardware non ha scaling misto, quindi la matematica è verificata su monitor sintetici e il comportamento di Windows al confine no — vedi §6 del tracking di M4 |
 | **R6** | UI Automation non vede l'elemento target | Playwright copre il browser, che è il caso principale | OCR come ultima risorsa, accettando la latenza |
 | **R7** | `ddgs` rate-limited | Caching locale, backoff | Brave Search API o SearXNG self-hosted |
 | **R8** | **Espansione di ambito** | §1.2 elenca esplicitamente il fuori ambito | Le idee nuove vanno in un backlog V1.1, non nella V1.0 |
@@ -1173,7 +1198,29 @@ tre punti, tutti già dietro un callable iniettato. Riaccenderla è
 modello successivo si rivaluta con `rescore_session.py` in sette minuti di
 CPU e senza altoparlanti. La seduta va fatta **a stanza vuota**.
 
-### D2 — UIA o OCR · fine M4 · aperta
+### D2 — UIA o OCR · 2026-09-21 · **provvisoria: niente OCR**
+
+**Esito: UIA e Playwright bastano, e OCR non entra. Con riserva esplicita.**
+
+Nei tentativi fatti in M4 — cinque su una pagina web via Playwright, due su
+un'applicazione nativa via UI Automation — entrambi i risolutori hanno
+trovato tutto ciò che c'era e rifiutato tutto ciò che non c'era, **senza un
+solo clic fuori bersaglio**. In una misura a parte, 20 clic su 20 sono
+atterrati sull'elemento giusto.
+
+Il criterio del piano era "≥ 80% dei tentativi". Sette tentativi non sono una
+percentuale, e i bersagli erano costruiti apposta: la decisione è quindi
+*provvisoria*, non chiusa.
+
+**Cosa la chiuderebbe davvero:** qualche decina di "clicca su X" sulle
+applicazioni vere di chi usa Metis, durante M5 e M6. Non serve un banco:
+serve l'uso, e l'audit log registra già ogni rifiuto con il motivo.
+
+**Cosa la ribalterebbe:** una classe di applicazioni che UIA non vede. Ne
+esiste già un esempio misurato — **Tk**, che disegna i propri widget invece
+di crearne di nativi ed espone solo la cornice della finestra. Se ne
+comparissero altre che contano (Electron senza accessibilità attiva è la
+candidata), OCR diventa il terzo livello, con i suoi 300 ms - 2 s.
 
 ### D3 — AEC necessario o superfluo · inizio M6 · aperta
 
@@ -1257,9 +1304,13 @@ Metis/
 │   │   ├── telemetry.py           # T0
 │   │   ├── web.py                 # T0
 │   │   ├── apps.py                # T1, subprocess con allowlist
-│   │   ├── windows.py             # T1, pywinctl DPI-aware
-│   │   ├── input.py               # T2, con guardie
-│   │   ├── browser.py             # T2, Playwright
+│   │   ├── display.py             # DPI per monitor, geometria (M4)
+│   │   ├── finestre.py            # risoluzione e movimento, sotto gli strumenti
+│   │   ├── windows.py             # T0/T1 sulle finestre
+│   │   ├── sendinput.py           # eventi Win32: nessuno strumento qui
+│   │   ├── input_sintetico.py     # T2, con guardie
+│   │   ├── uia.py                 # risoluzione elementi nativi
+│   │   ├── browser.py             # T2, Playwright su CDP
 │   │   ├── scheduler.py           # T1/T3
 │   │   └── home_assistant.py      # T0/T3
 │   ├── memory/
@@ -1353,8 +1404,11 @@ from pydantic import BaseModel, Field
 class MoveWindowToMonitor(BaseModel):
     """T1 — Sposta una finestra su un altro monitor. Reversibile."""
     tool: Literal["move_window_to_monitor"]
-    window_id: int = Field(..., description="ID da list_windows")
-    monitor: int = Field(..., ge=0, le=3, description="Indice monitor")
+    # Un pezzo del TITOLO, non un handle, e non un indice libero: §9.6.
+    # Vuoto = la finestra in primo piano quando l'utente ha parlato.
+    window: str = Field("", max_length=120)
+    monitor: Literal["destra", "sinistra", "altro", "primario",
+                     "0", "1", "2", "3"]
 
 class OpenApplication(BaseModel):
     """T1 — Apre un'applicazione dall'allowlist. Nessun percorso libero."""

@@ -25,8 +25,9 @@ import numpy as np
 from metis.audio.wakeword import WakeWordConfig, WakeWordDetector
 from metis.core.logging import bind_turn, clear_turn, log_transition
 from metis.core.orchestrator import Azioni, Deps, Orchestrator
-from metis.core.risposte import descrivi
+from metis.core.risposte import descrivi_sequenza
 from metis.core.router import Router
+from metis.memory.commands import Libreria
 from metis.llm.client import LlmClient
 from metis.llm.toolcall import ToolRouter
 from metis.security.audit import AuditLog
@@ -35,6 +36,7 @@ from metis.security.conferma import scegli_conferma
 from metis.security.killswitch import KILL_SWITCH
 from metis.security.policies import Context, richiede_conferma
 from metis.stt.whisper_engine import WhisperEngine
+from metis.tools import finestre
 from metis.tools.registry import Registry, carica_tutti
 from metis.tts import create_engine
 from metis.tts.kokoro_engine import Player
@@ -78,6 +80,7 @@ class Sistema:
     registry: Registry | None = None
     broker: Broker | None = None
     router: Router | None = None
+    libreria: Libreria | None = None
     avvio_s: float = 0.0
     note: list[str] = field(default_factory=list)
 
@@ -98,8 +101,11 @@ def costruisci_azioni(opz: Opzioni, log, riporta: Callable[[str], None],
     audit = AuditLog()
     broker = Broker(registry=reg, audit=audit, kill=KILL_SWITCH)
     tool_router = ToolRouter(reg)
-    router = Router(reg, tool_router=tool_router)
+    libreria = Libreria(reg)
+    router = Router(reg, libreria=libreria, tool_router=tool_router)
     chiedi = chiedi_conferma or scegli_conferma()
+    for avviso in libreria.avvisi:
+        log.warning("comando custom scartato", motivo=avviso)
 
     # Ollama compila la grammatica dell'output strutturato alla prima
     # richiesta: 3,8 s contro 250 ms. Si paga adesso.
@@ -109,7 +115,10 @@ def costruisci_azioni(opz: Opzioni, log, riporta: Callable[[str], None],
     riporta(f"strumenti    : {len(disponibili)} attivi ({', '.join(disponibili)})")
     riporta(f"perimetro    : {len(reg)} registrati, "
             f"{len(reg) - len(disponibili)} senza capacita' (M4/M6)")
-    riporta(f"comandi rapidi: {router.stats()['comandi_configurati']} frasi")
+    s = router.stats()
+    riporta(f"comandi rapidi: {s['comandi_configurati']} comandi, "
+            f"{s['frasi']} frasi"
+            + (f" ({len(libreria.avvisi)} scartati)" if libreria.avvisi else ""))
 
     def esegui(call: dict):
         r = broker.execute(call, Context(turn_id=None, chiedi_conferma=chiedi,
@@ -125,11 +134,17 @@ def costruisci_azioni(opz: Opzioni, log, riporta: Callable[[str], None],
     azioni = Azioni(
         decidi=lambda testo, storia: router.decidi(testo, storia),
         esegui=esegui,
-        descrivi=descrivi,
+        descrivi=descrivi_sequenza,
         richiede_conferma=conferma_serve,
+        # "Questa finestra" si fissa qui, all'ingresso in ascolto. Il
+        # cablaggio sta in questo file e non nell'orchestratore perche' e'
+        # l'unico posto che conosce sia il ciclo di vita del turno sia gli
+        # strumenti: l'orchestratore non deve sapere che esistono le
+        # finestre, e `finestre.py` non deve sapere che esiste un turno.
+        al_risveglio=finestre.cattura_riferimento,
     )
     return azioni, {"registry": reg, "audit": audit, "broker": broker,
-                    "router": router}
+                    "router": router, "libreria": libreria}
 
 
 def costruisci_sistema(opz: Opzioni, log,

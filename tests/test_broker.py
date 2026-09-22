@@ -544,3 +544,74 @@ def test_molti_errori_di_schema_vengono_riassunti(banco):
                               "a": 1, "b": 2, "c": 3, "d": 4, "e": 5})
     assert r.denied and r.stage == "schema"
     assert "e altri" in r.detail and len(r.detail) < 400
+
+
+# --- M4: uno strumento puo' rifiutare ---------------------------------------
+
+class Prova(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tool: Literal["prova"]
+
+
+def _con(tier, handler, tmp_path):
+    reg = Registry("rifiuti")
+    reg.strumento(tier, Prova)(handler)
+    return Broker(registry=reg, audit=AuditLog(tmp_path / "r.db"),
+                  kill=KillSwitch())
+
+
+def test_un_rifiuto_dello_strumento_e_denied_non_error(tmp_path):
+    """La distinzione fra "rotto" e "non l'ho fatto apposta".
+
+    "Non trovo nessun link che si chiami Contatti" non e' un guasto: e' il
+    comportamento corretto, ed e' preferibile a un clic a caso. Se finisse
+    nell'audit log accanto agli errori veri, entrambe le categorie
+    diventerebbero rumore e chi guarda il log imparerebbe a saltarle.
+    """
+    from metis.tools.registry import Rifiuto
+
+    def handler(call):
+        raise Rifiuto("non trovo nessun elemento che si chiami 'Contatti'")
+
+    r = _con(Tier.T1, handler, tmp_path).execute({"tool": "prova"}, Context())
+    assert r.denied and r.outcome is Outcome.DENIED
+    assert r.stage == "strumento" and "Contatti" in r.detail
+
+
+def test_un_errore_vero_resta_un_errore(tmp_path):
+    """Il verso opposto: se lo strumento esplode davvero non deve
+    travestirsi da rifiuto educato."""
+    def handler(call):
+        raise RuntimeError("playwright non risponde")
+
+    r = _con(Tier.T1, handler, tmp_path).execute({"tool": "prova"}, Context())
+    assert r.outcome is Outcome.ERROR and r.stage == "esecuzione"
+    assert "RuntimeError" in r.detail
+
+
+def test_un_rifiuto_non_e_una_via_per_saltare_i_controlli(tmp_path):
+    """`Rifiuto` si solleva dall'handler, cioe' dopo che tutti gli stadi
+    hanno detto si'. Su un T3 senza conferma l'handler non viene chiamato
+    affatto, e il rifiuto resta quello della conferma."""
+    from metis.tools.registry import Rifiuto
+
+    chiamato = []
+
+    def handler(call):
+        chiamato.append(1)
+        raise Rifiuto("mai arrivato")
+
+    r = _con(Tier.T3, handler, tmp_path).execute({"tool": "prova"}, Context())
+    assert r.denied and r.stage == "conferma" and chiamato == []
+
+
+def test_il_rifiuto_finisce_nell_audit_log_con_il_motivo(tmp_path):
+    from metis.tools.registry import Rifiuto
+
+    b = _con(Tier.T1, lambda c: (_ for _ in ()).throw(
+        Rifiuto("due finestre si chiamano cosi'")), tmp_path)
+    r = b.execute({"tool": "prova"}, Context())
+    righe = b.audit.recent(1)
+    assert righe and righe[0]["outcome"] == "denied"
+    assert "due finestre" in righe[0]["detail"]
+    assert r.audit_id is not None

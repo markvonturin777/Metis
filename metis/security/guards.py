@@ -19,6 +19,7 @@ eredita la protezione senza saperlo, ed e' l'unico modo perche' regga.
 
 from __future__ import annotations
 
+import os
 import tomllib
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -53,6 +54,10 @@ class Finestra:
     titolo: str
     processo: str
     classe: str
+    # 0 = sconosciuto. Serve a riconoscere le finestre di Metis stesso, e va
+    # confrontato con il PID e non con il nome del processo: "python.exe" e'
+    # anche il nome di qualunque altro script aperto sul desktop.
+    pid: int = 0
 
 
 # Processi in cui non si scrive mai. Non sono "applicazioni pericolose": sono
@@ -91,7 +96,7 @@ def finestra_in_primo_piano() -> Finestra:
         except Exception:
             processo = "?"
         return Finestra(win32gui.GetWindowText(hwnd), processo,
-                        win32gui.GetClassName(hwnd))
+                        win32gui.GetClassName(hwnd), pid)
     except Exception:
         return Finestra("", "?", "?")
 
@@ -115,6 +120,11 @@ def guardia_finestra(fornitore: Callable[[], Finestra] | None = None) -> Guard:
             return f"finestra in primo piano non consentita: {f.processo}"
         if f.classe in DENY_CLASSI:
             return f"classe di finestra non consentita: {f.classe} ({f.titolo[:40]})"
+        if f.pid and f.pid == os.getpid():
+            # Metis che scrive dentro Metis non e' pericoloso, e' insensato:
+            # succede quando l'utente clicca sull'overlay e poi detta. Meglio
+            # dirlo che consegnare i tasti a una finestra che non li aspetta.
+            return "in primo piano ci sono io: clicca prima sulla finestra giusta"
         if f.processo == "?":
             # Non sapere dove si sta scrivendo e' peggio che saperlo male.
             return "finestra in primo piano non identificabile"
@@ -158,17 +168,47 @@ def guardia_combinazione() -> Guard:
 
 # --- allowlist applicazioni --------------------------------------------------
 
-def carica_allowlist(path: Path = _CONFIG_APPS) -> dict[str, Path]:
+@dataclass(frozen=True)
+class VoceApp:
+    """Un'applicazione dell'allowlist: dove sta e con quali argomenti parte.
+
+    Gli argomenti vivono qui e non nello schema dello strumento. E' una
+    distinzione di sicurezza, non di comodita': `--remote-debugging-port` e'
+    una proprieta' di questa macchina, decisa da chi ha scritto il TOML. Un
+    campo `args` che il modello potesse riempire sarebbe una riga di comando
+    libera, e un'allowlist con una riga di comando libera dentro non e'
+    un'allowlist.
+    """
+
+    percorso: Path
+    args: tuple[str, ...] = ()
+
+    @staticmethod
+    def da(valore) -> "VoceApp":
+        """Accetta un `Path`, una stringa o la tabella del TOML.
+
+        La forma breve regge perche' la usano i test, che parlano di
+        percorsi e non di righe di comando.
+        """
+        if isinstance(valore, VoceApp):
+            return valore
+        if isinstance(valore, dict):
+            return VoceApp(Path(valore["path"]),
+                           tuple(str(a) for a in valore.get("args", ())))
+        return VoceApp(Path(valore))
+
+
+def carica_allowlist(path: Path = _CONFIG_APPS) -> dict[str, VoceApp]:
     if not path.exists():
         return {}
     dati = tomllib.loads(path.read_text(encoding="utf-8")).get("apps", {})
-    return {k: Path(v) for k, v in dati.items()}
+    return {k: VoceApp.da(v) for k, v in dati.items()}
 
 
 ALLOWLIST_APP = carica_allowlist()
 
 
-def guardia_app(allowlist: dict[str, Path] | None = None) -> Guard:
+def guardia_app(allowlist: dict | None = None) -> Guard:
     """Seconda barriera sull'apertura di applicazioni.
 
     Il `Literal` nello schema impedisce gia' al modello di nominare altro.
@@ -181,9 +221,10 @@ def guardia_app(allowlist: dict[str, Path] | None = None) -> Guard:
 
     def controlla(call: BaseModel) -> str | None:
         chiave = getattr(call, "app", None)
-        percorso = tabella.get(chiave)
-        if percorso is None:
+        voce = tabella.get(chiave)
+        if voce is None:
             return f"applicazione non in allowlist: {chiave!r}"
+        percorso = VoceApp.da(voce).percorso
         if not percorso.is_absolute():
             return f"percorso non assoluto in allowlist: {percorso}"
         if not percorso.exists():

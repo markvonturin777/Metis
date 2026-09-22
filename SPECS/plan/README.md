@@ -83,7 +83,7 @@ M3 (GUI) e M5 (conoscenza) sono parallelizzabili: dipendono da componenti divers
 | M1 | ✅ Chiusa | `m1-voice` | 2026-09-21 |
 | M2 | ✅ Chiusa | `m2-broker` | 2026-09-21 |
 | M3 | ✅ Chiusa | `m3-gui` | 2026-09-21 |
-| M4 | ⬜ Da iniziare | `m4-automation` | — |
+| M4 | ✅ Chiusa | `m4-automation` | 2026-09-21 |
 | M5 | ⬜ Da iniziare | `m5-knowledge` | — |
 | M6 | ⬜ Da iniziare | `m6-integrations` | — |
 | M7 | ⬜ Da iniziare | `v1.0` | — |

@@ -10,6 +10,7 @@ from typing import Literal
 import pytest
 from pydantic import BaseModel
 
+from metis.llm.schemas import OpenApplication
 from metis.security.guards import (
     DENY_COMBINAZIONI,
     Finestra,
@@ -152,8 +153,24 @@ def test_eseguibile_presente_passa(tmp_path):
 def test_allowlist_reale_si_carica():
     tabella = carica_allowlist()
     assert tabella, "config/apps.toml non contiene applicazioni"
-    for chiave, percorso in tabella.items():
-        assert percorso.is_absolute(), f"{chiave}: percorso non assoluto"
+    for chiave, voce in tabella.items():
+        assert voce.percorso.is_absolute(), f"{chiave}: percorso non assoluto"
+
+
+def test_gli_argomenti_vivono_nella_allowlist_non_nello_schema():
+    """Il flag di debug di Chrome e' una proprieta' della macchina.
+
+    Se finisse in un campo dello schema, il modello potrebbe scegliere gli
+    argomenti con cui si avvia un eseguibile — che e' una riga di comando
+    libera con qualche passaggio in mezzo, cioe' il contrario di
+    un'allowlist. Qui si verifica che stia dove deve stare.
+    """
+    voce = carica_allowlist().get("chrome")
+    assert voce is not None, "chrome manca dall'allowlist: serve a M4"
+    assert any("remote-debugging-port" in a for a in voce.args), (
+        "senza il flag, Playwright non puo' collegarsi alla sessione reale")
+    campi = set(OpenApplication.model_fields)
+    assert "args" not in campi and campi == {"tool", "app"}
 
 
 def test_allowlist_da_file_mancante_e_vuota():
@@ -209,3 +226,31 @@ def test_processo_non_interrogabile(monkeypatch):
     f = finestra_in_primo_piano()
     assert f.titolo == "Qualcosa" and f.processo == "?"
     assert guardia_finestra(lambda: f).controlla(Vuoto()) is not None
+
+
+# --- M4: la finestra di Metis stesso -----------------------------------------
+
+def test_metis_non_scrive_dentro_se_stesso():
+    """Succede quando l'utente clicca sull'overlay e poi detta: il fuoco e'
+    sul pannello, e i tasti finirebbero li'. Non e' pericoloso, e'
+    insensato — ma un rifiuto che spiega vale piu' di venti caratteri
+    consegnati a una finestra che non li aspetta."""
+    import os
+
+    g = con(Finestra("Metis", "python.exe", "Qt5152QWindowIcon", os.getpid()))
+    motivo = g.controlla(Vuoto())
+    assert motivo is not None and "ci sono io" in motivo
+
+
+def test_un_altro_processo_python_non_viene_scambiato_per_metis():
+    """Il confronto e' sul PID e non sul nome: "python.exe" e' anche
+    qualunque altro script aperto sul desktop."""
+    import os
+
+    g = con(Finestra("script altrui", "python.exe", "X", os.getpid() + 1))
+    assert g.controlla(Vuoto()) is None
+
+
+def test_la_finestra_letta_dal_sistema_porta_il_pid():
+    f = finestra_in_primo_piano()
+    assert isinstance(f.pid, int)

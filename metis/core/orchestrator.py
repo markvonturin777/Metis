@@ -63,8 +63,14 @@ class Azioni:
 
     decidi: Callable[[str, list], object]      # testo -> Decisione
     esegui: Callable[[dict], object]           # tool call -> Result
-    descrivi: Callable[[object], str]          # Result -> frase da dire
+    descrivi: Callable[[list, object], str]    # Result[] -> frase da dire
     richiede_conferma: Callable[[str], bool]   # nome strumento -> bool
+    # Chiamata ogni volta che Metis si mette in ascolto. Serve a fissare
+    # "questa finestra" nell'istante in cui l'utente comincia a parlare,
+    # invece che uno o due secondi dopo, quando il fuoco e' gia' cambiato —
+    # spesso verso Metis stesso. L'orchestratore non sa cosa venga
+    # catturato: sa solo che c'e' un momento in cui va fatto, e qual e'.
+    al_risveglio: Callable[[], None] | None = None
 
 
 @dataclass
@@ -193,6 +199,24 @@ class Orchestrator:
             # DORMIENTE -> IN_ASCOLTO, oppure il PTT che chiude l'ascolto.
             self.seg.reset()
 
+        if self.sm.state is State.IN_ASCOLTO:
+            self._risveglio()
+
+    def _risveglio(self) -> None:
+        """Il gancio di M4, isolato perche' gira sul thread audio.
+
+        Un'eccezione qui fermerebbe la cattura, cioe' il microfono, per un
+        dettaglio il cui peggior esito e' un rifiuto educato piu' tardi
+        ("non so quale finestra intendi"). Si assorbe e si conta.
+        """
+        a = self.d.azioni
+        if a is None or a.al_risveglio is None:
+            return
+        try:
+            a.al_risveglio()
+        except Exception:                        # noqa: BLE001
+            self.counters.errors += 1
+
     def _stop_everything(self) -> None:
         """Le tre cose da fermare. Ometterne una e' il bug classico."""
         with self._lock:
@@ -318,38 +342,62 @@ class Orchestrator:
     # -- ramo strumenti ----------------------------------------------------
 
     def _esegui_strumento(self, m: TurnMetrics, decisione) -> None:
-        """Esegue una tool call e ne pronuncia l'esito.
+        """Esegue le tool call del turno, in ordine, e ne pronuncia l'esito.
 
         Gli stati sono quelli veri della macchina, conferma compresa: in M2
-        la conferma e' una domanda da console, in M3 diventera' una finestra,
-        e la sequenza di stati resta la stessa. Costruirla adesso significa
-        che in M3 cambia il dialogo, non l'orchestratore.
+        la conferma era una domanda da console, in M3 e' diventata una
+        finestra, e la sequenza di stati non e' cambiata.
+
+        M4 — LA SEQUENZA SI FERMA AL PRIMO RIFIUTO
+        "Metti Chrome sull'altro schermo e massimizzala" sono due azioni, e
+        se la prima viene negata la seconda non ha piu' senso: massimizzare
+        una finestra rimasta dov'era non e' meta' del lavoro, e' un'altra
+        cosa. Proseguire darebbe anche il risultato peggiore possibile per
+        chi ascolta — un "fatto" parziale che sembra un successo.
+
+        Vale anche per l'interruzione: se l'utente parla sopra a Metis fra
+        la prima e la seconda azione, la seconda non parte.
         """
         a = self.d.azioni
-        call = decisione.call
-        nome = call.get("tool", "?")
-
         self.sm.fire(Event.INTENT_KNOWN)              # -> ESECUZIONE
-        conferma = a.richiede_conferma(nome)
-        if conferma:
-            self.sm.fire(Event.NEEDS_CONFIRM)         # -> ATTESA_CONFERMA
 
-        res = a.esegui(call)
+        risultati = []
+        for call in decisione.calls:
+            if self.cancelled:
+                break
+            nome = call.get("tool", "?")
+            conferma = a.richiede_conferma(nome)
+            if conferma:
+                self.sm.fire(Event.NEEDS_CONFIRM)     # -> ATTESA_CONFERMA
 
-        if conferma:
-            # CONFIRMED torna in ESECUZIONE, DENIED va dritto a PARLATO:
-            # in entrambi i casi c'e' qualcosa da dire all'utente.
-            self.sm.fire(Event.CONFIRMED if res.ok else Event.DENIED)
+            res = a.esegui(call)
 
-        if res.ok:
-            self.counters.tools_ok += 1
-        else:
-            self.counters.tools_denied += 1
+            if conferma:
+                # CONFIRMED torna in ESECUZIONE, DENIED va dritto a PARLATO:
+                # in entrambi i casi c'e' qualcosa da dire all'utente.
+                self.sm.fire(Event.CONFIRMED if res.ok else Event.DENIED)
 
-        frase = a.descrivi(res)
+            risultati.append(res)
+            if res.ok:
+                self.counters.tools_ok += 1
+            else:
+                self.counters.tools_denied += 1
+                break
+
+        if not risultati:
+            self.sm.fire(Event.NO_SPEECH)             # niente da dire
+            return
+
+        frase = a.descrivi(risultati, decisione.risposta)
+        ultimo = risultati[-1]
         m.reply = frase
-        m.extra["tool"] = nome
-        m.extra["esito"] = getattr(res.outcome, "value", str(res.outcome))
+        # I nomi si prendono dalla decisione e non dai Result: un Result
+        # nato da una chiamata malformata ha `tool` a None, e nel log
+        # servirebbe sapere proprio cosa si era tentato.
+        m.extra["tool"] = "+".join(c.get("tool", "?")
+                                   for c in decisione.calls[:len(risultati)])
+        m.extra["azioni"] = len(risultati)
+        m.extra["esito"] = getattr(ultimo.outcome, "value", str(ultimo.outcome))
         self.history.append({"role": "assistant", "content": frase})
 
         syn = self.d.tts_synth(frase)
