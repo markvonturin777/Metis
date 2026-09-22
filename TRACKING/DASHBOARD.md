@@ -64,7 +64,7 @@ I valori si riempiono man mano. La colonna "misurato" va aggiornata a ogni misur
 | 5 | WER italiano | < 12% | **8,6%** su 10 frasi | M0 parziale | 🟡 |
 | 6 | Falsi risvegli | < 1 / 8 h | ⏸️ non applicabile in V1.0: senza wake word non ci sono risvegli | v2 | ⏸️ |
 | 7 | Auto-inneschi da eco | **0** | ❌ **57 in 125 min** → D1. Non applicabile in V1.0 | v2 | ⏸️ |
-| 8 | Reattività GUI | ≥ 30 fps, no freeze > 100 ms | **62 fps**, max 13,1 ms su 10 373 campioni · pannello contesto 0,28 ms | M3 ✅ · M4 ✅ · M5 ✅ | ✅ |
+| 8 | Reattività GUI | ≥ 30 fps, no freeze > 100 ms | **62 fps**, 0 blocchi su 2 962 campioni, max **3,0 ms** — dopo la correzione della vista audit (M5 problema 13) | M3 ✅ · M4 ✅ · M5 ✅ | ✅ |
 | 9 | Azioni T3 non confermate | **0** | **0** su 50 tentativi (M2) · **0** su 18 giri di injection (M5) | M2 ✅ · M5 ✅ | ✅ |
 | 10 | Stabilità 72 h | RSS < +10% | 72 **min**: deriva −0,2 GB | M0 indicativo | 🟡 |
 
@@ -111,6 +111,7 @@ Ogni decisione che si scosta dalla specifica o che chiude un punto aperto va ann
 | 2026-09-22 | M5 | Riassunto con **due soglie**, non solo il 70% del piano | Con 16 messaggi di parlato il 70% non si raggiunge mai: i turni usciti dalla finestra sparivano |
 | 2026-09-22 | M5 | Budget del system prompt portato da 600 a **700 token** | Misurati 640 con `prompt_eval_count`: si è allargata la voce invece di accorciare la persona |
 | 2026-09-22 | M5 | La pulizia dell'HTML è il **primo** passo dell'estrazione, non il ripiego | `trafilatura` estrae il testo nascosto con i CSS: il payload bianco-su-bianco arrivava al prompt |
+| 2026-09-22 | M5 | La vista audit ridisegna solo quando l'audit log cambia, e con colonne `Interactive` | `ResizeToContents` più un timer a 1 Hz bloccavano la GUI per 2,6 s ogni 3. Un test di reattività deve far girare l'event loop e misurare il **secondo** disegno, non il primo |
 
 ---
 

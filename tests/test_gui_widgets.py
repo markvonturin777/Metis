@@ -541,3 +541,134 @@ def test_aggiornare_il_contesto_costa_quasi_niente(app_qt):
         peggiore = max(peggiore, (time.perf_counter() - t0) * 1000)
 
     assert peggiore < 10.0, f"{peggiore:.1f} ms per aggiornamento: un decimo di NFR-8"
+
+
+# --- NFR-8: il lavoro DIFFERITO è quello che blocca ---------------------------
+
+def _riempi_audit(path, n=200):
+    from metis.security.audit import AuditLog, Entry, Outcome, Tier
+
+    a = AuditLog(path)
+    for i in range(n):
+        a.record(Entry(tool="move_window_to_monitor", tier=Tier.T0,
+                       args={"window": "Chrome"}, outcome=Outcome.OK,
+                       stage="esecuzione",
+                       detail=f"eseguito, riga numero {i} con un motivo lungo "
+                              "quanto quelli veri"))
+    return a
+
+
+def test_la_vista_audit_non_blocca_l_interfaccia(app_qt, tmp_path):
+    """La regressione che ha reso la GUI inutilizzabile in M5, in forma di test.
+
+    Due ingredienti, e mancavano tutti e due alla prima versione di questo
+    test — che infatti passava sul codice difettoso.
+
+    **`processEvents()`.** Senza, `ricarica()` misura 3 ms e sembra tutto a
+    posto: il lavoro vero — la rimisura di ogni colonna provocata da
+    `ResizeToContents` a ogni `setItem` — è DIFFERITO all'event loop. Un test
+    che non fa girare l'event loop non misura il costo di un widget, misura
+    il costo di chiamare un metodo.
+
+    **Non il primo disegno.** Su una tabella vuota riempire 200 righe costa
+    11 ms; dal secondo disegno in poi, con le righe già lì da sostituire,
+    costa **8 secondi**. Misurare solo il primo giro nasconde esattamente il
+    caso che si verifica dal vivo, dove la tabella si ridisegna una volta al
+    secondo per tutta la sessione.
+    """
+    import time
+
+    from metis.gui.fullscreen_view import FOGLIO
+    from metis.security.audit import Entry, Outcome, Tier
+
+    from metis.gui.widgets.audit import VistaAudit
+
+    audit = _riempi_audit(tmp_path / "a.db")
+    v = VistaAudit(audit)
+    # Il foglio di stile fa parte della misura: sotto QStyleSheetStyle ogni
+    # calcolo di dimensione costa molto di più, ed è la condizione vera.
+    v.setStyleSheet(FOGLIO)
+    v.resize(1200, 300)
+    v.show()
+    app_qt.processEvents()
+    v.ricarica()                      # primo disegno: quello facile
+    app_qt.processEvents()
+
+    peggiore = 0.0
+    for i in range(3):
+        # Una riga nuova a ogni giro: è il caso vero, l'audit log cresce
+        # mentre Metis lavora, e ogni riga nuova forza un ridisegno.
+        audit.record(Entry(tool="web_search", tier=Tier.T0, args={},
+                           outcome=Outcome.OK, stage="esecuzione",
+                           detail=f"eseguito {i}"))
+        t0 = time.perf_counter()
+        v.ricarica()
+        app_qt.processEvents()
+        peggiore = max(peggiore, (time.perf_counter() - t0) * 1000)
+
+    assert peggiore < 100.0, (
+        f"{peggiore:.0f} ms per ridisegnare 200 righe: NFR-8 chiede meno di 100")
+
+
+def test_la_vista_audit_non_ridisegna_se_non_e_cambiato_niente(app_qt, tmp_path):
+    """Il caso normale: il timer batte ogni secondo e l'audit log cresce di
+    qualche riga al minuto. Cinquantanove battiti su sessanta non hanno
+    niente da fare, e devono costare zero."""
+    from metis.gui.widgets.audit import VistaAudit
+
+    a = _riempi_audit(tmp_path / "a.db", n=50)
+    v = VistaAudit(a)
+    v.show()
+    app_qt.processEvents()
+    v.ricarica()
+    dopo_il_primo = v.ridisegni
+
+    for _ in range(20):
+        v.ricarica()
+    assert v.ridisegni == dopo_il_primo, "ha ridisegnato senza righe nuove"
+
+    from metis.security.audit import Entry, Outcome, Tier
+
+    a.record(Entry(tool="web_search", tier=Tier.T0, args={},
+                   outcome=Outcome.OK, stage="esecuzione", detail="eseguito"))
+    v.ricarica()
+    assert v.ridisegni == dopo_il_primo + 1, "non ha visto la riga nuova"
+
+
+def test_il_pannello_contesto_non_blocca_l_interfaccia(app_qt):
+    """La stessa misura di `test_aggiornare_il_contesto_costa_quasi_niente`,
+    ma con l'event loop che gira. La prima versione di quel test non lo
+    faceva, e per questo ha lasciato passare il blocco della vista audit."""
+    import time
+
+    from metis.gui.fullscreen_view import FOGLIO
+    from metis.gui.widgets.contesto import PannelloContesto
+    from metis.llm.prompts import SYSTEM
+    from metis.memory.conversation import Memoria
+    from metis.memory.slots import Slots
+
+    mem = Memoria(system=SYSTEM)
+    for i in range(40):
+        mem.aggiungi("user", f"Domanda {i} " + "x" * 300)
+        mem.aggiungi("assistant", f"Risposta {i} " + "y" * 300)
+    slots = Slots()
+    slots.vista_finestra("Chrome - Investing.com", "chrome.exe", 1)
+
+    p = PannelloContesto()
+    p.setStyleSheet(FOGLIO)
+    p.resize(400, 300)
+    p.show()
+    app_qt.processEvents()
+
+    peggiore = 0.0
+    for _ in range(30):
+        t0 = time.perf_counter()
+        blocco = slots.blocco()
+        p.aggiorna({"conteggio": mem.conteggio(blocco, fonti="f" * 10000)
+                    .come_dizionario(),
+                    "slot": blocco, "riassunti": 0,
+                    "fonti": ["https://a.it/x"]})
+        app_qt.processEvents()
+        peggiore = max(peggiore, (time.perf_counter() - t0) * 1000)
+
+    assert peggiore < 100.0, f"{peggiore:.0f} ms per aggiornamento: NFR-8"

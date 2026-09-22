@@ -38,7 +38,11 @@ class VistaAudit(QWidget):
         super().__init__(parent)
         self.audit = audit
         self.max_righe = righe
-        self._ultimo_id = -1
+        # Ultimo stato disegnato: id della riga piu' recente, quante righe, e
+        # i due filtri. Se non e' cambiato niente non si ridisegna. Vedi la
+        # nota su M5 in testa al modulo.
+        self._ultimo_id: tuple = ()
+        self.ridisegni = 0
 
         radice = QVBoxLayout(self)
         radice.setContentsMargins(4, 4, 4, 4)
@@ -65,8 +69,20 @@ class VistaAudit(QWidget):
         self.tabella.setEditTriggers(QTableWidget.NoEditTriggers)
         self.tabella.setSelectionBehavior(QTableWidget.SelectRows)
         intestazione = self.tabella.horizontalHeader()
+        # `Interactive`, non `ResizeToContents`. La differenza e' il motivo per
+        # cui la GUI si bloccava: con ResizeToContents **ogni** `setItem`
+        # invalida la geometria dell'intestazione e Qt rimisura tutte le
+        # righe della colonna. Riempire 164 righe per 6 colonne diventa
+        # centomila calcoli di dimensione, sotto un foglio di stile che li
+        # rende tutti costosi. Misurato: **5,1 secondi**.
+        #
+        # Il lavoro e' DIFFERITO all'event loop, quindi cronometrare
+        # `ricarica()` dava 3 ms e non si vedeva niente. Si vedeva solo dal
+        # vivo, come 2,6 s di interfaccia ferma ogni 3.
+        #
+        # Adesso le colonne si adattano una volta sola, a riempimento finito.
         for i in range(len(COLONNE) - 1):
-            intestazione.setSectionResizeMode(i, QHeaderView.ResizeToContents)
+            intestazione.setSectionResizeMode(i, QHeaderView.Interactive)
         intestazione.setSectionResizeMode(len(COLONNE) - 1, QHeaderView.Stretch)
         radice.addWidget(self.tabella)
 
@@ -96,20 +112,41 @@ class VistaAudit(QWidget):
         if esito != "tutti":
             righe = [r for r in righe if r["outcome"] == esito]
 
-        self.tabella.setRowCount(len(righe))
-        for i, r in enumerate(righe):
-            valori = [
-                str(r["ts"])[11:19], r["tier"], r["tool"], r["outcome"],
-                r["stage"] or "", (r["detail"] or "")[:120],
-            ]
-            for j, v in enumerate(valori):
-                cella = QTableWidgetItem(v)
-                if j == 3:
-                    cella.setForeground(Qt.GlobalColor.white)
-                    colore = COLORI_ESITO.get(r["outcome"])
-                    if colore:
-                        cella.setToolTip(r["detail"] or "")
-                self.tabella.setItem(i, j, cella)
+        # Se non e' cambiato niente non si ridisegna. E' il caso NORMALE: il
+        # timer batte una volta al secondo e l'audit log cresce di qualche
+        # riga al minuto, quindi 59 battiti su 60 non hanno niente da fare.
+        #
+        # `self._ultimo_id` esisteva dal primo giorno di questo widget ed era
+        # dichiarato e mai letto: la guardia era prevista e non cablata.
+        firma = (righe[0]["id"] if righe else -1, len(righe), tier, esito)
+        if firma == self._ultimo_id:
+            return
+        self._ultimo_id = firma
+        self.ridisegni += 1
+
+        # Aggiornamenti sospesi durante il riempimento: senza, la tabella si
+        # ridisegna a ogni cella.
+        self.tabella.setUpdatesEnabled(False)
+        try:
+            self.tabella.setRowCount(len(righe))
+            for i, r in enumerate(righe):
+                valori = [
+                    str(r["ts"])[11:19], r["tier"], r["tool"], r["outcome"],
+                    r["stage"] or "", (r["detail"] or "")[:120],
+                ]
+                for j, v in enumerate(valori):
+                    cella = QTableWidgetItem(v)
+                    if j == 3:
+                        cella.setForeground(Qt.GlobalColor.white)
+                        colore = COLORI_ESITO.get(r["outcome"])
+                        if colore:
+                            cella.setToolTip(r["detail"] or "")
+                    self.tabella.setItem(i, j, cella)
+        finally:
+            self.tabella.setUpdatesEnabled(True)
+        # Una volta sola, a riempimento finito: e' la riga che ResizeToContents
+        # faceva mille volte.
+        self.tabella.resizeColumnsToContents()
 
         non_confermate = stat.get("t3_non_confermate", 0)
         avviso = "" if non_confermate == 0 else f"  ⚠ T3 NON CONFERMATE: {non_confermate}"

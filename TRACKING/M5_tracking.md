@@ -349,16 +349,52 @@ risultato sta in §4.1.
 
 La suite intera: **571 test, 17 saltati, 19,5 s.**
 
-### 4.8 NFR-8 — il pannello CONTESTO non costa niente
+### 4.8 NFR-8 — misurato male la prima volta, poi misurato
 
-| Operazione | p50 | max | Soglia |
-| :-- | ---: | ---: | ---: |
-| raccolta dati + aggiornamento pannello | 0,14 ms | 0,28 ms | 100 ms |
-| sola raccolta (sul thread del nucleo, 2 Hz) | 0,09 ms | 0,12 ms | — |
+**La prima misura di questa sezione era sbagliata e diceva che andava tutto
+bene.** Resta scritta qui sotto perché l'errore è più istruttivo del numero.
 
-C'è un test di regressione: il giorno in cui `conta_token` diventasse un
-tokenizzatore vero — che è l'ottimizzazione ovvia, e quella che rovinerebbe
-NFR-8 — cadrebbe prima che qualcuno se ne accorga usando Metis.
+Misura sbagliata — il pannello CONTESTO, da solo, senza far girare l'event loop:
+
+| Operazione | p50 | max |
+| :-- | ---: | ---: |
+| raccolta dati + `aggiorna()` | 0,14 ms | 0,28 ms |
+
+Da lì la conclusione "NFR-8 non regredito". Poi la GUI, avviata davvero, si è
+bloccata **2,6 secondi ogni 3** — il 78% del tempo — e non si riusciva
+nemmeno a parlare.
+
+Misura vera, con l'applicazione intera e l'event loop che gira
+(`--fullscreen --minutes 1`, `QT_QPA_PLATFORM=offscreen`):
+
+| Fase | Campioni | p50 | p95 | max | Blocchi > 100 ms |
+| :-- | ---: | ---: | ---: | ---: | ---: |
+| prima della correzione, esercizio | 419 | 0,01 ms | 0,93 ms | **2.755 ms** | **15** |
+| dopo la correzione, esercizio | **2.962** | 0,00 ms | 0,73 ms | **3,0 ms** | **0** |
+| dopo la correzione, avvio | 647 | 0,01 ms | 0,66 ms | 2.075 ms | 1 |
+
+Il blocco all'avvio è quello noto da M3: il caricamento dei modelli tiene il
+GIL. Il numero di campioni in esercizio è passato da 419 a 2.962 perché prima
+l'event loop era fermo per tre quarti del tempo.
+
+Il colpevole non era il pannello nuovo: era la **vista audit**, e il difetto
+c'era da M3. Vedi §7 problema 13.
+
+Costo del pannello CONTESTO, rimisurato con l'event loop che gira: **sotto il
+millisecondo**, confermato.
+
+**Cosa ho sbagliato a misurare, e come si evita.** Due errori, e bastava uno
+dei due per non vedere niente:
+
+1. **Ho cronometrato una chiamata a metodo, non un widget.** Il lavoro di Qt
+   è differito all'event loop: senza `processEvents()` nel ciclo di misura,
+   `ricarica()` risultava 3 ms mentre costava 8 secondi.
+2. **Ho misurato solo il primo disegno.** Riempire una tabella vuota costa
+   11 ms; *ri*disegnarla, con le righe già lì da sostituire, costa 8 secondi.
+   Dal vivo si ridisegna una volta al secondo per tutta la sessione.
+
+Entrambi sono adesso nei test, e i test sono stati verificati contro il
+codice difettoso: falliscono con 7.958 ms, passano con la correzione.
 
 ---
 
@@ -454,6 +490,7 @@ giunzione.
 | 10 | Il riassunto non sarebbe mai partito | La soglia del 70% non si raggiunge con 16 messaggi di parlato. I turni usciti dalla finestra sparivano | Vedi §2-bis: due soglie invece di una |
 | 11 | Il secondo riassunto perdeva i fatti del primo | 2/5 dopo due giri | Una riga nel prompt di riassunto: la memoria già condensata va riportata, non ricominciata. 5/5 dopo |
 | 12 | Il "lei" cedeva sulle frasi informali | 3 risposte su 20 davano del tu | Direttiva per esempi invece che per principio: l'elenco delle forme vietate. 0/20 dopo |
+| 13 | **La GUI si bloccava 2,6 s ogni 3 e non si riusciva a parlare** | NFR-8 fallito, applicazione inutilizzabile. Segnalato dall'uso reale, non dai test | `VistaAudit` ha 5 colonne in `ResizeToContents` e un timer che ricarica ogni secondo: **ogni** `setItem` invalida la geometria e Qt rimisura tutte le righe. Con 164 righe sotto un foglio di stile sono 8 secondi a ridisegno. Difetto presente da M3, latente finché l'audit log era corto: i banchi di M5 lo hanno riempito. Tre correzioni: colonne `Interactive` con un solo `resizeColumnsToContents()` a riempimento finito, aggiornamenti sospesi durante il riempimento, e **la guardia `_ultimo_id`** — dichiarata da M3 e mai cablata — che salta il ridisegno quando non è cambiato niente, cioè 59 battiti su 60. Da 7.958 ms a 10 ms, e 0,6 ms a vuoto |
 
 ---
 
