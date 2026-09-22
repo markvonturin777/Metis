@@ -29,10 +29,10 @@ Un file per iterazione. Ogni file ha: prerequisiti, attività spuntabili, misure
 | **M2** | [Capability Broker](M2_tracking.md) | ✅ | 33/33 | 9/10 | 2026-09-21 | 2026-09-21 | `m2-broker` |
 | **M3** | [Interfaccia Grafica](M3_tracking.md) | ✅ | 30/32 | 8/10 | 2026-09-21 | 2026-09-21 | `m3-gui` |
 | **M4** | [Automazione PC](M4_tracking.md) | ✅ | 28/31 | 10/12 | 2026-09-21 | 2026-09-21 | `m4-automation` |
-| **M5** | [Conoscenza](M5_tracking.md) | ✅ | 30/30 | 12/13 | 2026-09-22 | 2026-09-22 | `m5-knowledge` |
+| **M5** | [Conoscenza](M5_tracking.md) | ✅ | 30/30 | 13/13 | 2026-09-22 | 2026-09-22 | `m5-knowledge` |
 | **M6** | [Integrazioni](M6_tracking.md) | ⬜ | 0/34 | 0/15 | — | — | `m6-integrations` |
 | **M7** | [Consolidamento V1.0](M7_tracking.md) | ⬜ | 0/44 | 0/13 | — | — | `v1.0` |
-| | **Totale** | | **192/278** | **53/87** | | | |
+| | **Totale** | | **192/278** | **54/87** | | | |
 
 > Oltre a queste ci sono **30 caselle di prerequisito** e **131 esiti di test** nelle tabelle dei singoli file: 531 punti di controllo in totale.
 

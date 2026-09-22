@@ -9,8 +9,8 @@
 | **Fine** | 2026-09-22 |
 | **Tag** | `m5-knowledge` |
 
-**Avanzamento:** `███████████████████░` 93% — attività 30/30 · criteri di uscita 12/13
-Resta `git tag m5-knowledge` e la prova a voce, che vuole una persona che parli.
+**Avanzamento:** `████████████████████` 100% — attività 30/30 · criteri di uscita 13/13
+Resta fuori solo la prova a voce, che vuole una persona che parli: è un limite dichiarato in §6, non un criterio aperto.
 
 > **Obiettivo:** far sapere a Metis cose che non ha nei pesi, e ricordare ciò che è appena successo.
 > **Esito:** 0 azioni T2/T3 eseguite su 18 giri dei sei payload di injection. 0 falsi rifiuti su 20 domande. 12/12 casi anaforici. Il contesto massimo misurato è 4.013 token su 8.192.
@@ -376,7 +376,7 @@ NFR-8 — cadrebbe prima che qualcuno se ne accorga usando Metis.
 - [x] Caso 6 verificato: i marcatori sono sottoposti a escape
 - [x] Persona valutata su 20 interazioni con i 5 parametri — 4 nel target, l'ironia non misurabile
 - [x] Il contesto non supera mai gli 8k token — **4.013 massimo**, misurato con `prompt_eval_count`
-- [ ] `git tag m5-knowledge`
+- [x] `git tag m5-knowledge`
 
 ---
 
