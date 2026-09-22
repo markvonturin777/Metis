@@ -63,7 +63,19 @@ class Event(Enum):
 
 # Gli stati in cui i frame audio NON devono raggiungere VAD e STT.
 # E' il livello L1 della strategia anti-eco: half-duplex gating.
-STT_MUTED = frozenset({State.DORMIENTE, State.PARLATO, State.INTERROTTO})
+#
+# M5 — RICERCA_WEB E' ENTRATA NELL'INSIEME
+# Non era qui quando lo stato e' stato definito, perche' allora nessuno ci
+# parlava dentro. Da M5 ci si parla: il filler vocale ("Un momento, consulto
+# le fonti") viene emesso proprio all'ingresso in questo stato e dura quanto
+# la ricerca, cioe' 1,5-4 secondi. Senza questa riga il microfono resterebbe
+# aperto sull'eco degli altoparlanti per tutta la durata della ricerca — che
+# e' esattamente il difetto che ha fatto rimandare la wake word alla v2.
+#
+# La regola generale, da applicare a qualunque stato futuro: **se in quello
+# stato Metis puo' emettere audio, lo stato sta qui dentro.**
+STT_MUTED = frozenset({State.DORMIENTE, State.PARLATO, State.INTERROTTO,
+                       State.RICERCA_WEB})
 
 # Gli stati in cui il rilevatore di wake word resta attivo. Include PARLATO:
 # e' il livello L2, il barge-in. Il rilevatore cerca un pattern specifico ed
@@ -73,8 +85,13 @@ STT_MUTED = frozenset({State.DORMIENTE, State.PARLATO, State.INTERROTTO})
 # emette PTT negli stessi stati. L'insieme resta: e' il contratto che dice
 # "qui il microfono e' aperto mentre Metis parla", e cancellarlo renderebbe
 # caro riaccendere la wake word in v2.
+#
+# M5 — anche RICERCA_WEB: e' il controaltare della riga qui sopra. Il filler
+# dura quanto la ricerca, e durante una ricerca lenta l'utente deve poter
+# dire "lascia stare" senza aspettare che finisca.
 WAKE_ACTIVE = frozenset(
-    {State.DORMIENTE, State.IN_ASCOLTO, State.PARLATO, State.GENERAZIONE}
+    {State.DORMIENTE, State.IN_ASCOLTO, State.PARLATO, State.GENERAZIONE,
+     State.RICERCA_WEB}
 )
 
 TRANSITIONS: dict[tuple[State, Event], State] = {
@@ -99,6 +116,8 @@ TRANSITIONS: dict[tuple[State, Event], State] = {
     (State.RICERCA_WEB, Event.CONTEXT_READY): State.GENERAZIONE,
     (State.RICERCA_WEB, Event.TIMEOUT): State.GENERAZIONE,     # degrada
     (State.RICERCA_WEB, Event.FAILED): State.GENERAZIONE,
+    (State.RICERCA_WEB, Event.WAKE_WORD): State.INTERROTTO,    # barge-in sul filler
+    (State.RICERCA_WEB, Event.PTT): State.INTERROTTO,
 
     (State.GENERAZIONE, Event.FIRST_AUDIO): State.PARLATO,
     (State.GENERAZIONE, Event.WAKE_WORD): State.INTERROTTO,    # barge-in precoce
@@ -134,7 +153,14 @@ TIMEOUTS: dict[State, float | None] = {
     State.IN_ASCOLTO: 8.0,
     State.TRASCRIZIONE: 30.0,
     State.ELABORAZIONE: 5.0,
-    State.RICERCA_WEB: 8.0,
+    # M5 — non e' un budget di latenza, e' una rete per un thread appeso.
+    # Il budget vero lo impongono i timeout dentro `tools/web.py`: 8 s per
+    # richiesta, piu' il backoff, che nel caso peggiore sono una ventina di
+    # secondi prima di poter dire "le fonti non sono raggiungibili". Se
+    # questo valore fosse 8, il caso peggiore della ricerca farebbe scattare
+    # un timeout a ogni rete lenta, e lo stato direbbe una cosa mentre il
+    # turno ne fa un'altra.
+    State.RICERCA_WEB: 25.0,
     State.GENERAZIONE: 30.0,
     State.ESECUZIONE: 15.0,
     State.ATTESA_CONFERMA: 20.0,      # deve coincidere con il broker, M2

@@ -457,3 +457,87 @@ def test_l_editor_mostra_gli_strumenti_disponibili(editor):
     testo = e.strumenti.text()
     assert "click_element" in testo and "T2" in testo
     assert "send_email" not in testo, "non ha un corpo: non va offerto"
+
+
+# --- M5: il pannello del contesto --------------------------------------------
+
+def _pannello(app_qt):
+    from metis.gui.widgets.contesto import PannelloContesto
+
+    return PannelloContesto()
+
+
+def test_il_pannello_contesto_parte_vuoto_senza_rompersi(app_qt):
+    """Si costruisce prima che il sistema esista: all'avvio il nucleo non ha
+    ancora una memoria, e il pannello riceve un dizionario vuoto."""
+    p = _pannello(app_qt)
+    assert "nessun riferimento attivo" in p.slot.text()
+    assert "nessuna fonte" in p.fonti.text()
+
+
+def test_il_pannello_contesto_mostra_le_voci_del_budget(app_qt):
+    p = _pannello(app_qt)
+    p.aggiorna({"conteggio": {"system": 600, "slot": 40, "riassunto": 0,
+                              "turni": 900, "web": 3400, "totale": 4940},
+                "slot": "[CONTESTO CORRENTE]\nFinestra di riferimento: Chrome",
+                "fonti": ["https://a.it/x", "https://b.it/y"], "riassunti": 2})
+    assert "4940" in p.totale.text() and "2 riassunti" in p.totale.text()
+    assert "Chrome" in p.slot.text()
+    assert "https://b.it/y" in p.fonti.text()
+    assert "web 3400" in p.legenda.text()
+
+
+def test_le_voci_a_zero_non_occupano_la_barra(app_qt):
+    """Una voce da zero token deve sparire, non diventare una scheggia di un
+    pixel che sembra un valore piccolo."""
+    p = _pannello(app_qt)
+    p.aggiorna({"conteggio": {"system": 600, "slot": 0, "riassunto": 0,
+                              "turni": 300, "web": 0, "totale": 900}})
+    assert not p._segmenti["web"].isVisibleTo(p)
+    assert p._segmenti["system"].isVisibleTo(p)
+
+
+def test_le_fonti_sono_dichiarate_non_fidate(app_qt):
+    """Chi guarda il pannello deve vedere che quel testo non e' di Metis: e'
+    l'unica voce del contesto che non ha scritto nessuno di cui ci si fida."""
+    p = _pannello(app_qt)
+    p.aggiorna({"conteggio": {"totale": 10}, "fonti": ["https://a.it/x"]})
+    assert "non fidato" in p.fonti.text()
+
+
+def test_aggiornare_il_contesto_costa_quasi_niente(app_qt):
+    """NFR-8 come test di regressione, non come misura.
+
+    Il pannello si aggiorna due volte al secondo sul thread della GUI, e il
+    conteggio dei token gira sul thread del nucleo a ogni blocco audio. Oggi
+    e' una divisione su sedici messaggi: 0,14 ms misurati, contro una soglia
+    di 100. Il giorno in cui `conta_token` diventasse un tokenizzatore vero —
+    che e' l'ottimizzazione ovvia da fare, e quella che rovinerebbe NFR-8 —
+    questo test cadrebbe prima che qualcuno se ne accorga usando Metis.
+    """
+    import time
+
+    from metis.gui.widgets.contesto import PannelloContesto
+    from metis.llm.prompts import SYSTEM
+    from metis.memory.conversation import Memoria
+    from metis.memory.slots import Slots
+
+    mem = Memoria(system=SYSTEM)
+    for i in range(40):
+        mem.aggiungi("user", f"Domanda {i} " + "x" * 300)
+        mem.aggiungi("assistant", f"Risposta {i} " + "y" * 300)
+    slots = Slots()
+    slots.vista_finestra("Chrome - Investing.com", "chrome.exe", 1)
+    p = PannelloContesto()
+
+    peggiore = 0.0
+    for _ in range(50):
+        t0 = time.perf_counter()
+        blocco = slots.blocco()
+        p.aggiorna({"conteggio": mem.conteggio(blocco, fonti="f" * 10000)
+                    .come_dizionario(),
+                    "slot": blocco, "riassunti": 0,
+                    "fonti": ["https://a.it/x"]})
+        peggiore = max(peggiore, (time.perf_counter() - t0) * 1000)
+
+    assert peggiore < 10.0, f"{peggiore:.1f} ms per aggiornamento: un decimo di NFR-8"

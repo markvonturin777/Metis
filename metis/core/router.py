@@ -123,7 +123,8 @@ class Router:
 
     # -- decisione ---------------------------------------------------------
 
-    def decidi(self, testo: str, storia: list[dict] | None = None) -> Decisione:
+    def decidi(self, testo: str, storia: list[dict] | None = None,
+               slot: str = "") -> Decisione:
         t0 = time.perf_counter()
         c = self.fast_path(testo)
         if c is not None:
@@ -135,7 +136,7 @@ class Router:
         if not self.usa_llm or self.tool_router is None:
             return Decisione((), "chat", (time.perf_counter() - t0) * 1000)
 
-        d = self.tool_router.decidi(testo, storia)
+        d = self.tool_router.decidi(testo, storia, slot)
         if d.e_strumento:
             self.llm_hit += 1
         return d

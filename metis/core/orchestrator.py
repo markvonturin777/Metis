@@ -31,6 +31,23 @@ gia' in coda. Le tre sono:
     3. lo stream di generazione LLM   -> CancelToken
 
 Il test `test_barge_in_ferma_tutte_e_tre` verifica proprio questo.
+
+M5 — IL TURNO SI PUO' CONTAMINARE, E QUANDO SUCCEDE NON TORNA PULITO
+Dal momento in cui nel turno entra testo recuperato dal web, ogni chiamata a
+uno strumento parte con `untrusted=True` e il broker rifiuta T2 e T3. La
+bandiera vive nel turno e non nell'istanza, perche' un attributo sopravvissuto
+al turno renderebbe contaminati anche quelli dopo — che non lo sono — e Metis
+smetterebbe di poter agire per il resto della sessione dopo una sola ricerca.
+
+E' la difesa 3 del piano, l'unica delle tre che non dipende da come il modello
+interpreta un prompt. Le altre due stanno nei delimitatori
+(`llm/grounding.py`) e nel system prompt.
+
+M5 — IL RIASSUNTO SI FA IN DORMIENTE
+`tick()` gira a 2 Hz e non e' solo un contatore di timeout: e' l'unico punto
+del sistema che si accorge che **nessuno sta aspettando**. Riassumere costa
+2-3 secondi, e farlo su un turno a caso e' il tipo di latenza peggiore —
+quella di cui l'utente non riesce a indovinare la causa.
 """
 
 from __future__ import annotations
@@ -48,6 +65,27 @@ from metis.audio.vad import Segment, SpeechSegmenter
 from metis.core.metrics import TurnMetrics
 from metis.core.state_machine import Event, State, StateMachine, Transition
 from metis.llm.client import CancelToken
+from metis.memory.conversation import Memoria
+
+
+@dataclass
+class Conoscenza:
+    """Il ramo "consultare le fonti". Assente = Metis sa solo cio' che ha nei pesi.
+
+    Tre callable e nessun oggetto: l'orchestratore non impara cos'e' una
+    ricerca, cos'e' una fonte e cosa siano i delimitatori. Sa che c'e' un
+    momento in cui si dice qualcosa per non far aspettare in silenzio, uno in
+    cui si va a leggere, e che da quel momento il turno e' contaminato.
+
+    `query_web` riceve la Decisione del router e ritorna la query, oppure
+    None se questo turno non richiede fonti. Una sola chiamata invece di un
+    predicato piu' un estrattore: due funzioni che devono essere d'accordo
+    fra loro sono due funzioni che prima o poi non lo sono.
+    """
+
+    query_web: Callable[[object], str | None]
+    consulta: Callable[[str], object]            # query -> Contesto
+    filler: Callable[[], str]
 
 
 @dataclass
@@ -62,7 +100,11 @@ class Azioni:
     """
 
     decidi: Callable[[str, list], object]      # testo -> Decisione
-    esegui: Callable[[dict], object]           # tool call -> Result
+    # M5 — il secondo argomento e' `untrusted`: se in questo turno e' entrato
+    # testo dal web. Non ha un default, ed e' voluto: chi scrive un nuovo
+    # chiamante deve fermarsi a chiedersi cosa passare, invece di ereditare
+    # un False che nessuno ha deciso.
+    esegui: Callable[[dict, bool], object]     # (tool call, untrusted) -> Result
     descrivi: Callable[[list, object], str]    # Result[] -> frase da dire
     richiede_conferma: Callable[[str], bool]   # nome strumento -> bool
     # Chiamata ogni volta che Metis si mette in ascolto. Serve a fissare
@@ -94,6 +136,15 @@ class Deps:
     on_turn_start: Callable[[str], None] | None = None
     on_turn_end: Callable[[TurnMetrics], None] | None = None
     azioni: "Azioni | None" = None
+    # M5 — la memoria. Se manca se ne costruisce una dal solo system prompt,
+    # cosi' i test di M1 continuano a funzionare senza sapere che esiste.
+    memoria: "Memoria | None" = None
+    conoscenza: "Conoscenza | None" = None
+    # Il blocco [CONTESTO CORRENTE] degli slot, ricalcolato a ogni turno.
+    # E' un callable e non una stringa perche' gli slot cambiano fra un turno
+    # e l'altro, ed e' un callable qui e non un import perche' altrimenti
+    # l'orchestratore saprebbe che esistono le finestre.
+    contesto: Callable[[], str] | None = None
 
 
 @dataclass
@@ -108,6 +159,12 @@ class Counters:
     tools_ok: int = 0
     tools_denied: int = 0
     cancel_latency_ms: list[float] = field(default_factory=list)
+    # M5
+    ricerche: int = 0
+    ricerche_degradate: int = 0
+    riassunti: int = 0
+    filler_ms: list[float] = field(default_factory=list)
+    web_ms: list[float] = field(default_factory=list)
 
 
 class Orchestrator:
@@ -118,13 +175,34 @@ class Orchestrator:
         # Un token PER TURNO: vedi la nota in testa al modulo.
         self._cancel: CancelToken | None = None
         self.counters = Counters()
-        self.history: list[dict] = (
-            [{"role": "system", "content": deps.system_prompt}] if deps.system_prompt else []
-        )
+        self.mem = deps.memoria if deps.memoria is not None else Memoria(
+            system=deps.system_prompt)
         self._worker: threading.Thread | None = None
+        self._riassunto: threading.Thread | None = None
         self._lock = threading.Lock()
         self._wake_gap = False        # il rilevatore ha saltato dei frame
         self.synchronous = False      # solo nei test: evita i thread
+
+    @property
+    def history(self) -> list[dict]:
+        """La conversazione come la vede il modello, slot compresi.
+
+        Resta una proprieta' e non un attributo perche' da M5 la cronologia
+        non e' piu' una lista che si appende: e' una finestra scorrevole con
+        un riassunto davanti, e chi la legge deve vedere quella — non i
+        messaggi grezzi, che sono un dettaglio della memoria.
+        """
+        return self.mem.messaggi(slot=self._contesto())
+
+    def _contesto(self) -> str:
+        """Il blocco degli slot. Non solleva: e' contorno, non sostanza."""
+        if self.d.contesto is None:
+            return ""
+        try:
+            return self.d.contesto() or ""
+        except Exception:                        # noqa: BLE001
+            self.counters.errors += 1
+            return ""
 
     # -- ingresso audio ----------------------------------------------------
 
@@ -187,7 +265,13 @@ class Orchestrator:
         difetto salterebbe fuori solo in uno dei due modi di usare Metis.
         """
         st = self.sm.state
-        if st in (State.PARLATO, State.GENERAZIONE):
+        # M5 — RICERCA_WEB e' nell'elenco perche' li' il filler sta suonando.
+        # Senza, il PTT premuto durante una ricerca lenta faceva transire la
+        # macchina in INTERROTTO e lasciava il filler in riproduzione: Metis
+        # continuava a dire "un momento, consulto le fonti" a un utente che
+        # aveva appena chiesto di smettere. L'elenco va tenuto uguale a
+        # STT_MUTED meno DORMIENTE: sono gli stati in cui esce audio.
+        if st in (State.PARLATO, State.GENERAZIONE, State.RICERCA_WEB):
             t0 = time.perf_counter()
             self.sm.fire(evento)                   # -> INTERROTTO
             self._stop_everything()
@@ -278,13 +362,21 @@ class Orchestrator:
             self.sm.fire(Event.NO_SPEECH)
             return
 
-        self.history.append({"role": "user", "content": m.transcript})
+        self.mem.aggiungi("user", m.transcript)
+        slot = self._contesto()
 
-        # Strumento o conversazione? Il router decide, e nel dubbio sceglie
-        # la conversazione: rispondere a parole non fa danni, agire quando
-        # non era richiesto sì.
+        # Strumento, fonti o conversazione? Il router decide, e nel dubbio
+        # sceglie la conversazione: rispondere a parole non fa danni, agire
+        # quando non era richiesto sì.
         if self.d.azioni is not None:
             decisione = self.d.azioni.decidi(m.transcript, self.history)
+            # Le fonti si guardano PRIMA degli strumenti. Una decisione che
+            # contiene una ricerca e' un turno di conoscenza anche se
+            # contiene altro: cio' che verrebbe dopo sarebbe deciso da una
+            # pagina che ancora non e' stata letta. Vedi `_percorso_web`.
+            query = self._query_web(decisione)
+            if query:
+                return self._percorso_web(m, decisione, query, slot)
             if getattr(decisione, "e_strumento", False):
                 return self._esegui_strumento(m, decisione)
 
@@ -299,21 +391,9 @@ class Orchestrator:
             tok = CancelToken()
             self._cancel = tok
 
-        m.t_llm_sent = time.perf_counter()
-        first = True
-        gm = None
-        for chunk, gm in self.d.llm_stream(self.history, cancel=tok):
-            if tok.cancelled:
-                break
-            syn = self.d.tts_synth(chunk)
-            self.d.player.enqueue(syn.pcm)
-            if first:
-                m.t_ttft = m.t_llm_sent + (getattr(gm, "ttft_ms", 0) or 0) / 1000.0
-                m.t_first_chunk = m.t_ttft
-                m.t_tts_done = time.perf_counter()
-                m.t_first_audio = time.perf_counter()
-                self.sm.fire(Event.FIRST_AUDIO)     # -> PARLATO
-                first = False
+        messaggi = self.mem.messaggi(slot=slot)
+        m.extra["contesto_token"] = self.mem.conteggio(slot).totale
+        gm = self._genera(m, messaggi, tok)
 
         if tok.cancelled:
             return                                   # gia' in IN_ASCOLTO
@@ -321,7 +401,7 @@ class Orchestrator:
         if gm is not None:
             m.tokens = gm.tokens
             m.reply = gm.text
-            self.history.append({"role": "assistant", "content": gm.text})
+            self.mem.aggiungi("assistant", gm.text)
         self.counters.turns += 1
         m.append_to_log()
         if self.d.on_turn_end is not None:
@@ -338,6 +418,154 @@ class Orchestrator:
             corrente = self._cancel is tok and not tok.cancelled
         if corrente:
             self.sm.fire(Event.PLAYBACK_DONE)
+
+    def _genera(self, m: TurnMetrics, messaggi: list[dict], tok: CancelToken):
+        """Streaming frase per frase verso il TTS. La meta' comune ai due
+        percorsi di conversazione, quello a memoria e quello fondato.
+
+        Estratta da `_process` quando e' arrivato il secondo chiamante: le
+        due copie avrebbero divergiuto sulla riga che fa scattare
+        FIRST_AUDIO, e il sintomo sarebbe stato "sul percorso web il
+        microfono si riapre mentre Metis parla" — cioe' l'eco, di nuovo.
+        """
+        m.t_llm_sent = time.perf_counter()
+        first = True
+        gm = None
+        for chunk, gm in self.d.llm_stream(messaggi, cancel=tok):
+            if tok.cancelled:
+                break
+            syn = self.d.tts_synth(chunk)
+            self.d.player.enqueue(syn.pcm)
+            if first:
+                m.t_ttft = m.t_llm_sent + (getattr(gm, "ttft_ms", 0) or 0) / 1000.0
+                m.t_first_chunk = m.t_ttft
+                m.t_tts_done = time.perf_counter()
+                m.t_first_audio = time.perf_counter()
+                self.sm.fire(Event.FIRST_AUDIO)     # -> PARLATO
+                first = False
+        return gm
+
+    # -- ramo conoscenza ---------------------------------------------------
+
+    def _query_web(self, decisione) -> str | None:
+        """La query di questo turno, o None. Non solleva.
+
+        Un difetto qui non deve impedire di rispondere: nel peggiore dei casi
+        si perde la ricerca e si risponde a parole, che e' il comportamento
+        innocuo.
+        """
+        if self.d.conoscenza is None:
+            return None
+        try:
+            return self.d.conoscenza.query_web(decisione)
+        except Exception:                        # noqa: BLE001
+            self.counters.errors += 1
+            return None
+
+    def _percorso_web(self, m: TurnMetrics, decisione, query: str,
+                      slot: str) -> None:
+        """Filler, fonti, risposta fondata. Il turno da qui e' contaminato.
+
+        LE ALTRE AZIONI DEL PIANO NON SI ESEGUONO
+        Se il router ha prodotto `[web_search, press_hotkey]`, la seconda non
+        parte. Non perche' il broker la rifiuterebbe — la rifiuterebbe, ed e'
+        la difesa 3 — ma per una ragione che viene prima: quell'azione e'
+        stata decisa **da una frase**, e fra la decisione e l'esecuzione si e'
+        messo di mezzo il testo di una pagina. Eseguirla significherebbe dare
+        l'ultima parola a chi ha scritto la pagina. Si scarta e si conta.
+
+        L'ordine delle due righe che contano — filler prima, ricerca dopo —
+        e' il requisito dei 300 ms. Invertirle non romperebbe niente e
+        renderebbe il filler inutile, che e' il modo in cui un requisito di
+        interazione muore senza che nessun test se ne accorga.
+        """
+        k = self.d.conoscenza
+        self.sm.fire(Event.INTENT_WEB)                # -> RICERCA_WEB
+        self.counters.ricerche += 1
+
+        t0 = time.perf_counter()
+        try:
+            self.d.player.enqueue(self.d.tts_synth(k.filler()).pcm)
+        except Exception:                            # noqa: BLE001
+            # Un filler che non si sintetizza non giustifica la perdita del
+            # turno: si tace e si cerca lo stesso.
+            self.counters.errors += 1
+        m.extra["filler_ms"] = round((time.perf_counter() - t0) * 1000, 1)
+        self.counters.filler_ms.append((time.perf_counter() - t0) * 1000)
+
+        scartate = [c for c in getattr(decisione, "calls", ())
+                    if c.get("tool") not in ("web_search", "web_fetch")]
+        if scartate:
+            m.extra["azioni_scartate"] = "+".join(c.get("tool", "?") for c in scartate)
+
+        ctx = k.consulta(query)
+        m.extra["fonti"] = len(getattr(ctx, "fonti", ()))
+        m.extra["web_ms"] = round(getattr(ctx, "ms", 0.0))
+        self.counters.web_ms.append(getattr(ctx, "ms", 0.0))
+
+        # Da qui il turno e' contaminato, anche se le fonti non sono
+        # arrivate: gli estratti della ricerca sono gia' contenuto esterno.
+        untrusted = bool(getattr(ctx, "contaminato", True))
+        m.extra["untrusted"] = untrusted
+
+        if not getattr(ctx, "ok", False):
+            # DEGRADAZIONE DICHIARATA. Non si genera niente: se si passasse
+            # comunque dal modello, quello risponderebbe a memoria, che e' lo
+            # scenario che questo progetto esiste per evitare.
+            self.counters.ricerche_degradate += 1
+            self.sm.fire(Event.FAILED)                # -> GENERAZIONE
+            frase = getattr(ctx, "motivo", "") or "Le fonti non sono raggiungibili al momento."
+            return self._chiudi_parlando(m, frase)
+
+        with self._lock:
+            if self._cancel is not None and self._cancel.cancelled:
+                return
+            tok = CancelToken()
+            self._cancel = tok
+
+        self.sm.fire(Event.CONTEXT_READY)             # -> GENERAZIONE
+        messaggi = self.mem.messaggi(slot=slot, domanda=ctx.messaggio(m.transcript))
+        m.extra["contesto_token"] = self.mem.conteggio(
+            slot, fonti=ctx.blocco()).totale
+        m.extra["fonte"] = (ctx.citazioni() or [""])[0][:80]
+
+        gm = self._genera(m, messaggi, tok)
+        if tok.cancelled:
+            return
+
+        if gm is not None:
+            m.tokens = gm.tokens
+            m.reply = gm.text
+            # In memoria entra la RISPOSTA, mai le fonti. Vedi la nota in
+            # testa a `llm/grounding.py`: un testo ostile che restasse in
+            # cronologia continuerebbe a insistere per tutti i turni
+            # successivi, e quelli non sarebbero piu' marcati contaminati.
+            self.mem.aggiungi("assistant", gm.text)
+
+        self.counters.turns += 1
+        m.append_to_log()
+        if self.d.on_turn_end is not None:
+            self.d.on_turn_end(m)
+        self.d.player.wait_drained()
+        with self._lock:
+            corrente = self._cancel is tok and not tok.cancelled
+        if corrente:
+            self.sm.fire(Event.PLAYBACK_DONE)
+
+    def _chiudi_parlando(self, m: TurnMetrics, frase: str) -> None:
+        """Dire una frase sola e chiudere il turno. Usato dalla degradazione."""
+        m.reply = frase
+        self.mem.aggiungi("assistant", frase)
+        self.d.player.enqueue(self.d.tts_synth(frase).pcm)
+        m.t_first_audio = time.perf_counter()
+        if self.sm.state is not State.PARLATO:
+            self.sm.fire(Event.FIRST_AUDIO)
+        self.counters.turns += 1
+        m.append_to_log()
+        if self.d.on_turn_end is not None:
+            self.d.on_turn_end(m)
+        self.d.player.wait_drained()
+        self.sm.fire(Event.PLAYBACK_DONE)
 
     # -- ramo strumenti ----------------------------------------------------
 
@@ -362,6 +590,10 @@ class Orchestrator:
         self.sm.fire(Event.INTENT_KNOWN)              # -> ESECUZIONE
 
         risultati = []
+        # M5 — la bandiera vive nel turno. Una volta alzata non si abbassa:
+        # se la seconda azione di un piano porta dentro del web, la terza
+        # nasce in un turno contaminato anche se la prima non lo era.
+        untrusted = False
         for call in decisione.calls:
             if self.cancelled:
                 break
@@ -370,7 +602,8 @@ class Orchestrator:
             if conferma:
                 self.sm.fire(Event.NEEDS_CONFIRM)     # -> ATTESA_CONFERMA
 
-            res = a.esegui(call)
+            res = a.esegui(call, untrusted)
+            untrusted = untrusted or nome in ("web_search", "web_fetch")
 
             if conferma:
                 # CONFIRMED torna in ESECUZIONE, DENIED va dritto a PARLATO:
@@ -398,7 +631,9 @@ class Orchestrator:
                                    for c in decisione.calls[:len(risultati)])
         m.extra["azioni"] = len(risultati)
         m.extra["esito"] = getattr(ultimo.outcome, "value", str(ultimo.outcome))
-        self.history.append({"role": "assistant", "content": frase})
+        if untrusted:
+            m.extra["untrusted"] = True
+        self.mem.aggiungi("assistant", frase)
 
         syn = self.d.tts_synth(frase)
         m.t_first_audio = time.perf_counter()
@@ -430,5 +665,41 @@ class Orchestrator:
         self.sm.reset()
 
     def tick(self) -> None:
-        """Da chiamare ~1 Hz: fa scattare i timeout degli stati."""
+        """Da chiamare ~2 Hz: timeout degli stati e manutenzione della memoria."""
         self.sm.check_timeout()
+        self._forse_riassumi()
+
+    def _forse_riassumi(self) -> None:
+        """Il riassunto, e solo quando nessuno sta aspettando.
+
+        Tre condizioni, tutte necessarie:
+
+            DORMIENTE        nessun turno in corso, nessuno in ascolto
+            serve_riassunto  il contesto e' al 70% e c'e' roba da condensare
+            nessun thread    non se ne avviano due
+
+        Gira su un thread proprio anche qui: `tick()` e' chiamata dal ciclo
+        audio, e due o tre secondi dentro `tick()` sono due o tre secondi in
+        cui i blocchi del microfono si accumulano e poi si perdono.
+        """
+        if self.sm.state is not State.DORMIENTE:
+            return
+        if self._riassunto is not None and self._riassunto.is_alive():
+            return
+        slot = self._contesto()
+        if not self.mem.serve_riassunto(slot):
+            return
+
+        def lavora() -> None:
+            try:
+                if self.mem.compatta(slot):
+                    self.counters.riassunti += 1
+            except Exception:                    # noqa: BLE001
+                self.counters.errors += 1
+
+        if self.synchronous:
+            lavora()
+            return
+        self._riassunto = threading.Thread(target=lavora, daemon=True,
+                                           name="metis-riassunto")
+        self._riassunto.start()

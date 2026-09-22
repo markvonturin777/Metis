@@ -96,3 +96,37 @@ def test_nessun_testo_perduto_con_max_chars():
     lunga = "Prima parte della frase molto lunga, seconda parte altrettanto lunga, terza parte finale."
     chunk, resto = split_sentences(lunga, 25, 60)
     assert " ".join([*chunk, resto]).strip().replace("  ", " ") == lunga
+
+
+# --- M5: i marcatori delle fonti non si pronunciano --------------------------
+
+def test_il_marcatore_non_arriva_al_tts():
+    """Misurato in M5: su una fonte senza titolo Qwen chiude la risposta
+    citando la fonte con il nome del DELIMITATORE, 3 volte su 3. Il prompt lo
+    scoraggia; qui diventa impossibile."""
+    from metis.llm.client import _clean
+
+    assert _clean("La pagina parla dei BTP. FONTEESTERNANONFIDATA") == \
+        "La pagina parla dei BTP."
+    assert _clean("Testo. <<<FINE_FONTE_ESTERNA id=1>>>") == "Testo."
+    assert _clean("Secondo <<<FONTE_ESTERNA_NON_FIDATA id=2 url=\"x\">>> il tasso") \
+        == "Secondo il tasso"
+
+
+def test_un_chunk_di_solo_marcatore_non_si_pronuncia():
+    """Un PCM di zero campioni in coda al player e' un buco nella
+    riproduzione, non un silenzio voluto."""
+    from metis.llm.client import _clean, split_sentences
+
+    assert _clean("<<<FINE_FONTE_ESTERNA id=1>>>") == ""
+    chunk, _ = split_sentences(
+        "Questa e' la risposta vera e completa. FONTEESTERNANONFIDATA. ")
+    assert all(c for c in chunk), "un chunk vuoto e' finito in coda al TTS"
+
+
+def test_la_pulizia_non_tocca_il_testo_normale():
+    """Una regola che rovina le risposte buone e' una regola che si toglie."""
+    from metis.llm.client import _clean
+
+    normale = "Secondo Investing.com il rendimento e' al 3,75 per cento."
+    assert _clean(normale) == normale

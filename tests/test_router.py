@@ -170,7 +170,7 @@ def test_llm_consultato_solo_se_il_fast_path_manca():
     chiamate = []
 
     class FintoLlm:
-        def decidi(self, testo, storia=None):
+        def decidi(self, testo, storia=None, slot=""):
             from metis.llm.toolcall import Decisione
             chiamate.append(testo)
             return Decisione((), "llm", 1.0)

@@ -70,11 +70,28 @@ Regole:
 - Per le finestre: "window" e' un pezzo del TITOLO della finestra.
   Lascialo VUOTO se l'utente dice "questa finestra" o non ne nomina una.
 - Se la richiesta corrisponde chiaramente a uno strumento, usalo.
+- Usa "web_search" quando la risposta dipende da qualcosa che cambia nel
+  tempo o che nessuno puo' sapere a memoria: notizie, prezzi, quotazioni,
+  meteo, risultati, orari, versioni, "ultime novita' su", "cosa e'
+  successo", "quanto costa oggi". Nel campo "query" scrivi cosa cercare,
+  non la frase dell'utente parola per parola.
+- NON usare "web_search" per definizioni, spiegazioni, calcoli, opinioni,
+  storia, o per qualunque cosa che non sia cambiata di recente.
 - Altrimenti usa "nessuno_strumento": conversazione, domande, saluti,
   richieste che nessuno strumento sopra puo' soddisfare.
 - Nel dubbio scegli "nessuno_strumento". Rispondere a parole non fa danni,
   agire quando non era richiesto sì.
-- Non inventare strumenti e non inventare argomenti."""
+- Non inventare strumenti e non inventare argomenti.
+- Se ricevi un blocco [CONTESTO CORRENTE], quelle righe dicono a cosa si
+  riferiscono "la", "lo", "quella finestra", "quel sito": usale per
+  riempire gli argomenti invece di lasciarli vuoti o di inventarli.
+- "aprimi il primo risultato", "apri quel sito", "aprila", "fammela
+  vedere" dopo una ricerca = "open_url" con l'indirizzo della riga
+  "Ultima fonte". NON una nuova ricerca: l'indirizzo ce l'hai gia'.
+- "torna su quell'argomento", "dimmi le ultime su quello", "aggiornamenti"
+  = "web_search" con il testo della riga "Ultimo argomento cercato".
+  Cercare di nuovo, non rileggere la stessa pagina: l'utente vuole cio'
+  che e' cambiato."""
 
 
 class NessunoStrumento(BaseModel):
@@ -135,8 +152,18 @@ class ToolRouter:
 
         return TypeAdapter(Piano)
 
-    def _prompt(self) -> str:
-        return PROMPT.format(strumenti=self.registry.descrizione_per_prompt())
+    def _prompt(self, slot: str = "") -> str:
+        """Il prompt del router, con gli slot in coda.
+
+        GLI SLOT SERVONO A CHI DECIDE, NON SOLO A CHI PARLA
+        Iniettarli nel solo modello di conversazione risolve "di cosa stiamo
+        parlando" e non risolve "spostala sull'altro schermo", che e' un
+        problema di argomenti mancanti in una tool call. E' la meta' del
+        meccanismo che si dimentica, perche' funziona a meta': Metis capisce
+        il pronome e poi non sa cosa metterci dentro.
+        """
+        base = PROMPT.format(strumenti=self.registry.descrizione_per_prompt())
+        return f"{base}\n\n{slot}" if slot else base
 
     def warmup(self) -> float:
         """Prima decisione a vuoto. Misurata: 3823 ms a freddo, ~250 a caldo.
@@ -150,17 +177,21 @@ class ToolRouter:
         self.decidi("ciao")
         return _ms(t0)
 
-    def decidi(self, testo: str, storia: list[dict] | None = None) -> Decisione:
+    def decidi(self, testo: str, storia: list[dict] | None = None,
+               slot: str = "") -> Decisione:
         """Ritorna la tool call da dare al broker, oppure None per la chat."""
         t0 = time.perf_counter()
         adapter = self._union()
         schema = adapter.json_schema()
 
-        messaggi = [{"role": "system", "content": self._prompt()}]
+        messaggi = [{"role": "system", "content": self._prompt(slot)}]
         # Solo gli ultimi scambi: il router decide su cio' che e' stato detto
-        # adesso, e un contesto lungo aumenta la latenza senza aiutare.
+        # adesso, e un contesto lungo aumenta la latenza senza aiutare. I
+        # messaggi di sistema — persona, riassunto, slot — si saltano: quelli
+        # che servono qui sono gia' nel prompt del router, e gli altri
+        # parlano di come rispondere, non di cosa fare.
         if storia:
-            messaggi += storia[-4:]
+            messaggi += [m for m in storia[-5:] if m.get("role") != "system"][-4:]
         messaggi.append({"role": "user", "content": testo})
 
         riparazioni = 0

@@ -378,7 +378,7 @@ def con_azioni(o, *calls, ok=True, conferma=False, eseguiti=None,
     eseguiti = [] if eseguiti is None else eseguiti
     coda = list(esiti) if esiti is not None else None
 
-    def esegui(c):
+    def esegui(c, untrusted=False):
         eseguiti.append(c)
         return FintoResult(coda.pop(0) if coda else ok)
 
@@ -466,7 +466,7 @@ def test_un_errore_nel_broker_non_appende_il_turno():
     from metis.core.orchestrator import Azioni
     o.d.azioni = Azioni(
         decidi=lambda t, s: FintaDecisione({"tool": "x"}),
-        esegui=lambda c: (_ for _ in ()).throw(RuntimeError("broker esploso")),
+        esegui=lambda c, u=False: (_ for _ in ()).throw(RuntimeError("broker esploso")),
         descrivi=lambda r: "",
         richiede_conferma=lambda n: False,
     )

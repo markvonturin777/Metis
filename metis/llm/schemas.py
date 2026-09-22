@@ -145,6 +145,37 @@ class ListMonitors(_Strumento):
     tool: Literal["list_monitors"]
 
 
+class WebSearch(_Strumento):
+    """T0 — Cerca sul web.
+
+    M5 — PERCHE' NON C'E' `max_results`
+    Il piano lo prevedeva. E' fuori perche' il numero di fonti e' una
+    decisione di budget del contesto — 8k token in tutto, ~1.200 per fonte —
+    e non una preferenza dell'utente che il modello debba interpretare. Un
+    `max_results=10` sarebbe uno schema valido che espelle la memoria
+    conversazionale, cioe' un modo di far dimenticare Metis scrivendo un
+    JSON legittimo. Sta come costante in `metis/tools/web.py`.
+    """
+
+    tool: Literal["web_search"]
+    query: str = Field(..., min_length=2, max_length=200,
+                       description="cosa cercare, in parole")
+
+
+class WebFetch(_Strumento):
+    """T0 — Legge una pagina web.
+
+    Solo `https`, come `open_url` e per lo stesso motivo: questo campo e uno
+    solo altro sono gli unici di tutto il perimetro che assomiglino a un
+    percorso, e senza il `pattern` sarebbero il modo per nominare
+    `file:///C:/Users/...` scrivendo un JSON valido.
+    """
+
+    tool: Literal["web_fetch"]
+    url: str = Field(..., max_length=500,
+                     pattern=r"^https://[A-Za-z0-9][A-Za-z0-9.\-]*\.[A-Za-z]{2,}(:\d{1,5})?(/[^\s]*)?$")
+
+
 # --- T1: reversibile ---------------------------------------------------------
 
 class OpenApplication(_Strumento):
@@ -277,6 +308,8 @@ SCHEMI: tuple[type[_Strumento], ...] = (
     ListWindows,
     GetActiveWindow,
     ListMonitors,
+    WebSearch,
+    WebFetch,
     OpenApplication,
     OpenUrl,
     MoveWindowToMonitor,

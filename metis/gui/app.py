@@ -146,6 +146,10 @@ class Applicazione(QObject):
         n.turno.connect(self._turno)
         n.livello.connect(self._livello)
         n.contatori.connect(self._contatori)
+        # M5 — va solo alla control room: nella vista minimal non c'e' posto
+        # per un budget di token, e chi usa Metis in minimal non lo sta
+        # guardando per capire perche' ha risposto cosi'.
+        n.contesto.connect(self.fullscreen.imposta_contesto)
         self.worker_telemetria.dati.connect(self._risorse)
         self.worker_telemetria.errore.connect(self._errore)
 

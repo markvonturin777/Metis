@@ -24,11 +24,15 @@ import numpy as np
 
 from metis.audio.wakeword import WakeWordConfig, WakeWordDetector
 from metis.core.logging import bind_turn, clear_turn, log_transition
-from metis.core.orchestrator import Azioni, Deps, Orchestrator
-from metis.core.risposte import descrivi_sequenza
+from metis.core.orchestrator import Azioni, Conoscenza, Deps, Orchestrator
+from metis.core.risposte import Filler, descrivi_sequenza
 from metis.core.router import Router
 from metis.memory.commands import Libreria
+from metis.memory.conversation import Memoria
+from metis.memory.slots import SLOTS
 from metis.llm.client import LlmClient
+from metis.llm.grounding import Consulente
+from metis.llm.prompts import SYSTEM
 from metis.llm.toolcall import ToolRouter
 from metis.security.audit import AuditLog
 from metis.security.broker import Broker
@@ -41,11 +45,8 @@ from metis.tools.registry import Registry, carica_tutti
 from metis.tts import create_engine
 from metis.tts.kokoro_engine import Player
 
-SYSTEM = (
-    "Sei Metis, assistente personale su questo PC. Rispondi in italiano, "
-    "formale ma con ironia discreta. MASSIMO DUE FRASI BREVI: l'utente ti "
-    "ascolta, non ti legge. Niente preamboli, niente 'Certamente'."
-)
+__all__ = ["SYSTEM", "Opzioni", "Sistema", "CicloAudio", "costruisci_sistema",
+           "costruisci_azioni"]
 
 
 @dataclass
@@ -81,13 +82,15 @@ class Sistema:
     broker: Broker | None = None
     router: Router | None = None
     libreria: Libreria | None = None
+    consulente: Consulente | None = None
+    memoria: Memoria | None = None
     avvio_s: float = 0.0
     note: list[str] = field(default_factory=list)
 
 
 def costruisci_azioni(opz: Opzioni, log, riporta: Callable[[str], None],
                       chiedi_conferma: Callable | None = None
-                      ) -> tuple[Azioni | None, dict[str, Any]]:
+                      ) -> tuple[Azioni | None, Conoscenza | None, dict[str, Any]]:
     """Il perimetro d'azione: registro, broker, router. Oppure niente.
 
     `chiedi_conferma` e' il solo punto in cui console e GUI differiscono. Il
@@ -95,7 +98,7 @@ def costruisci_azioni(opz: Opzioni, log, riporta: Callable[[str], None],
     c'e': quando nessuno puo' acconsentire, la risposta e' no.
     """
     if not opz.tools:
-        return None, {}
+        return None, None, {}
 
     reg = carica_tutti()
     audit = AuditLog()
@@ -120,19 +123,51 @@ def costruisci_azioni(opz: Opzioni, log, riporta: Callable[[str], None],
             f"{s['frasi']} frasi"
             + (f" ({len(libreria.avvisi)} scartati)" if libreria.avvisi else ""))
 
-    def esegui(call: dict):
+    def esegui(call: dict, untrusted: bool = False):
+        """L'unico punto da cui si passa dal broker, e l'unico che aggiorna
+        gli slot.
+
+        `untrusted` arriva dall'orchestratore e dal consulente, e finisce nel
+        `Context` del broker. E' la difesa 3 di M5: da qui in giu' nessun
+        prompt puo' piu' cambiare l'esito, perche' e' un confronto fra due
+        insiemi in `policies.valuta_tier`.
+        """
         r = broker.execute(call, Context(turn_id=None, chiedi_conferma=chiedi,
+                                         has_untrusted_content=untrusted,
                                          origine="orchestratore"))
         log.info("strumento", tool=r.tool, esito=r.outcome.value,
-                 stadio=r.stage, motivo=r.detail[:80], ms=round(r.duration_ms))
+                 stadio=r.stage, motivo=r.detail[:80], ms=round(r.duration_ms),
+                 web=untrusted or None)
+        # Gli slot si aggiornano qui e in nessun altro posto: un secondo
+        # scrittore renderebbe impossibile sapere perche' "la" si riferisce a
+        # quella cosa li'. Solo sugli esiti riusciti — vedi `slots.osserva`.
+        SLOTS.osserva(call, r)
         return r
 
     def conferma_serve(nome: str) -> bool:
         spec = reg.get(nome)
         return spec is not None and richiede_conferma(spec.tier)
 
+    def al_risveglio() -> None:
+        """Due cose nello stesso istante: fissare "questa finestra" per gli
+        strumenti, e scriverla negli slot perche' il modello possa nominarla.
+
+        Sono due lettori diversi dello stesso fatto. Tenerli in due momenti
+        diversi vorrebbe dire che `move_window_to_monitor` agisce su una
+        finestra e la frase pronunciata ne nomina un'altra.
+        """
+        hwnd = finestre.cattura_riferimento()
+        if hwnd is None:
+            return
+        try:
+            info = finestre.info(hwnd)
+        except Exception:                          # noqa: BLE001
+            return
+        if info is not None:
+            SLOTS.vista_finestra(info.titolo, info.processo)
+
     azioni = Azioni(
-        decidi=lambda testo, storia: router.decidi(testo, storia),
+        decidi=lambda testo, storia: router.decidi(testo, storia, SLOTS.blocco()),
         esegui=esegui,
         descrivi=descrivi_sequenza,
         richiede_conferma=conferma_serve,
@@ -141,10 +176,41 @@ def costruisci_azioni(opz: Opzioni, log, riporta: Callable[[str], None],
         # l'unico posto che conosce sia il ciclo di vita del turno sia gli
         # strumenti: l'orchestratore non deve sapere che esistono le
         # finestre, e `finestre.py` non deve sapere che esiste un turno.
-        al_risveglio=finestre.cattura_riferimento,
+        al_risveglio=al_risveglio,
     )
-    return azioni, {"registry": reg, "audit": audit, "broker": broker,
-                    "router": router, "libreria": libreria}
+
+    # -- il ramo conoscenza ------------------------------------------------
+    #
+    # `Consulente` riceve `esegui`, cioe' lo stesso callable che usa
+    # l'orchestratore: ricerche e letture attraversano il broker come
+    # qualunque altra azione. Non e' pignoleria — il percorso che porta
+    # dentro il testo non fidato e' proprio quello che non puo' permettersi
+    # di saltare la validazione e l'audit.
+    consulente = Consulente(esegui)
+    filler = Filler()
+
+    def query_web(decisione) -> str | None:
+        """La query di questo turno, se c'e'.
+
+        Guarda TUTTE le azioni del piano e non solo la prima: un modello che
+        risponde `[open_url, web_search]` ha comunque chiesto delle fonti, e
+        trattare quel turno come un turno normale significherebbe eseguire
+        `open_url` e poi la ricerca — cioe' agire prima di sapere.
+        """
+        for c in getattr(decisione, "calls", ()):
+            if c.get("tool") == "web_search":
+                return (c.get("query") or "").strip() or None
+            if c.get("tool") == "web_fetch":
+                return (c.get("url") or "").strip() or None
+        return None
+
+    conoscenza = Conoscenza(query_web=query_web,
+                            consulta=consulente.consulta,
+                            filler=filler.prossimo)
+
+    return azioni, conoscenza, {"registry": reg, "audit": audit, "broker": broker,
+                                "router": router, "libreria": libreria,
+                                "consulente": consulente}
 
 
 def costruisci_sistema(opz: Opzioni, log,
@@ -190,8 +256,16 @@ def costruisci_sistema(opz: Opzioni, log,
         det.scores.clear()
         det.scores_dual.clear()
 
-    azioni, pezzi = costruisci_azioni(opz, log, riporta, chiedi_conferma)
+    azioni, conoscenza, pezzi = costruisci_azioni(opz, log, riporta, chiedi_conferma)
     player.start()
+
+    # La memoria riassume con lo STESSO modello che conversa, a temperatura
+    # 0,1: un riassunto non deve essere creativo, deve essere lo stesso ogni
+    # volta. Il client e' quello gia' caricato in VRAM — un secondo modello
+    # per riassumere costerebbe un secondo caricamento e un secondo picco.
+    memoria = Memoria(system=SYSTEM, riassumi=llm.riassumi)
+    riporta(f"memoria      : finestra {memoria.finestra} messaggi, "
+            f"riassunto al {int(memoria.soglia * 100)}% del contesto")
 
     # I motori si avvolgono qui, non dentro l'orchestratore: l'orchestratore
     # deve restare ignaro di quale STT o TTS stia usando, e di chi lo guarda.
@@ -233,13 +307,16 @@ def costruisci_sistema(opz: Opzioni, log,
         on_turn_start=bind_turn,
         on_turn_end=fine_turno,
         azioni=azioni,
+        memoria=memoria,
+        conoscenza=conoscenza,
+        contesto=SLOTS.blocco,
     )
     orch = Orchestrator(deps, on_transition=osserva)
     avvio = time.perf_counter() - t0
     riporta(f"pronti in {avvio:.1f} s")
 
     return Sistema(orchestrator=orch, player=player, detector=det,
-                   avvio_s=avvio, **pezzi)
+                   memoria=memoria, avvio_s=avvio, **pezzi)
 
 
 TICK_S = 0.5          # ogni quanto si controllano i timeout degli stati

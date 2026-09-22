@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 from metis.core.palette import esadecimale
 from metis.gui.widgets.audit import VistaAudit
 from metis.gui.widgets.comandi import PannelloComandi
+from metis.gui.widgets.contesto import PannelloContesto
 from metis.gui.widgets.conversazione import Conversazione
 from metis.gui.widgets.stato import IndicatoreStato, VuMeter
 from metis.gui.widgets.telemetria import Telemetria
@@ -145,6 +146,13 @@ class FullscreenView(QWidget):
             " padding: 10px; font-size: 13px;")
         lay.addWidget(self.corrente, 1)
 
+        lay.addWidget(_titolo("CONTESTO"))
+        # Il pannello di M5. Sta nella colonna "adesso" e non fra i cruscotti
+        # perche' non e' una misura: e' il contenuto del prompt corrente, e
+        # si guarda mentre si parla, non a fine sessione.
+        self.contesto = PannelloContesto()
+        lay.addWidget(self.contesto)
+
         lay.addWidget(_titolo("COMANDI RAPIDI"))
         # In M3 era un'etichetta di sola lettura: il contenitore predisposto
         # per M4. Adesso e' l'editor vero, e il resto della colonna non se
@@ -166,6 +174,10 @@ class FullscreenView(QWidget):
     @Slot(bool)
     def imposta_kill(self, sospeso: bool) -> None:
         self.kill.setVisible(sospeso)
+
+    @Slot(dict)
+    def imposta_contesto(self, stato: dict) -> None:
+        self.contesto.aggiorna(stato)
 
     def collega_comandi(self, libreria) -> None:
         """La libreria dei comandi, quando il sistema e' pronto."""

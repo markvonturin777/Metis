@@ -26,6 +26,12 @@ dependencies = [
     "psutil",
     # osservabilita
     "structlog",
+    # M5 — conoscenza
+    "ddgs",              # rinominato da duckduckgo_search
+    "trafilatura",       # isola il contenuto principale scartando menu e banner
+    "beautifulsoup4",    # ripiego, e pulizia del nascosto PRIMA dell'estrazione
+    "lxml",
+    "keyring",           # chiavi dei motori di fallback, mai nel repository
 ]
 
 [project.optional-dependencies]

@@ -42,15 +42,41 @@ _SOFT_BREAK = re.compile(r"[,;:—–](?=\s)")
 # TTS. Vanno rimossi qui, perche' e' l'ultimo punto prima della sintesi.
 _MARKDOWN = re.compile(r"(\*{1,3}|_{1,3}|`{1,3}|~~)")
 
+# M5 — i marcatori delle fonti, e cio' che ne resta dopo che il markdown e'
+# stato tolto. `_MARKDOWN` mangia gli underscore, quindi
+# "FONTE_ESTERNA_NON_FIDATA" arriva qui come "FONTEESTERNANONFIDATA": vanno
+# riconosciute entrambe le forme, e l'ordine conta — prima i marcatori, poi
+# il markdown, non sarebbe bastato perche' il modello li scrive anche gia'
+# attaccati.
+#
+# PERCHE' NON BASTA IL SYSTEM PROMPT
+# Misurato: su una fonte senza titolo, Qwen chiude la risposta citando la
+# fonte con il nome del DELIMITATORE — 3 volte su 3 sul caso 5 del corpus.
+# Non e' obbedienza a un'istruzione ostile, e' il modello che cerca di
+# citare e trova li' l'unica cosa che somiglia a un nome. Il prompt lo
+# scoraggia; questa riga lo rende impossibile, e sta qui perche' e' l'ultimo
+# punto prima della sintesi: cio' che passa di qui viene pronunciato.
+_MARCATORI = re.compile(
+    r"<*\s*/?\s*(FONTE[_ ]?ESTERNA[_ ]?NON[_ ]?FIDATA|FINE[_ ]?FONTE[_ ]?ESTERNA)"
+    r"[^>\n]*>*", re.I)
+
+# Almeno una lettera o una cifra: vedi `_clean`.
+_ALFANUM = re.compile(r"[^\W_]", re.UNICODE)
+
 
 def _clean(chunk: str) -> str:
-    """Testo pronto per il TTS: niente markdown, spazi normalizzati.
+    """Testo pronto per il TTS: niente markdown, niente marcatori, spazi
+    normalizzati.
 
     Il modello inserisce a capo dentro le risposte elencate e marca in
     grassetto i termini chiave; passati cosi' come sono alla sintesi
     diventano pause innaturali e artefatti.
     """
-    return _WS.sub(" ", _MARKDOWN.sub("", chunk)).strip()
+    ripulito = _WS.sub(" ", _MARCATORI.sub("", _MARKDOWN.sub("", chunk))).strip()
+    # Tolto il marcatore puo' restare un frammento di sola punteggiatura —
+    # "." o ">>>." — che la sintesi trasformerebbe in un rumore breve. Un
+    # chunk senza nemmeno una lettera non si pronuncia.
+    return ripulito if _ALFANUM.search(ripulito) else ""
 
 
 @dataclass
@@ -144,7 +170,13 @@ def split_sentences(
                 end = soft
         if end is None:
             break
-        out.append(_clean(buf[:end]))
+        pulito = _clean(buf[:end])
+        # Un chunk vuoto si scarta invece di accodarlo: da M5 `_clean` puo'
+        # svuotare un chunk per intero — quando il modello produce una riga
+        # fatta del solo marcatore — e un PCM di zero campioni in coda al
+        # player e' un buco nella riproduzione, non un silenzio voluto.
+        if pulito:
+            out.append(pulito)
         buf = buf[end:].lstrip()
     return out, buf
 
@@ -170,6 +202,36 @@ class LlmClient:
         for _ in self._raw_stream([{"role": "user", "content": "Ciao."}]):
             pass
         return (time.perf_counter() - t0) * 1000.0
+
+    def riassumi(self, prompt: str, max_token: int = 300,
+                 temperatura: float = 0.1) -> str:
+        """Una generazione non in streaming, fredda e corta. Per la memoria.
+
+        Non passa da `stream_sentences` per tre motivi, tutti e tre il
+        contrario di quello che serve sul percorso vocale: non c'e' nessuno
+        che ascolta, quindi lo streaming non guadagna niente; la segmentazione
+        in frasi rovinerebbe un testo che va conservato intero; e la
+        temperatura dev'essere 0,1, non 0,7 — un riassunto diverso a ogni
+        esecuzione renderebbe la memoria una cosa che non si puo' verificare.
+
+        `num_predict` e' un tetto duro. Il prompt chiede 120 parole, ma un
+        modello da 8B davanti a una conversazione lunga tende a riassumere
+        tutto con cura, e il riassunto diventerebbe il problema che doveva
+        risolvere.
+        """
+        try:
+            r = self.client.chat(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                stream=False, think=False,
+                options={**self.options, "temperature": temperatura,
+                         "top_p": 0.9, "num_predict": max_token},
+            )
+            return (r.get("message", {}).get("content", "") or "").strip()
+        except Exception:                          # noqa: BLE001
+            # La memoria resta grande. E' un problema minore di un thread che
+            # muore: vedi `Memoria.compatta`.
+            return ""
 
     def _raw_stream(self, messages: list[dict]) -> Iterator[str]:
         try:

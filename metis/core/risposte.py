@@ -25,6 +25,8 @@ rotto. Confonderli insegnerebbe all'utente a ignorare entrambi.
 
 from __future__ import annotations
 
+import random
+
 from metis.security.audit import Outcome
 from metis.security.broker import Result
 
@@ -126,7 +128,65 @@ def descrivi(result: Result) -> str:
     if result.tool == "drag":
         return "Trascinato."
 
+    # -- web ---------------------------------------------------------------
+    #
+    # Si arriva qui solo quando il modello ha chiesto una ricerca fuori dal
+    # percorso web — per esempio perche' la decisione conteneva `web_search`
+    # in seconda posizione. Il percorso normale non passa di qua: la
+    # risposta a una ricerca la genera il modello leggendo le fonti, non
+    # questo file. Elencare i titoli ad alta voce sarebbe il modo piu' rapido
+    # di trasformare Metis in un lettore di risultati di ricerca.
+
+    if result.tool == "web_search":
+        n = v.get("totale", 0)
+        if not n:
+            return "Non ho trovato fonti su questo."
+        return f"Ho {n} fonti."
+
+    if result.tool == "web_fetch":
+        return f"Ho letto {(v.get('titolo') or v.get('url') or 'la pagina')[:60]}."
+
     return "Fatto."
+
+
+# --- filler vocale ------------------------------------------------------------
+
+# Il percorso web costa 1,5-4 s, dominati dalla rete e non comprimibili. Il
+# rimedio non e' tecnico: e' dire qualcosa. Un assistente che tace per tre
+# secondi sembra rotto; uno che dice "verifico" e poi tace per tre secondi
+# sta lavorando.
+FILLERS: tuple[str, ...] = (
+    "Un momento, consulto le fonti.",
+    "Verifico.",
+    "Le fonti, subito.",
+    "Un istante, non vorrei inventarmi nulla.",
+    "Guardo.",
+)
+
+
+class Filler:
+    """Frasi di attesa, in ordine casuale ma senza ripetizioni immediate.
+
+    Sentire sempre la stessa frase e' peggio del silenzio: diventa un suono
+    di sistema, smette di significare "sto lavorando" e comincia a
+    significare "ha ricevuto l'input". La rotazione e' la meta' meno ovvia
+    del requisito, ed e' quella che si dimentica.
+
+    `scelta` e' iniettabile perche' un test sul non-ripetersi con una
+    sorgente casuale vera e' un test che ogni tanto passa per fortuna.
+    """
+
+    def __init__(self, frasi: tuple[str, ...] = FILLERS, scelta=random.choice):
+        self.frasi = frasi
+        self._scelta = scelta
+        self.ultima: str | None = None
+        self.emessi = 0
+
+    def prossimo(self) -> str:
+        candidate = [f for f in self.frasi if f != self.ultima] or list(self.frasi)
+        self.ultima = self._scelta(candidate)
+        self.emessi += 1
+        return self.ultima
 
 
 def descrivi_sequenza(risultati: list[Result], risposta: str | None = None) -> str:

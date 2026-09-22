@@ -48,6 +48,7 @@ class Nucleo(QObject):
     turno = Signal(dict)                # metriche del turno concluso
     livello = Signal(float, float)      # rms, picco in dBFS
     contatori = Signal(dict)
+    contesto = Signal(dict)             # M5: budget, slot, fonti dell'ultimo turno
     errore = Signal(str)
     finito = Signal()
 
@@ -108,6 +109,7 @@ class Nucleo(QObject):
         if ora - self._ultimo_contatori >= 1.0 / CONTATORI_HZ:
             self._ultimo_contatori = ora
             self.contatori.emit(self._stato_contatori())
+            self.contesto.emit(self._stato_contesto())
 
     def _stato_contatori(self) -> dict:
         c = self.sistema.orchestrator.counters
@@ -117,6 +119,34 @@ class Nucleo(QObject):
             "barge_in": c.barge_ins, "scartati": c.discarded,
             "kill_switch": KILL_SWITCH.attivo,
         }
+
+    def _stato_contesto(self) -> dict:
+        """Cosa c'e' nel prompt adesso, in forma di dizionario.
+
+        Due volte al secondo, come i contatori: e' un conteggio di caratteri
+        su una finestra di 16 messaggi, cioe' microsecondi. Se un giorno
+        diventasse un tokenizzatore vero andrebbe diradato, perche' questa
+        funzione gira sul thread del nucleo e NFR-8 si misura anche qui.
+
+        Escono dati, mai oggetti: `Memoria` e `Slots` hanno un lock e
+        reggerebbero la lettura dal thread della GUI, ma la regola di M3
+        resta — fra i due thread passano dizionari.
+        """
+        from metis.memory.slots import SLOTS
+
+        mem = getattr(self.sistema, "memoria", None)
+        if mem is None:
+            return {}
+        slot = SLOTS.blocco()
+        consulente = getattr(self.sistema, "consulente", None)
+        ultimo = getattr(consulente, "ultimo", None)
+        fonti = ultimo.citazioni() if ultimo is not None else []
+        return {"conteggio": mem.conteggio(slot, fonti=(ultimo.blocco()
+                                                        if ultimo else "")
+                                           ).come_dizionario(),
+                "slot": slot,
+                "riassunti": mem.riassunti_fatti,
+                "fonti": fonti}
 
     @staticmethod
     def _metriche(m) -> dict:

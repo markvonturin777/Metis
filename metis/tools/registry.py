@@ -165,5 +165,6 @@ def carica_tutti() -> Registry:
     from metis.tools import apps, telemetry, windows  # noqa: F401
     from metis.tools import input_sintetico  # noqa: F401
     from metis.tools import esterni  # noqa: F401
+    from metis.tools import web  # noqa: F401
 
     return REGISTRY
