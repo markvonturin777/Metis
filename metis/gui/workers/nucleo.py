@@ -183,3 +183,5 @@ class Nucleo(QObject):
         if self.sistema is not None:
             self.sistema.orchestrator.panic()
             self.sistema.player.close()
+            # M6: scheduler e Home Assistant girano su thread propri.
+            self.sistema.chiudi()

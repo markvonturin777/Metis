@@ -170,7 +170,9 @@ def test_lo_schema_json_per_ollama_si_genera():
     testo = str(schema)
     for nome in {s.name for s in REG if not s.implemented}:
         assert nome not in testo, f"{nome} non ha un corpo e non va offerto"
-    assert "send_email" not in testo, "T3 senza capacita': arriva in M6"
+    # Fino a M5 qui c'era `assert "send_email" not in testo`: era l'ultimo T3
+    # senza corpo. In M6 il corpo e' arrivato, e il test dice il contrario.
+    assert "send_email" in testo and "set_home_device" in testo
     assert "click_element" in testo
 
 
@@ -233,9 +235,17 @@ def test_strumenti_inventati_dal_modello(tmp_path, inventato):
     assert r.denied and r.stage == "registro"
 
 
-def test_send_email_vero_senza_conferma_non_parte(tmp_path):
+def test_send_email_vero_senza_conferma_non_parte(tmp_path, monkeypatch):
+    """Da M6 il destinatario deve essere in allowlist, e la guardia viene
+    prima della conferma: con l'allowlist vuota del repository il rifiuto
+    arriverebbe allo stadio sbagliato e il test non direbbe piu' niente sulla
+    conferma. Si mette il destinatario in un'allowlist di prova."""
     from metis.security.policies import Context
+    from metis.tools import posta
 
+    lista = tmp_path / "email.toml"
+    lista.write_text('[allowlist]\nindirizzi = ["a@b.it"]\n', encoding="utf-8")
+    monkeypatch.setattr(posta, "CONFIG", lista)
     b = _broker_reale(tmp_path)
     r = b.execute({"tool": "send_email", "to": "a@b.it", "subject": "s",
                    "body": "b"}, Context())

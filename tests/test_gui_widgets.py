@@ -131,9 +131,37 @@ def test_allo_scadere_il_dialogo_si_chiude_senza_decidere(qt):
 
 
 def _tutto_il_testo(widget) -> str:
-    from PySide6.QtWidgets import QLabel
+    from PySide6.QtWidgets import QLabel, QPlainTextEdit
 
-    return " ".join(w.text() for w in widget.findChildren(QLabel))
+    etichette = [w.text() for w in widget.findChildren(QLabel)]
+    riquadri = [w.toPlainText() for w in widget.findChildren(QPlainTextEdit)]
+    return " ".join(etichette + riquadri)
+
+
+def test_il_corpo_lungo_si_vede_per_intero(qt):
+    """M6: fino a qui il dialogo tagliava ogni valore a 400 caratteri, e la
+    sua docstring diceva "argomenti interi". Con l'email vera la differenza
+    e' diventata concreta: si approverebbe un messaggio letto a meta'.
+
+    La coda del corpo e' la parte che conta — e' li' che un testo
+    "innocuo" per quattrocento caratteri puo' diventare altro."""
+    corpo = ("Riga innocua di apertura. " * 40) + "CODA CHE DEVE ESSERE LETTA"
+    d = DialogoConferma("send_email", "T3",
+                        {"a": "marco@esempio.it", "corpo": corpo}, 20.0)
+    assert len(corpo) > 1000
+    assert "CODA CHE DEVE ESSERE LETTA" in _tutto_il_testo(d)
+    assert d.riquadri, "il corpo lungo non e' finito in un riquadro che scorre"
+
+
+def test_non_si_dice_non_si_annulla_quando_non_e_vero(qt):
+    """Un promemoria T1 chiede conferma della data ma si cancella con una
+    frase. Dirgli "NON si annulla" insegnerebbe a non credere all'avviso
+    proprio quando e' vero."""
+    t1 = _tutto_il_testo(DialogoConferma("schedule_reminder", "T1",
+                                         {"quando": "domani"}, 20.0))
+    t3 = _tutto_il_testo(DialogoConferma("send_email", "T3", {"a": "x"}, 20.0))
+    assert "NON si annulla" not in t1
+    assert "NON si annulla" in t3
 
 
 # --- conversazione -----------------------------------------------------------
@@ -456,7 +484,9 @@ def test_l_editor_mostra_gli_strumenti_disponibili(editor):
     e, lib, _ = editor
     testo = e.strumenti.text()
     assert "click_element" in testo and "T2" in testo
-    assert "send_email" not in testo, "non ha un corpo: non va offerto"
+    # Fino a M5 qui si verificava che `send_email` NON comparisse, perche'
+    # non aveva un corpo. In M6 l'ha avuto: compare, e compare come T3.
+    assert "send_email" in testo and "T3" in testo
 
 
 # --- M5: il pannello del contesto --------------------------------------------

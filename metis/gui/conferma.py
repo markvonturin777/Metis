@@ -66,8 +66,13 @@ class PonteConferma(QObject):
         # ma se un giorno qualcuno chiamasse `chiedi` dal thread della GUI la
         # connessione sarebbe diretta e lo slot girerebbe qui dentro. Con il
         # mutex preso sarebbe un blocco permanente.
-        self.richiesta.emit(spec.name, spec.tier.value, call.model_dump(),
-                            self.timeout_s)
+        # M6: la presentazione e non `model_dump()`. Chi conferma legge
+        # "domani, giovedi' 24 settembre, alle 17:00", non un ISO 8601, e il
+        # corpo dell'email per intero. Vedi `registry.presentazione`.
+        from metis.tools.registry import presentazione
+
+        self.richiesta.emit(spec.name, spec.tier.value,
+                            presentazione(spec, call), self.timeout_s)
 
         self._mutex.lock()
         try:

@@ -302,6 +302,97 @@ class SendEmail(_Strumento):
     body: str = Field(..., max_length=5000)
 
 
+# --- M6: nel tempo -------------------------------------------------------------
+#
+# LE DATE SONO STRINGHE CON UN PATTERN, NON `datetime`
+# Un campo `datetime` di Pydantic accetta una dozzina di formati, fusi orari
+# compresi, e diventa `anyOf` nello schema JSON — il punto in cui i modelli
+# piccoli sbagliano di piu'. Un formato solo, senza fuso e senza secondi, e'
+# un formato che il modello produce sempre uguale. Che la data sia nel futuro
+# lo verifica una guardia, non lo schema: e' una questione di quando, non di
+# forma.
+
+Quando = Annotated[str, Field(
+    pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$",
+    description="data e ora locali, formato AAAA-MM-GGTHH:MM, es. 2026-09-24T17:00",
+)]
+
+
+class ScheduleReminder(_Strumento):
+    """T1 — Programma un promemoria. Conferma della data SEMPRE."""
+
+    tool: Literal["schedule_reminder"]
+    testo: str = Field(..., min_length=1, max_length=200,
+                       description="cosa ricordare, in poche parole")
+    quando: Quando
+
+
+class ScheduleEmail(_Strumento):
+    """T3 — Programma l'invio di una email. Conferma alla CREAZIONE.
+
+    Non all'invio: chiedere conferma alle 9 di domani presuppone che l'utente
+    sia davanti al PC alle 9 di domani, e allora la schedulazione non serve.
+    """
+
+    tool: Literal["schedule_email"]
+    to: str = Field(..., max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    subject: str = Field(..., max_length=200)
+    body: str = Field(..., max_length=5000)
+    quando: Quando
+
+
+class ListReminders(_Strumento):
+    """T0 — Elenco dei promemoria e delle email programmate."""
+
+    tool: Literal["list_reminders"]
+
+
+class CancelReminder(_Strumento):
+    """T1 — Cancella un promemoria o un'email programmata.
+
+    Per TESTO, non per id: e' la stessa scelta delle finestre in M4. Un id
+    inventato dal modello potrebbe esistere; un pezzo di testo inventato non
+    corrisponde a niente e produce un rifiuto. Due corrispondenze, rifiuto.
+    """
+
+    tool: Literal["cancel_reminder"]
+    riferimento: str = Field(..., min_length=2, max_length=120,
+                             description="parte del testo del promemoria o "
+                                         "dell'oggetto dell'email")
+
+
+# --- M6: nel mondo fisico -------------------------------------------------------
+#
+# IL MODELLO NON NOMINA MAI UN `entity_id`
+# Nomina un dispositivo per NOME, fra quelli di `config/home_assistant.toml`.
+# Non e' comodita': e' il perimetro. Home Assistant espone anche serrature,
+# allarmi, termostati; se il modello potesse scrivere `lock.porta_ingresso`,
+# il perimetro di Metis sarebbe quello di Home Assistant. Cosi' e' quello del
+# file di configurazione, e un nome che non c'e' e' un rifiuto.
+
+class GetHomeState(_Strumento):
+    """T0 — Stato attuale di un dispositivo di casa."""
+
+    tool: Literal["get_home_state"]
+    dispositivo: str = Field(..., min_length=2, max_length=60,
+                             description="nome del dispositivo, es. friggitrice")
+
+
+class ListHomeDevices(_Strumento):
+    """T0 — Elenco dei dispositivi di casa che Metis puo' usare."""
+
+    tool: Literal["list_home_devices"]
+
+
+class SetHomeDevice(_Strumento):
+    """T3 — Accende o spegne un dispositivo di casa. Conferma SEMPRE."""
+
+    tool: Literal["set_home_device"]
+    dispositivo: str = Field(..., min_length=2, max_length=60,
+                             description="nome del dispositivo, es. friggitrice")
+    azione: Literal["accendi", "spegni"]
+
+
 # Tutti gli schemi, per chi deve scorrerli: il registro e le verifiche.
 SCHEMI: tuple[type[_Strumento], ...] = (
     GetTelemetry,
@@ -324,6 +415,13 @@ SCHEMI: tuple[type[_Strumento], ...] = (
     ScrollWindow,
     DragElement,
     SendEmail,
+    ScheduleReminder,
+    ScheduleEmail,
+    ListReminders,
+    CancelReminder,
+    GetHomeState,
+    ListHomeDevices,
+    SetHomeDevice,
 )
 
 ToolCall = Annotated[Union[SCHEMI], Field(discriminator="tool")]

@@ -154,6 +154,7 @@ def main() -> None:
         hk.stop()
         orch.panic()
         sis.player.close()
+        sis.chiudi()          # M6: scheduler e Home Assistant
         clear_turn()
 
     riepilogo(sis, ciclo)

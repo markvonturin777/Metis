@@ -1,0 +1,25 @@
+# Destinatari a cui Metis puo' scrivere. SOLO questi.
+#
+# E' una scelta conservativa deliberata per la V1.0: Metis non ha motivo di
+# scrivere a indirizzi arbitrari, e la restrizione elimina un'intera classe
+# di danni — compreso quello di una pagina web che convince il modello a
+# mandare qualcosa a un indirizzo scelto da chi l'ha scritta.
+#
+# Il controllo e' doppio: una guardia del broker quando l'email viene chiesta
+# (o programmata), e di nuovo al momento dell'invio. Togliere un indirizzo
+# da qui blocca anche le email gia' programmate verso di lui.
+#
+# Il confronto e' esatto e senza maiuscole. Niente caratteri jolly: un
+# "*@gmail.com" sarebbe un'allowlist di un miliardo di persone.
+
+[allowlist]
+indirizzi = [
+    # "tu@esempio.it",
+]
+
+# Chi e' "me" in "mandami una mail". Il modello non lo sa, e senza questa riga
+# inventerebbe un indirizzo — che la guardia rifiuterebbe, per fortuna, ma
+# l'utente non capirebbe perche'. Deve comparire anche nell'allowlist qui
+# sopra: questa riga dice a chi scrivere, non autorizza a farlo.
+[utente]
+indirizzo = ""

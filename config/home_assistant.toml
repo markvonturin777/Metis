@@ -1,0 +1,46 @@
+# I dispositivi di casa che Metis puo' vedere e usare. SOLO questi.
+#
+# Il modello non nomina mai un `entity_id`: nomina un dispositivo per nome, fra
+# quelli qui sotto. Home Assistant espone anche serrature, allarmi e
+# termostati; se il modello potesse scrivere `lock.porta_ingresso`, il
+# perimetro di Metis sarebbe quello di Home Assistant. Cosi' e' quello di
+# questo file, e un nome che non c'e' e' un rifiuto.
+#
+# CAMPI
+#   entity_id              l'entita' di Home Assistant
+#   nome                   come Metis lo chiama, a voce, CON l'articolo:
+#                          "Ho acceso la friggitrice" suona giusto, senza articolo no
+#   alias                  altri modi in cui l'utente lo chiama
+#   scrivibile             false = si legge soltanto (default true)
+#   max_durata_min         si spegne da solo dopo N minuti, anche se Metis
+#                          viene riavviato nel frattempo: e' un job persistente
+#   max_erogazioni_giorno  oltre N accensioni nella giornata, rifiuto
+#
+# IL TIER NON SI ABBASSA DA QUI
+# Leggere e' T0, accendere e spegnere e' T3 con conferma, per ogni dispositivo.
+# Il piano pensava a un tier per entita'; il tier pero' e' una proprieta'
+# dello strumento, verificata dal broker, e un file di configurazione che lo
+# potesse abbassare sarebbe un modo di togliere una conferma scrivendo una
+# riga. Qui si puo' solo RESTRINGERE: rendere un dispositivo di sola lettura,
+# o aggiungergli un limite.
+#
+# I limiti sono guardie del broker, non suggerimenti. Un ciclo di
+# allucinazione che accende ripetutamente il distributore e' uno scenario
+# concreto, e il gatto non puo' dare il consenso informato.
+
+[entities.friggitrice]
+entity_id = "switch.friggitrice_aria"
+nome = "la friggitrice ad aria"
+alias = ["friggitrice", "friggitrice ad aria"]
+max_durata_min = 60
+
+[entities.crocchette]
+entity_id = "switch.distributore_crocchette"
+nome = "il distributore di crocchette"
+alias = ["crocchette", "distributore", "cibo del gatto"]
+max_erogazioni_giorno = 3
+
+[entities.videocamera]
+entity_id = "camera.xiaomi_salotto"
+nome = "la videocamera del salotto"
+alias = ["videocamera", "telecamera"]

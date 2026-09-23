@@ -63,6 +63,18 @@ class ToolSpec:
     # sono verificate ora, e in M4 si aggiunge solo l'handler.
     implemented: bool = True
     descrizione: str = ""
+    # M6 — la conferma puo' essere richiesta anche sotto T3. Serve a
+    # `schedule_reminder`: e' T1, reversibile, ma il piano vuole che
+    # l'interpretazione della data sia confermata SEMPRE, perche' un
+    # promemoria alla settimana sbagliata e' il modo piu' semplice di rendere
+    # la funzione inaffidabile. Il campo puo' solo AGGIUNGERE una conferma:
+    # non esiste un modo di toglierla a un T3.
+    conferma: bool = False
+    # M6 — cosa mostrare a chi conferma, al posto degli argomenti grezzi.
+    # "quando: 2026-09-24T17:00" e' un dato; "domani, giovedi' 24 settembre,
+    # alle 17:00" e' qualcosa a cui si puo' dire di no sapendo perche'.
+    # Ritorna {etichetta: testo}. I testi NON si troncano: vedi `presentazione`.
+    presenta: Callable[[BaseModel], dict[str, str]] | None = None
 
 
 class Registry:
@@ -73,7 +85,9 @@ class Registry:
     # -- registrazione -----------------------------------------------------
 
     def strumento(self, tier: Tier, schema: type[BaseModel],
-                  guards: tuple[Guard, ...] = (), implemented: bool = True):
+                  guards: tuple[Guard, ...] = (), implemented: bool = True,
+                  conferma: bool = False,
+                  presenta: Callable[[BaseModel], dict[str, str]] | None = None):
         """Decoratore. Il nome viene dal Literal dello schema, non a mano."""
 
         def deco(fn: Callable[[BaseModel], Any]) -> Callable[[BaseModel], Any]:
@@ -84,6 +98,7 @@ class Registry:
                 name=nome, tier=tier, schema=schema, handler=fn,
                 guards=tuple(guards), implemented=implemented,
                 descrizione=(fn.__doc__ or schema.__doc__ or "").strip().split("\n")[0],
+                conferma=conferma, presenta=presenta,
             )
             return fn
 
@@ -150,6 +165,43 @@ class Registry:
         return "\n".join(righe)
 
 
+def presentazione(spec: ToolSpec, call: BaseModel) -> dict[str, str]:
+    """Cosa vede chi conferma: {etichetta: testo}, completo.
+
+    NIENTE TRONCAMENTI (M6)
+    Fino a M5 la finestra di conferma tagliava ogni valore a 400 caratteri e
+    la console a 200. Con `send_email` vuol dire approvare un'email di cui si
+    e' letto l'inizio: il piano chiede il corpo **completo**, perche' la
+    conferma di un'azione che non si annulla vale quanto cio' che si e' visto
+    prima di darla. La finestra lo mostra in un riquadro che scorre; qui non
+    si taglia niente.
+
+    Se lo strumento dichiara `presenta`, si usa quella — e se esplode, si
+    ripiega sugli argomenti grezzi invece di mostrare una finestra vuota: una
+    conferma senza contenuto non e' un consenso.
+    """
+    # `getattr` e non l'attributo: chi chiede conferma riceve uno spec che
+    # somiglia a un ToolSpec, e una conferma che esplode per un campo
+    # mancante si chiude in un rifiuto silenzioso — cioe' in un'azione che
+    # l'utente voleva e non vede nemmeno proporre.
+    presenta = getattr(spec, "presenta", None)
+    if presenta is not None:
+        try:
+            voci = presenta(call)
+            if voci:
+                return {str(k): str(v) for k, v in voci.items()}
+        except Exception:                          # noqa: BLE001
+            pass
+    return {k: str(v) for k, v in call.model_dump().items() if k != "tool"}
+
+
+def serve_conferma(spec: ToolSpec) -> bool:
+    """Il tier la impone (T3), oppure lo strumento la chiede comunque."""
+    from metis.security.policies import richiede_conferma
+
+    return richiede_conferma(spec.tier) or spec.conferma
+
+
 # Registro dell'applicazione. Si popola importando i moduli degli strumenti:
 # vedi `metis.tools.carica_tutti`.
 REGISTRY = Registry()
@@ -166,5 +218,6 @@ def carica_tutti() -> Registry:
     from metis.tools import input_sintetico  # noqa: F401
     from metis.tools import esterni  # noqa: F401
     from metis.tools import web  # noqa: F401
+    from metis.tools import home_assistant, scheduler  # noqa: F401
 
     return REGISTRY

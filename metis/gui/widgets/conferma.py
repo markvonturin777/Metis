@@ -19,6 +19,11 @@ riflesso, nega.
 poter dire di no sapendo cosa sta per succedere. "Metis vuole eseguire
 send_email" non e' un consenso informato: serve vedere a chi.
 
+M6: fino a qui questa riga diceva "interi" e il codice tagliava a 400
+caratteri. Con l'email arrivata in M6 la differenza e' diventata concreta —
+approvare un messaggio di cui si e' letto l'inizio — e il taglio e' sparito:
+i testi lunghi o su piu' righe vanno in un riquadro che scorre, per intero.
+
 Il conto alla rovescia non e' decorazione: dice che l'attesa finisce, e
 finisce con un rifiuto.
 """
@@ -32,13 +37,16 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QLabel,
+    QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
 )
 
 from metis.core.palette import esadecimale
 
-MAX_VALORE = 400        # caratteri mostrati per argomento
+# Oltre questa lunghezza, o con un a capo dentro, il valore va in un riquadro
+# che scorre invece che in un'etichetta. NON e' un taglio: si vede tutto.
+SOGLIA_RIQUADRO = 160
 
 
 class DialogoConferma(QDialog):
@@ -62,7 +70,12 @@ class DialogoConferma(QDialog):
         colore = esadecimale("ATTESA_CONFERMA")
         radice = QVBoxLayout(self)
 
-        testa = QLabel(f"{tier} — questa azione NON si annulla")
+        # "NON si annulla" solo quando e' vero. Da M6 la conferma si chiede
+        # anche per un promemoria T1, che si cancella con una frase: dirgli
+        # "non si annulla" insegnerebbe a non credere all'avviso quando conta.
+        avviso = ("questa azione NON si annulla" if tier == "T3"
+                  else "controlla che sia quello che intendevi")
+        testa = QLabel(f"{tier} — {avviso}")
         f = QFont()
         f.setBold(True)
         f.setPointSize(f.pointSize() + 1)
@@ -76,15 +89,20 @@ class DialogoConferma(QDialog):
 
         modulo = QFormLayout()
         modulo.setLabelAlignment(Qt.AlignRight | Qt.AlignTop)
+        self.riquadri: list[QPlainTextEdit] = []
         for campo, valore in argomenti.items():
             if campo == "tool":
                 continue
             testo = str(valore)
-            if len(testo) > MAX_VALORE:
-                testo = testo[:MAX_VALORE] + f"…  (+{len(str(valore)) - MAX_VALORE})"
-            v = QLabel(testo)
-            v.setWordWrap(True)
-            v.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            if len(testo) > SOGLIA_RIQUADRO or "\n" in testo:
+                v = QPlainTextEdit(testo)
+                v.setReadOnly(True)
+                v.setMinimumHeight(120)
+                self.riquadri.append(v)
+            else:
+                v = QLabel(testo)
+                v.setWordWrap(True)
+                v.setTextInteractionFlags(Qt.TextSelectableByMouse)
             modulo.addRow(f"{campo}:", v)
         radice.addLayout(modulo)
 

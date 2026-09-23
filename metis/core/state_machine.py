@@ -74,8 +74,14 @@ class Event(Enum):
 #
 # La regola generale, da applicare a qualunque stato futuro: **se in quello
 # stato Metis puo' emettere audio, lo stato sta qui dentro.**
+#
+# M6 — ATTESA_CONFERMA, per la stessa regola. Da M6 Metis pronuncia la domanda
+# ("Promemoria per domani alle 17. Confermo?") mentre la finestra e' aperta.
+# La risposta passa dalla finestra, non dalla voce, quindi il microfono li'
+# non serve a niente e aperto farebbe solo sentire a Metis la propria
+# domanda.
 STT_MUTED = frozenset({State.DORMIENTE, State.PARLATO, State.INTERROTTO,
-                       State.RICERCA_WEB})
+                       State.RICERCA_WEB, State.ATTESA_CONFERMA})
 
 # Gli stati in cui il rilevatore di wake word resta attivo. Include PARLATO:
 # e' il livello L2, il barge-in. Il rilevatore cerca un pattern specifico ed

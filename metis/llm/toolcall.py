@@ -69,6 +69,16 @@ Regole:
   mai. Un'azione che l'utente non ha chiesto verra' eseguita lo stesso.
 - Per le finestre: "window" e' un pezzo del TITOLO della finestra.
   Lascialo VUOTO se l'utente dice "questa finestra" o non ne nomina una.
+  MA un pronome attaccato al verbo — spostaLA, rimpiccioliscILA,
+  massimizzaLO, chiudiLA — si riferisce alla finestra del [CONTESTO
+  CORRENTE] ("Finestra di riferimento" o "Ultima azione"): scrivi quel
+  titolo in "window", non lasciarlo vuoto.
+- Per "monitor" usa "altro", "destra", "sinistra" o "primario". "L'altro
+  schermo", "sull'altro monitor" = "altro". Un NUMERO solo se l'utente dice
+  esplicitamente un numero di schermo.
+- Le applicazioni: "vscode" = Visual Studio Code, l'editor di codice;
+  "github_desktop" = GitHub Desktop, il client di git; "chrome" = il
+  browser.
 - Se la richiesta corrisponde chiaramente a uno strumento, usalo.
 - Usa "web_search" quando la risposta dipende da qualcosa che cambia nel
   tempo o che nessuno puo' sapere a memoria: notizie, prezzi, quotazioni,
@@ -91,7 +101,34 @@ Regole:
 - "torna su quell'argomento", "dimmi le ultime su quello", "aggiornamenti"
   = "web_search" con il testo della riga "Ultimo argomento cercato".
   Cercare di nuovo, non rileggere la stessa pagina: l'utente vuole cio'
-  che e' cambiato."""
+  che e' cambiato.
+- "ricordami di ...", "promemoria per ..." = "schedule_reminder". Nel campo
+  "quando" scrivi data e ora nel formato AAAA-MM-GGTHH:MM.
+  Per un GIORNO ("domani", "lunedi'", "venerdi'") copia la data dalla riga
+  del [CALENDARIO], non calcolarla.
+  Per un INTERVALLO ("fra mezz'ora", "tra un'ora") copia il valore dalla
+  riga [INTERVALLI]; se non c'e', parti dall'ora di [ADESSO].
+  Se l'utente non dice l'ora: la mattina e' 09:00, il pomeriggio 15:00, la
+  sera 20:00.
+- "mandami/manda una mail ... domani/lunedi'/alle ..." = "schedule_email".
+  Solo se c'e' un momento futuro; se e' "adesso" o non c'e' un momento,
+  "send_email". "Mandami" = all'indirizzo della riga [UTENTE]. Non
+  inventare MAI un indirizzo: se non lo conosci, "nessuno_strumento".
+- "cosa ho in programma", "che promemoria ho" = "list_reminders".
+  "cancella/annulla il promemoria di ..." = "cancel_reminder": in
+  "riferimento" UNA o due parole del contenuto ("commercialista"), non la
+  frase intera. "No, annullalo" subito dopo un promemoria =
+  "cancel_reminder" con il testo della riga "Ultima azione".
+- "set_home_device" SOLO se l'utente da' un ORDINE con un verbo di comando:
+  "accendi", "spegni", "attiva", "disattiva", "dai le crocchette". Nel
+  campo "dispositivo" scrivi l'OGGETTO da accendere ("crocchette", non
+  "gatto").
+- Una domanda, un'opinione, un consiglio o un commento su un dispositivo
+  NON e' un ordine: "mi piace la friggitrice", "la consigli?", "e' buona?",
+  "quanto consuma?" = mai "set_home_device". Accendere quando non era
+  richiesto e' l'errore peggiore: un dispositivo fisico scalda davvero.
+- "e' accesa?", "com'e' la ..." = "get_home_state". "che dispositivi ho" =
+  "list_home_devices"."""
 
 
 class NessunoStrumento(BaseModel):
@@ -162,7 +199,21 @@ class ToolRouter:
         meccanismo che si dimentica, perche' funziona a meta': Metis capisce
         il pronome e poi non sa cosa metterci dentro.
         """
+        from metis.core.tempo import contesto_temporale
+
         base = PROMPT.format(strumenti=self.registry.descrizione_per_prompt())
+        # M6 — che giorno e'. Un modello non ha un orologio: senza questa riga
+        # "domani" e' il giorno dopo la data di addestramento, e il promemoria
+        # finisce nel passato — dove la guardia lo rifiuta, per fortuna, ma
+        # l'utente non capisce perche'. Ricalcolata a ogni decisione.
+        base = f"{base}\n\n{contesto_temporale()}"
+        # E chi e' "me" in "mandami una mail". Vedi `posta.indirizzo_utente`:
+        # senza questa riga il modello inventerebbe un indirizzo.
+        from metis.tools.posta import indirizzo_utente
+
+        io = indirizzo_utente()
+        if io:
+            base += f"\n[UTENTE] il suo indirizzo email e' {io}"
         return f"{base}\n\n{slot}" if slot else base
 
     def warmup(self) -> float:

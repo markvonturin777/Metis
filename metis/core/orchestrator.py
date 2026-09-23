@@ -48,6 +48,13 @@ M5 — IL RIASSUNTO SI FA IN DORMIENTE
 del sistema che si accorge che **nessuno sta aspettando**. Riassumere costa
 2-3 secondi, e farlo su un turno a caso e' il tipo di latenza peggiore —
 quella di cui l'utente non riesce a indovinare la causa.
+
+M6 — I PROMEMORIA NON INTERROMPONO
+Un promemoria che scatta mentre l'utente sta parlando con Metis non si
+pronuncia in mezzo alla conversazione: si accoda, e parte al primo passaggio
+in DORMIENTE. E' la stessa regola del riassunto, per la stessa ragione — solo
+`tick()` sa quando nessuno sta aspettando. La notifica desktop invece parte
+subito: e' silenziosa, e non ruba la parola a nessuno.
 """
 
 from __future__ import annotations
@@ -55,6 +62,7 @@ from __future__ import annotations
 import threading
 import time
 import uuid
+from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -113,6 +121,10 @@ class Azioni:
     # spesso verso Metis stesso. L'orchestratore non sa cosa venga
     # catturato: sa solo che c'e' un momento in cui va fatto, e qual e'.
     al_risveglio: Callable[[], None] | None = None
+    # M6 — la frase da dire mentre la finestra di conferma e' aperta: "Promemoria
+    # per domani, giovedi' 24 settembre, alle 17. Confermo?". Vedi
+    # `risposte.domanda_conferma`.
+    domanda_conferma: Callable[[dict], str] | None = None
 
 
 @dataclass
@@ -165,6 +177,9 @@ class Counters:
     riassunti: int = 0
     filler_ms: list[float] = field(default_factory=list)
     web_ms: list[float] = field(default_factory=list)
+    # M6
+    annunci: int = 0
+    annunci_rimandati: int = 0
 
 
 class Orchestrator:
@@ -179,6 +194,10 @@ class Orchestrator:
             system=deps.system_prompt)
         self._worker: threading.Thread | None = None
         self._riassunto: threading.Thread | None = None
+        # M6 — le frasi che nessuno ha chiesto: promemoria scaduti, email
+        # partite. Aspettano qui finche' Metis non e' libero. Vedi `annuncia`.
+        self._annunci: deque[str] = deque()
+        self._annuncio: threading.Thread | None = None
         self._lock = threading.Lock()
         self._wake_gap = False        # il rilevatore ha saltato dei frame
         self.synchronous = False      # solo nei test: evita i thread
@@ -282,6 +301,12 @@ class Orchestrator:
         elif self.sm.fire(evento) is not st:
             # DORMIENTE -> IN_ASCOLTO, oppure il PTT che chiude l'ascolto.
             self.seg.reset()
+            # M6: in DORMIENTE puo' esserci un annuncio in riproduzione — un
+            # promemoria. Il microfono si sta aprendo: se l'annuncio
+            # continuasse, VAD e STT sentirebbero Metis. Si ferma. Su un
+            # player gia' fermo non costa niente.
+            if st is State.DORMIENTE:
+                self.d.player.stop()
 
         if self.sm.state is State.IN_ASCOLTO:
             self._risveglio()
@@ -601,6 +626,7 @@ class Orchestrator:
             conferma = a.richiede_conferma(nome)
             if conferma:
                 self.sm.fire(Event.NEEDS_CONFIRM)     # -> ATTESA_CONFERMA
+                self._chiedi_a_voce(call)
 
             res = a.esegui(call, untrusted)
             untrusted = untrusted or nome in ("web_search", "web_fetch")
@@ -649,6 +675,73 @@ class Orchestrator:
         self.d.player.wait_drained()
         self.sm.fire(Event.PLAYBACK_DONE)
 
+    def _chiedi_a_voce(self, call: dict) -> None:
+        """La domanda di conferma, pronunciata mentre la finestra e' aperta.
+
+        Non blocca: il PCM va in coda e la finestra resta la sola via per
+        rispondere. Non solleva: una sintesi fallita toglie la voce alla
+        domanda, non la domanda — la finestra c'e' comunque.
+        """
+        a = self.d.azioni
+        if a is None or a.domanda_conferma is None:
+            return
+        try:
+            frase = a.domanda_conferma(call)
+            if frase:
+                self.d.player.enqueue(self.d.tts_synth(frase).pcm)
+        except Exception:                        # noqa: BLE001
+            self.counters.errors += 1
+
+    # -- annunci: cio' che nessuno ha chiesto --------------------------------
+
+    def annuncia(self, testo: str) -> None:
+        """Accoda una frase da dire appena Metis e' libero. Thread-safe.
+
+        Chiamata dallo scheduler, su un thread suo, quando scatta un
+        promemoria. Non parla subito: vedi la nota su M6 in testa al modulo.
+        """
+        if not testo:
+            return
+        with self._lock:
+            self._annunci.append(testo)
+
+    def _forse_annuncia(self) -> None:
+        """Da `tick()`: se Metis e' libero e c'e' qualcosa in coda, lo dice.
+
+        Libero significa DORMIENTE, e nient'altro. In IN_ASCOLTO l'utente ha
+        appena premuto il PTT e sta per parlare; in qualunque altro stato un
+        turno e' in corso. In tutti quei casi l'annuncio aspetta, e si conta:
+        se il numero cresce, i promemoria arrivano sistematicamente mentre
+        l'utente parla, ed e' un'informazione.
+
+        In DORMIENTE il microfono e' gia' chiuso, quindi l'annuncio non ha
+        bisogno di cambiare stato: se l'utente preme il PTT mentre Metis sta
+        annunciando, `_attiva` ferma il player prima di aprire il microfono.
+        """
+        with self._lock:
+            if not self._annunci:
+                return
+            if self.sm.state is not State.DORMIENTE:
+                self.counters.annunci_rimandati += 1
+                return
+            if self._annuncio is not None and self._annuncio.is_alive():
+                return
+            testo = self._annunci.popleft()
+
+        def parla() -> None:
+            try:
+                self.d.player.enqueue(self.d.tts_synth(testo).pcm)
+                self.counters.annunci += 1
+            except Exception:                    # noqa: BLE001
+                self.counters.errors += 1
+
+        if self.synchronous:
+            parla()
+            return
+        self._annuncio = threading.Thread(target=parla, daemon=True,
+                                          name="metis-annuncio")
+        self._annuncio.start()
+
     # -- manutenzione ------------------------------------------------------
 
     def panic(self) -> None:
@@ -667,6 +760,7 @@ class Orchestrator:
     def tick(self) -> None:
         """Da chiamare ~2 Hz: timeout degli stati e manutenzione della memoria."""
         self.sm.check_timeout()
+        self._forse_annuncia()
         self._forse_riassumi()
 
     def _forse_riassumi(self) -> None:

@@ -101,7 +101,7 @@ class AuditLog:
                     e.turn_id,
                     e.tool,
                     e.tier.value,
-                    json.dumps(e.args, ensure_ascii=False, default=str),
+                    json.dumps(_accorcia(e.args), ensure_ascii=False, default=str),
                     None if e.confirmed is None else int(e.confirmed),
                     e.outcome.value,
                     e.stage,
@@ -149,6 +149,27 @@ class AuditLog:
     def close(self) -> None:
         with self._lock:
             self._conn.close()
+
+
+# M6 — oltre questa lunghezza un argomento si tronca nel log. Il caso e' il
+# corpo di un'email: nell'audit servono destinatario, oggetto e l'inizio del
+# testo, cioe' abbastanza per sapere COSA e' partito. Il corpo intero sarebbe
+# una copia della posta dentro un file che si conserva per sempre, e il log
+# esiste per rispondere a "chi ha fatto cosa", non per archiviare messaggi.
+MAX_ARGOMENTO_LOG = 200
+
+
+def _accorcia(args: dict) -> dict:
+    """Gli argomenti come vanno nel log: i testi lunghi troncati, con la
+    lunghezza originale dichiarata. Non tocca l'argomento vero, che arriva
+    intero allo strumento."""
+    out = {}
+    for k, v in (args or {}).items():
+        if isinstance(v, str) and len(v) > MAX_ARGOMENTO_LOG:
+            out[k] = f"{v[:MAX_ARGOMENTO_LOG]}… [troncato, {len(v)} caratteri]"
+        else:
+            out[k] = v
+    return out
 
 
 class timed:

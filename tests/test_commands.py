@@ -79,11 +79,29 @@ def test_strumento_inesistente():
 
 
 def test_strumento_senza_corpo():
-    """`send_email` e' registrato ma arriva in M6: prometterlo in un comando
-    custom significa un rifiuto a voce fra qualche settimana."""
+    """Prometterlo in un comando custom significa un rifiuto a voce fra
+    qualche settimana.
+
+    Fino a M5 il caso vero era `send_email`, registrato senza corpo. In M6 il
+    corpo e' arrivato e nel registro vero non resta nessuno strumento senza
+    capacita': il caso si costruisce in un registro di prova, perche' la
+    regola resta anche quando nessuno strumento la esercita.
+    """
+    from typing import Literal
+
+    from pydantic import BaseModel, ConfigDict
+
+    from metis.security.audit import Tier
+    from metis.tools.registry import Registry
+
+    class Futuro(BaseModel):
+        model_config = ConfigDict(extra="forbid", frozen=True)
+        tool: Literal["futuro"]
+
+    reg = Registry("prova")
+    reg.strumento(Tier.T1, Futuro, implemented=False)(lambda c: None)
     with pytest.raises(Errore) as e:
-        valida(buono(azioni=[{"tool": "send_email", "to": "a@b.it",
-                              "subject": "x", "body": "y"}]), REG)
+        valida(buono(azioni=[{"tool": "futuro"}]), reg)
     assert "non ha ancora un corpo" in str(e.value)
 
 

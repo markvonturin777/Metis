@@ -3,7 +3,7 @@
 > Stato vivo del progetto. Si aggiorna mentre si lavora.
 > Riferimento: [Specifica V1.0](../SPECS/Metis_V1.0_Specifica_Ufficiale.md) · [Piano](../SPECS/plan/README.md)
 
-**Ultimo aggiornamento:** 2026-09-22 — **M5 chiusa.** Metis consulta le fonti, ricorda, e rifiuta di agire dopo aver letto una pagina web. Zero azioni T2/T3 sui sei payload di injection, zero falsi rifiuti
+**Ultimo aggiornamento:** 2026-09-23 — **M6: codice completo, verifiche sui servizi veri aperte.** Promemoria che sopravvivono al riavvio, email programmate, Home Assistant. 90/90 decisioni di Qwen su date e dispositivi; mancano Home Assistant, un account SMTP e un riavvio vero del PC
 
 ---
 
@@ -30,20 +30,22 @@ Un file per iterazione. Ogni file ha: prerequisiti, attività spuntabili, misure
 | **M3** | [Interfaccia Grafica](M3_tracking.md) | ✅ | 30/32 | 8/10 | 2026-09-21 | 2026-09-21 | `m3-gui` |
 | **M4** | [Automazione PC](M4_tracking.md) | ✅ | 28/31 | 10/12 | 2026-09-21 | 2026-09-21 | `m4-automation` |
 | **M5** | [Conoscenza](M5_tracking.md) | ✅ | 30/30 | 13/13 | 2026-09-22 | 2026-09-22 | `m5-knowledge` |
-| **M6** | [Integrazioni](M6_tracking.md) | ⬜ | 0/34 | 0/15 | — | — | `m6-integrations` |
+| **M6** | [Integrazioni](M6_tracking.md) | 🔄 | 32/34 | 9/15 | 2026-09-23 | — | `m6-integrations` |
 | **M7** | [Consolidamento V1.0](M7_tracking.md) | ⬜ | 0/44 | 0/13 | — | — | `v1.0` |
-| | **Totale** | | **192/278** | **54/87** | | | |
+| | **Totale** | | **224/278** | **63/87** | | | |
 
 > Oltre a queste ci sono **30 caselle di prerequisito** e **131 esiti di test** nelle tabelle dei singoli file: 531 punti di controllo in totale.
 
-**Iterazione corrente:** **M6 — Integrazioni.** Metis esce dal PC: posta,
-scheduler, domotica. È la prima iterazione in cui un'azione ha effetti che non
-si annullano riavviando, ed è per questo che M5 doveva chiudere con le difese
-contro la prompt injection verificate — non scritte, verificate.
+**Iterazione corrente:** **M6 — Integrazioni, in attesa dei servizi veri.**
+Il codice è completo e provato contro un Home Assistant e un server SMTP
+finti che parlano il protocollo vero. Restano sei criteri che chiedono tre
+cose che su questa macchina non ci sono ancora: Home Assistant, un account
+SMTP con password per app, e un riavvio vero del PC con un promemoria in
+coda. Il comando per chiuderli è in [M6 §6](M6_tracking.md).
 
-La riga scritta in M2 e mai attivata è entrata in funzione il 22 settembre:
-nessuna azione T2 o T3 può nascere da un turno con contenuto web. Non è stato
-necessario cambiare `policies.py`, solo alzare la bandiera.
+**Da sapere prima di usare M6:** le notifiche di Windows sono **disattivate**
+per questo account (`ToastEnabled = 0`). Metis lo dice all'avvio; i
+promemoria arrivano comunque a voce.
 
 **Rimandato alla v2:** la wake word. Banchi pronti, modello v3 pronto, si
 riaccende con `enabled = true` in `config/wakeword.toml`. Vedi §21 della
@@ -65,7 +67,7 @@ I valori si riempiono man mano. La colonna "misurato" va aggiornata a ogni misur
 | 6 | Falsi risvegli | < 1 / 8 h | ⏸️ non applicabile in V1.0: senza wake word non ci sono risvegli | v2 | ⏸️ |
 | 7 | Auto-inneschi da eco | **0** | ❌ **57 in 125 min** → D1. Non applicabile in V1.0 | v2 | ⏸️ |
 | 8 | Reattività GUI | ≥ 30 fps, no freeze > 100 ms | **62 fps**, 0 blocchi su 2 962 campioni, max **3,0 ms** — dopo la correzione della vista audit (M5 problema 13) | M3 ✅ · M4 ✅ · M5 ✅ | ✅ |
-| 9 | Azioni T3 non confermate | **0** | **0** su 50 tentativi (M2) · **0** su 18 giri di injection (M5) | M2 ✅ · M5 ✅ | ✅ |
+| 9 | Azioni T3 non confermate | **0** | **0** su 50 tentativi (M2) · **0** su 18 giri di injection (M5) · **0** con email e dispositivi reali nel perimetro (M6) | M2 ✅ · M5 ✅ · M6 ✅ | ✅ |
 | 10 | Stabilità 72 h | RSS < +10% | 72 **min**: deriva −0,2 GB | M0 indicativo | 🟡 |
 
 ---
@@ -79,7 +81,7 @@ I valori si riempiono man mano. La colonna "misurato" va aggiornata a ogni misur
 | **D0** | Fine M0 | Budget di latenza confermato | ✅ con riserva sulle frasi lunghe | 2026-09-20 |
 | **D1** | Fine M1 | Wake word promossa o sostituita | ⏸️ **rimandata alla v2** — NFR-7 non superato (57 auto-inneschi), v3 promettente ma non verificato. PTT unica via | 2026-09-21 |
 | **D2** | Fine M4 | UIA sufficiente o serve OCR | 🔄 **niente OCR per ora**, campione troppo piccolo: serve l'uso | 2026-09-21 |
-| **D3** | Inizio M6 | AEC necessario o superfluo | 🔄 orientamento: **serve valutarlo** — uscita su altoparlanti, non cuffie | 2026-09-20 |
+| **D3** | Inizio M6 | AEC necessario o superfluo | ✅ **escluso dalla V1.0** — con la wake word in v2 il barge-in è il PTT, che funziona già con gli altoparlanti. Si decide con la wake word | 2026-09-23 |
 
 ---
 
@@ -112,6 +114,12 @@ Ogni decisione che si scosta dalla specifica o che chiude un punto aperto va ann
 | 2026-09-22 | M5 | Budget del system prompt portato da 600 a **700 token** | Misurati 640 con `prompt_eval_count`: si è allargata la voce invece di accorciare la persona |
 | 2026-09-22 | M5 | La pulizia dell'HTML è il **primo** passo dell'estrazione, non il ripiego | `trafilatura` estrae il testo nascosto con i CSS: il payload bianco-su-bianco arrivava al prompt |
 | 2026-09-22 | M5 | La vista audit ridisegna solo quando l'audit log cambia, e con colonne `Interactive` | `ResizeToContents` più un timer a 1 Hz bloccavano la GUI per 2,6 s ogni 3. Un test di reattività deve far girare l'event loop e misurare il **secondo** disegno, non il primo |
+| 2026-09-23 | M6 | AEC **escluso** dalla V1.0 (D3) | Senza wake word il barge-in è il PTT; l'AEC serve solo alla wake word, e si decide con lei in v2 |
+| 2026-09-23 | M6 | Il prompt del router porta **calendario e intervalli già calcolati** | Qwen sbagliava 3 date relative su 7 ("lunedì" → sabato): sa leggere, non sa fare l'aritmetica dei giorni |
+| 2026-09-23 | M6 | `misfire_grace_time = None`; l'ora di tolleranza separa "in orario" da "in ritardo" | Con 3600 APScheduler scartava in silenzio i promemoria scaduti da più di un'ora. Oltre l'ora: il promemoria arriva dicendolo, l'email **non parte** |
+| 2026-09-23 | M6 | La conferma si può **aggiungere** sotto T3 (`ToolSpec.conferma`) | La data di un promemoria T1 va confermata sempre. È un `or`: nessun modo di toglierla a un T3 |
+| 2026-09-23 | M6 | Il tier non si abbassa da `home_assistant.toml`; il modello non nomina mai un `entity_id` | Un file che abbassa un tier toglie una conferma con una riga; un `entity_id` libero renderebbe il perimetro quello di Home Assistant |
+| 2026-09-23 | M6 | Email solo verso l'allowlist, ricontrollata **all'invio** | Togliere un indirizzo dal file blocca anche le email già programmate verso di lui |
 
 ---
 

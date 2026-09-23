@@ -163,8 +163,10 @@ class Broker:
                                 "guardie", motivo, t0, None, None)
 
         # --- 6. conferma ----------------------------------------------------
+        # Il tier la impone; `spec.conferma` puo' aggiungerla sotto T3 (M6,
+        # la data di un promemoria) ma mai toglierla: e' un `or`.
         confirmed: bool | None = None
-        if richiede_conferma(spec.tier):
+        if richiede_conferma(spec.tier) or spec.conferma:
             confirmed = self._conferma(spec, call, ctx)
             if not confirmed:
                 return self._chiudi(nome, spec.tier, args, ctx, Outcome.DENIED,

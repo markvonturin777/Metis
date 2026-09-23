@@ -163,6 +163,15 @@ def _argomenti_minimi(nome: str) -> dict:
         "drag": {"tool": "drag", "da": "x", "a": "y"},
         "send_email": {"tool": "send_email", "to": "a@b.it", "subject": "s",
                        "body": "b"},
+        # M6. Aggiunti perche' questo test e' caduto: i due strumenti nuovi
+        # sono stati trovati dallo sweep sul registro senza che nessuno
+        # dovesse ricordarsene — che e' esattamente il motivo per cui il test
+        # scorre il registro invece di elencare i sei casi del corpus.
+        "schedule_email": {"tool": "schedule_email", "to": "a@b.it",
+                           "subject": "s", "body": "b",
+                           "quando": "2099-01-01T09:00"},
+        "set_home_device": {"tool": "set_home_device",
+                            "dispositivo": "friggitrice", "azione": "accendi"},
     }[nome]
 
 

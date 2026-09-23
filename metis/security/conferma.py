@@ -25,21 +25,27 @@ SI = frozenset({"s", "si", "sì", "y", "yes", "ok", "conferma"})
 
 
 def conferma_console(spec, call) -> bool:
-    """Chiede conferma sul terminale. Ritorna True solo su un sì esplicito."""
+    """Chiede conferma sul terminale. Ritorna True solo su un sì esplicito.
+
+    M6: i valori non si troncano piu'. Vedi `registry.presentazione`: si
+    conferma cio' che si e' letto, e un corpo di email tagliato a 200
+    caratteri e' un'email approvata a meta'.
+    """
+    from metis.tools.registry import presentazione
+
+    avviso = ("azione NON annullabile" if spec.tier.value == "T3"
+              else "controlla che sia quello che intendevi")
     righe = [
         "",
         "  " + "=" * 58,
-        f"  CONFERMA RICHIESTA — {spec.tier.value}: azione NON annullabile",
+        f"  CONFERMA RICHIESTA — {spec.tier.value}: {avviso}",
         "  " + "=" * 58,
         f"  strumento : {spec.name}",
     ]
-    for campo, valore in call.model_dump().items():
-        if campo == "tool":
-            continue
-        testo = str(valore)
-        if len(testo) > 200:
-            testo = testo[:200] + f"... (+{len(str(valore)) - 200} caratteri)"
-        righe.append(f"  {campo:<10}: {testo}")
+    for campo, testo in presentazione(spec, call).items():
+        prima, *resto = testo.splitlines() or [""]
+        righe.append(f"  {campo:<10}: {prima}")
+        righe.extend(f"  {'':<10}  {r}" for r in resto)
     righe.append("  " + "-" * 58)
     print("\n".join(righe))
 

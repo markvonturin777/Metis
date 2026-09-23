@@ -81,7 +81,9 @@ _SU_FINESTRA = {"move_window_to_monitor", "resize_window", "maximize_window",
 # vera. "Massimizza VS Code" -> "che finestre ho aperte?" -> "no,
 # rimpiccioliscila": la terza frase si riferisce alla prima.
 _NON_AZIONI = {"get_telemetry", "list_windows", "get_active_window",
-               "list_monitors", "web_search", "web_fetch"}
+               "list_monitors", "web_search", "web_fetch",
+               # M6
+               "list_reminders", "get_home_state", "list_home_devices"}
 
 
 @dataclass
@@ -149,6 +151,14 @@ class Slots:
 
             elif tool == "web_fetch":
                 self.ultima_fonte_url = (v.get("url") or call.get("url") or "")[:MAX_URL]
+
+            elif tool in ("get_home_state", "set_home_device"):
+                # M6: lo slot che aspettava da M5. "Accendi la friggitrice" ->
+                # "spegnila": il pronome si risolve con il nome del
+                # dispositivo, quello del file di configurazione.
+                nome = v.get("nome") or call.get("dispositivo") or ""
+                if nome:
+                    self.ultimo_dispositivo = nome[:MAX_VALORE]
 
             elif tool in _SU_FINESTRA:
                 titolo = v.get("titolo") or call.get("window") or ""

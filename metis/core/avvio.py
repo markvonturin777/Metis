@@ -25,7 +25,7 @@ import numpy as np
 from metis.audio.wakeword import WakeWordConfig, WakeWordDetector
 from metis.core.logging import bind_turn, clear_turn, log_transition
 from metis.core.orchestrator import Azioni, Conoscenza, Deps, Orchestrator
-from metis.core.risposte import Filler, descrivi_sequenza
+from metis.core.risposte import Filler, descrivi_sequenza, domanda_conferma
 from metis.core.router import Router
 from metis.memory.commands import Libreria
 from metis.memory.conversation import Memoria
@@ -38,10 +38,10 @@ from metis.security.audit import AuditLog
 from metis.security.broker import Broker
 from metis.security.conferma import scegli_conferma
 from metis.security.killswitch import KILL_SWITCH
-from metis.security.policies import Context, richiede_conferma
+from metis.security.policies import Context
 from metis.stt.whisper_engine import WhisperEngine
 from metis.tools import finestre
-from metis.tools.registry import Registry, carica_tutti
+from metis.tools.registry import Registry, carica_tutti, serve_conferma
 from metis.tts import create_engine
 from metis.tts.kokoro_engine import Player
 
@@ -84,8 +84,24 @@ class Sistema:
     libreria: Libreria | None = None
     consulente: Consulente | None = None
     memoria: Memoria | None = None
+    pianificatore: Any = None
+    casa: Any = None
     avvio_s: float = 0.0
     note: list[str] = field(default_factory=list)
+
+    def chiudi(self) -> None:
+        """Ferma cio' che gira su thread propri: scheduler e Home Assistant.
+
+        Lo scheduler si ferma SENZA aspettare i job in corso: un'email che
+        sta partendo finisce da sola, e i job futuri restano in `jobs.db` —
+        e' il loro posto, e al prossimo avvio ripartono.
+        """
+        for pezzo in (self.pianificatore, self.casa):
+            if pezzo is not None:
+                try:
+                    pezzo.ferma()
+                except Exception:                  # noqa: BLE001
+                    pass
 
 
 def costruisci_azioni(opz: Opzioni, log, riporta: Callable[[str], None],
@@ -145,8 +161,11 @@ def costruisci_azioni(opz: Opzioni, log, riporta: Callable[[str], None],
         return r
 
     def conferma_serve(nome: str) -> bool:
+        # M6: non solo il tier. `schedule_reminder` e' T1 ma chiede conferma
+        # della data: se l'orchestratore non lo sapesse, non passerebbe da
+        # ATTESA_CONFERMA e la domanda non verrebbe pronunciata.
         spec = reg.get(nome)
-        return spec is not None and richiede_conferma(spec.tier)
+        return spec is not None and serve_conferma(spec)
 
     def al_risveglio() -> None:
         """Due cose nello stesso istante: fissare "questa finestra" per gli
@@ -177,6 +196,7 @@ def costruisci_azioni(opz: Opzioni, log, riporta: Callable[[str], None],
         # strumenti: l'orchestratore non deve sapere che esistono le
         # finestre, e `finestre.py` non deve sapere che esiste un turno.
         al_risveglio=al_risveglio,
+        domanda_conferma=domanda_conferma,
     )
 
     # -- il ramo conoscenza ------------------------------------------------
@@ -312,11 +332,189 @@ def costruisci_sistema(opz: Opzioni, log,
         contesto=SLOTS.blocco,
     )
     orch = Orchestrator(deps, on_transition=osserva)
+
+    # M6 — scheduler e casa DOPO l'orchestratore, e lo scheduler per ULTIMO.
+    # I promemoria scaduti mentre il PC era spento partono appena lo
+    # scheduler si avvia: chi li riceve deve esistere gia'. Vedi la nota in
+    # testa a `tools/scheduler.py`.
+    pian, casa = (None, None)
+    if azioni is not None:
+        pian, casa = costruisci_integrazioni(orch, pezzi.get("audit"), log, riporta)
+
     avvio = time.perf_counter() - t0
     riporta(f"pronti in {avvio:.1f} s")
 
     return Sistema(orchestrator=orch, player=player, detector=det,
-                   memoria=memoria, avvio_s=avvio, **pezzi)
+                   memoria=memoria, pianificatore=pian, casa=casa,
+                   avvio_s=avvio, **pezzi)
+
+
+def costruisci_integrazioni(orch, audit, log, riporta: Callable[[str], None]):
+    """Scheduler, consegne e Home Assistant. Ritorna (pianificatore, client).
+
+    Separata da `costruisci_sistema` perche' e' la parte che non carica
+    modelli: si prova senza microfono ne' VRAM.
+    """
+    from metis.core import tempo
+    from metis.tools import home_assistant, posta
+    from metis.tools import scheduler as sch
+
+    consegne = Consegne(orch, audit, log)
+    sch.imposta_consegna(sch.PROMEMORIA, consegne.promemoria)
+    sch.imposta_consegna(sch.EMAIL, consegne.email)
+    sch.imposta_consegna(sch.SPEGNI, consegne.spegni)
+
+    casa = home_assistant.avvia_da_segreti()
+    for a in home_assistant.carica()[1]:
+        log.warning("home assistant", configurazione=a)
+    riporta("casa         : " + ("connessione in corso" if casa is not None
+                                 else "non configurata (scripts/setup_secrets.py)"))
+    riporta(f"posta        : {len(posta.allowlist())} destinatari autorizzati")
+
+    # Le notifiche sono la via dei promemoria quando Metis non puo' parlare
+    # — kill switch, audio occupato. Se Windows le ha spente, i promemoria
+    # arrivano solo a voce, e va detto adesso, non scoperto quando un
+    # promemoria si perde. Metis non cambia l'impostazione: la riferisce.
+    from metis.tools import notify
+
+    if notify.abilitate() is False:
+        riporta("notifiche   : DISATTIVATE in Windows — i promemoria arriveranno "
+                "solo a voce (Impostazioni > Sistema > Notifiche)")
+        log.warning("notifiche disattivate", impostazione="ToastEnabled=0")
+
+    pian = sch.pianificatore()
+    try:
+        pian.avvia()
+        voci = pian.voci()
+        prossimo = f", il prossimo {tempo.in_parole(voci[0].quando)}" if voci else ""
+        riporta(f"promemoria   : {len(voci)} in programma{prossimo}")
+    except Exception as exc:                       # noqa: BLE001
+        log.error("scheduler", errore=f"{type(exc).__name__}: {exc}")
+        riporta(f"promemoria   : NON disponibili ({type(exc).__name__})")
+    return pian, casa
+
+
+def _ora_prevista(dati: dict) -> str:
+    from datetime import datetime
+
+    from metis.core import tempo
+
+    try:
+        return tempo.in_parole(datetime.strptime(dati.get("previsto", ""),
+                                                 tempo.FORMATO))
+    except ValueError:
+        return "un orario che non ricordo"
+
+
+class Consegne:
+    """Cosa succede quando un job scatta. Una classe e non tre closure
+    perche' i test la usano senza costruire l'applicazione intera.
+
+    I job scattano fuori da un turno e fuori dal broker: la conferma c'e'
+    stata alla creazione. L'audit pero' deve sapere che l'effetto e' avvenuto
+    ADESSO — la riga della creazione dice "programmata", queste dicono
+    "partita".
+    """
+
+    def __init__(self, orch, audit, log=None):
+        self.orch = orch
+        self.audit = audit
+        self.log = log
+
+    def _registra(self, tool, tier, args, esito, stadio, dettaglio, confermata):
+        from metis.security.audit import Entry
+
+        if self.audit is None:
+            return
+        try:
+            self.audit.record(Entry(tool=tool, tier=tier, args=args, outcome=esito,
+                                    stage=stadio, detail=dettaglio,
+                                    confirmed=confermata))
+        except Exception:                          # noqa: BLE001
+            pass
+
+    def promemoria(self, dati: dict) -> None:
+        from metis.tools import notify
+
+        testo = dati.get("testo", "")
+        # La notifica subito, la voce quando Metis e' libero: vedi
+        # `Orchestrator.annuncia`.
+        if dati.get("in_ritardo"):
+            # Scaduto a PC spento, oltre l'ora di tolleranza. Arriva lo stesso
+            # — un promemoria in ritardo e' meglio di uno sparito — ma dice per
+            # quando era: "chiamare il commercialista" detto alle 11 di sera
+            # ha un significato diverso se era per le 17.
+            quando = _ora_prevista(dati)
+            notify.mostra("Promemoria in ritardo", f"{testo} (era per {quando})")
+            self.orch.annuncia(f"Promemoria in ritardo, era per {quando}: {testo}.")
+            return
+        notify.mostra("Promemoria", testo)
+        self.orch.annuncia(f"Promemoria: {testo}.")
+
+    def email(self, dati: dict) -> None:
+        from metis.security.audit import Outcome, Tier
+        from metis.tools import notify, posta
+
+        to, subject = dati.get("to", ""), dati.get("subject", "")
+        args = {"to": to, "subject": subject, "body": dati.get("body", "")}
+        if dati.get("in_ritardo"):
+            # NON si manda. L'utente ha confermato un invio alle 9, non alle 14:
+            # "ricordati la riunione delle 10" spedito a mezzogiorno e' un'altra
+            # email. Si dice che non e' partita, e perche'; se la vuole ancora,
+            # la chiede di nuovo.
+            quando = _ora_prevista(dati)
+            motivo = f"il PC era spento all'orario previsto ({quando})"
+            self._registra("schedule_email", Tier.T3, args, Outcome.DENIED,
+                           "invio_programmato", f"non inviata: {motivo}", True)
+            notify.mostra("Email NON inviata", f"A {to}: {motivo}.")
+            self.orch.annuncia(f"L'email programmata a {to} non e' partita: "
+                               f"{motivo}. Se la vuole ancora, me lo chieda.")
+            return
+        try:
+            posta.invia(to, subject, dati.get("body", ""))
+        except Exception as exc:                   # noqa: BLE001
+            # Non partita: lo si dice in tutti i modi possibili, perche'
+            # l'utente conta che sia partita e non e' davanti al PC.
+            motivo = str(exc)[:160]
+            self._registra("schedule_email", Tier.T3, args, Outcome.ERROR,
+                           "invio_programmato", motivo, True)
+            notify.mostra("Email NON inviata", f"A {to}: {motivo}")
+            self.orch.annuncia(f"Attenzione: l'email programmata a {to} "
+                               f"non e' partita. {motivo}")
+            return
+        self._registra("schedule_email", Tier.T3, args, Outcome.OK,
+                       "invio_programmato",
+                       f"inviata, confermata il {dati.get('confermata_il', '?')}",
+                       True)
+        notify.mostra("Email inviata", f"A {to}: {subject}")
+
+    def spegni(self, dati: dict) -> None:
+        from metis.security.audit import Outcome, Tier
+        from metis.tools import home_assistant, notify
+
+        r = home_assistant.spegni_per_sicurezza(dati)
+        nome = r.get("nome", dati.get("dispositivo", ""))
+        ok = r.get("esito") == "spento"
+        # T1 e non T3 nel log. Spegnere per un limite di sicurezza riduce il
+        # rischio invece di aggiungerne, e non c'e' nessuno a cui chiedere
+        # conferma. Registrarlo come T3 non confermata falserebbe NFR-9, che
+        # esiste per contare le azioni rischiose partite senza consenso.
+        dettaglio = r.get("esito", "")
+        if not ok:
+            dettaglio += f": {r.get('motivo', '')}"
+        self._registra("spegnimento_sicurezza", Tier.T1,
+                       {"dispositivo": dati.get("dispositivo", ""),
+                        "tentativo": dati.get("tentativo", 0)},
+                       Outcome.OK if ok else Outcome.ERROR, "sicurezza",
+                       dettaglio, None)
+        if ok:
+            notify.mostra("Spegnimento di sicurezza",
+                          f"Ho spento {nome}: era in funzione da troppo tempo.")
+            return
+        coda = ("Riprovo fra un minuto." if r.get("riprova")
+                else "Ho smesso di riprovare: va spento a mano.")
+        notify.mostra("NON riesco a spegnere", f"{nome}. {coda}")
+        self.orch.annuncia(f"Attenzione: non riesco a spegnere {nome}. {coda}")
 
 
 TICK_S = 0.5          # ogni quanto si controllano i timeout degli stati

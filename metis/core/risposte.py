@@ -146,7 +146,114 @@ def descrivi(result: Result) -> str:
     if result.tool == "web_fetch":
         return f"Ho letto {(v.get('titolo') or v.get('url') or 'la pagina')[:60]}."
 
+    # -- M6: nel tempo -------------------------------------------------------
+    #
+    # La data si ripete SEMPRE per esteso, anche dopo la conferma. E' la
+    # seconda occasione per accorgersi che il modello ha capito male, e costa
+    # tre parole.
+
+    if result.tool == "schedule_reminder":
+        return f"Promemoria per {v.get('in_parole', 'l orario indicato')}."
+
+    if result.tool == "schedule_email":
+        return f"Email a {v.get('to', '')} programmata per {v.get('in_parole', '')}."
+
+    if result.tool == "list_reminders":
+        voci = v.get("voci") or []
+        if not voci:
+            return "Non ha niente in programma."
+        prima = voci[0]
+        coda = "" if len(voci) == 1 else f" Ne ha {len(voci)} in tutto."
+        return f"Il prossimo e' {prima['testo']}, {prima['in_parole']}.{coda}"
+
+    if result.tool == "cancel_reminder":
+        return f"Cancellato: {v.get('testo', '')}."
+
+    if result.tool == "send_email":
+        return f"Email inviata a {v.get('to', '')}."
+
+    # -- M6: nel mondo fisico ------------------------------------------------
+    #
+    # "In funzione" e non "acceso/accesa": i nomi vengono dal file di
+    # configurazione e il genere non si indovina. Una frase che sbaglia il
+    # genere della friggitrice suona rotta anche quando dice il vero.
+
+    if result.tool == "get_home_state":
+        nome = _maiuscola(v.get("nome", "il dispositivo"))
+        if not v.get("noto"):
+            return f"Non conosco lo stato di {v.get('nome', 'quel dispositivo')}."
+        stato = "è in funzione" if v.get("acceso") else "non è in funzione"
+        return f"{nome} {stato}."
+
+    if result.tool == "list_home_devices":
+        n = v.get("totale", 0)
+        if not n:
+            return "Non ho dispositivi di casa configurati."
+        if not v.get("connesso"):
+            return f"Ne conosco {n}, ma l'hub domotico non risponde."
+        attivi = [d["nome"] for d in v.get("dispositivi", []) if d.get("acceso")]
+        if not attivi:
+            return f"Ne conosco {n}, e nessuno e' in funzione."
+        return f"Ne conosco {n}. In funzione: {', '.join(attivi)}."
+
+    if result.tool == "set_home_device":
+        nome = v.get("nome", "il dispositivo")
+        if v.get("azione") == "spegni":
+            return f"Ho spento {nome}."
+        frase = f"Ho acceso {nome}."
+        if v.get("spegnimento"):
+            # "automaticamente" e non "da solo": per la friggitrice sarebbe
+            # "da sola". Stessa ragione di "in funzione", vedi sopra.
+            frase += f" Si spegnerà automaticamente alle {v['spegnimento']}."
+        elif "spegnimento" in v:
+            frase += (" Attenzione: non sono riuscito a programmare lo "
+                      "spegnimento automatico.")
+        if v.get("limite_giorno") is not None:
+            frase += f" Oggi {v.get('oggi')} su {v['limite_giorno']}."
+        return frase
+
     return "Fatto."
+
+
+def _maiuscola(s: str) -> str:
+    return s[:1].upper() + s[1:]
+
+
+def domanda_conferma(call: dict) -> str:
+    """Cosa dire ad alta voce mentre la finestra di conferma e' aperta.
+
+    Il piano chiede la conferma VOCALE dell'interpretazione: "Promemoria per
+    domani, martedi' 4 novembre, alle 17:00. Confermo?". La decisione passa
+    comunque dalla finestra — il microfono in ATTESA_CONFERMA e' chiuso, vedi
+    `state_machine.STT_MUTED` — ma la data si sente, e sentirla e' cio' che
+    permette di accorgersi che e' sbagliata senza leggere niente.
+    """
+    from metis.core import tempo
+
+    tool = call.get("tool", "")
+
+    def data() -> str:
+        try:
+            return tempo.in_parole(tempo.interpreta(call.get("quando", "")))
+        except ValueError:
+            return "un orario che non ho capito"
+
+    if tool == "schedule_reminder":
+        return f"Promemoria per {data()}: {call.get('testo', '')}. Confermo?"
+    if tool == "schedule_email":
+        return f"Email a {call.get('to', '')}, in partenza {data()}. Confermo?"
+    if tool == "send_email":
+        return f"Email a {call.get('to', '')}. Confermo l'invio?"
+    if tool == "set_home_device":
+        verbo = "Accendo" if call.get("azione") == "accendi" else "Spengo"
+        try:
+            from metis.tools.home_assistant import risolvi
+
+            nome = risolvi(call.get("dispositivo", "")).nome
+        except Exception:                          # noqa: BLE001
+            nome = call.get("dispositivo", "il dispositivo")
+        return f"{verbo} {nome}?"
+    return "Serve la sua conferma."
 
 
 # --- filler vocale ------------------------------------------------------------

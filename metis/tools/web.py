@@ -212,11 +212,16 @@ def _ddg(query: str, n: int) -> list[Risultato]:
 
 
 def _brave(query: str, n: int) -> list[Risultato]:
-    """Fallback a pagamento. La chiave sta nel portachiavi di Windows, mai
-    nel repository: `keyring.set_password("metis", "brave", "...")`."""
-    chiave = _chiave("brave") or os.environ.get("BRAVE_API_KEY", "")
-    if not chiave:
-        raise RuntimeError("nessuna chiave Brave")
+    """Fallback a pagamento. La chiave sta nel Credential Manager, mai nel
+    repository: si configura con `scripts/setup_secrets.py`."""
+    from metis.core import secrets
+
+    try:
+        chiave = secrets.get("brave_api_key")
+    except secrets.SecretMissing:
+        # Facoltativa per costruzione: senza chiave questo motore non c'e',
+        # e `_vale_la_pena` sa che non ha senso riprovare.
+        raise RuntimeError("nessuna chiave Brave") from None
     import httpx
 
     r = httpx.get("https://api.search.brave.com/res/v1/web/search",
@@ -251,14 +256,6 @@ def _searxng(query: str, n: int) -> list[Risultato]:
 
 MOTORI = (("ddg", _ddg), ("brave", _brave), ("searxng", _searxng))
 
-
-def _chiave(nome: str) -> str:
-    try:
-        import keyring
-
-        return keyring.get_password("metis", nome) or ""
-    except Exception:                             # noqa: BLE001
-        return ""
 
 
 # --- ricerca ------------------------------------------------------------------
