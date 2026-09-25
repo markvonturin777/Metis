@@ -244,3 +244,20 @@ def test_bs4_e_una_dipendenza():
     perche' non deve mai succedere."""
     import bs4  # noqa: F401
     import lxml  # noqa: F401
+
+
+def test_elementi_invisibili_annidati_non_fanno_cadere_la_pulizia():
+    """M7, trovato dal soak su ilmeteo.it: un contenitore nascosto con dentro
+    altri elementi con `style` o `hidden`. Distrutto il genitore, i figli
+    restavano nella lista di `find_all` e il `.get` su di loro sollevava
+    AttributeError — la pagina diventava un errore dello strumento."""
+    from metis.tools.web import _ripulisci
+
+    html = ("<html><body><p>visibile</p>"
+            '<div style="display:none"><span style="color:red">nascosto</span>'
+            '<em hidden>anche</em><b aria-hidden="true">pure</b></div>'
+            '<section hidden><i style="visibility:hidden">x</i></section>'
+            "</body></html>")
+    pulito = _ripulisci(html)
+    assert "visibile" in pulito
+    assert "nascosto" not in pulito and "anche" not in pulito

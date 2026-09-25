@@ -51,6 +51,7 @@ from typing import Annotated, Literal, Union
 import ollama
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
+from metis.llm.client import NUM_CTX
 from metis.tools.registry import Registry
 
 MODEL = "qwen3:8b"
@@ -175,6 +176,9 @@ class ToolRouter:
         self.registry = registry
         self.model = model
         self.client = ollama.Client(host=host)
+        # Lo stesso contesto della conversazione, o Ollama ricarica il
+        # modello a ogni cambio: vedi la nota su NUM_CTX in `client.py`.
+        self.options = {"temperature": TEMPERATURA, "num_ctx": NUM_CTX}
 
     def _union(self):
         schemi = [s.schema for s in self.registry.disponibili()]
@@ -248,16 +252,27 @@ class ToolRouter:
         riparazioni = 0
         ultimo_errore: str | None = None
 
+        from metis.core.errors import SALUTE, Categoria, classifica
+
+        # M7 — Ollama noto come giu': conversazione subito, senza pagare i
+        # 2,26 s di una connessione rifiutata. Sara' la generazione a dire in
+        # persona che l'inferenza non risponde. Vedi `errors.Salute`.
+        if SALUTE.e_giu(Categoria.INFERENZA):
+            return Decisione((), "llm", _ms(t0), 0, "inferenza non disponibile")
+
         for tentativo in (1, 2):
             try:
                 risposta = self.client.chat(
                     model=self.model, messages=messaggi, format=schema,
-                    think=False, options={"temperature": TEMPERATURA},
+                    think=False, options=self.options,
                 )
                 grezzo = risposta["message"]["content"]
+                SALUTE.su(Categoria.INFERENZA)
             except Exception as exc:              # noqa: BLE001
                 # Ollama giu' o modello assente: si degrada in conversazione,
                 # che e' il comportamento innocuo.
+                if classifica(exc) is Categoria.INFERENZA:
+                    SALUTE.giu(Categoria.INFERENZA)
                 return Decisione((), "llm", _ms(t0), riparazioni,
                                  f"{type(exc).__name__}: {exc}")
 

@@ -41,3 +41,11 @@ htmlcov/
 
 # Posizione della finestra: e della macchina, non del progetto.
 config/settings.toml
+
+# M7 — configurazione personale: gli indirizzi veri, mai nel repository.
+# Vedi `metis/tools/posta.py`.
+config/*.local.toml
+
+# M7 — uscite di PyInstaller (metis.spec): si rigenerano, non si versionano.
+build/
+dist/

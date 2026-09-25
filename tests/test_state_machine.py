@@ -1,10 +1,8 @@
 """La macchina a stati e' testabile senza audio: e' il motivo per cui le
 transizioni sono un dato e non una catena di `if`."""
 import random
-import pytest
 from metis.core.state_machine import (
-    Event, State, StateMachine, TIMEOUTS, TRANSITIONS,
-    dead_end_states, unreachable_states,
+    Event, State, StateMachine, TIMEOUTS, dead_end_states, unreachable_states,
 )
 
 

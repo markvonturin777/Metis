@@ -1,6 +1,7 @@
 """Quanto cresce il TTFT al crescere del contesto?
 Il benchmark principale usa prompt minimi: NFR-2 chiede <400 ms a 2k token."""
-import time, ollama
+import time
+import ollama
 
 FILLER = ("Nota di contesto operativo numero {i}: il sistema ha registrato "
           "un evento di telemetria con valori nella norma e nessuna anomalia. ")
@@ -15,7 +16,8 @@ def measure(ctx_tokens: int, runs: int = 3) -> tuple[float, int]:
     for _ in range(runs):
         msgs = [
             {"role": "system", "content": "Sei Metis. Rispondi in italiano, una frase."},
-            {"role": "user", "content": build(ctx_tokens) + "\n\nDomanda: quanti eventi ho elencato, all'incirca?"},
+            {"role": "user", "content": build(ctx_tokens)
+             + "\n\nDomanda: quanti eventi ho elencato, all'incirca?"},
         ]
         t0 = time.perf_counter(); ttft = None; ptokens = 0
         for ch in ollama.chat(model="qwen3:8b", messages=msgs, stream=True,

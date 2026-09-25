@@ -15,6 +15,7 @@ azioni T3. Tutto il resto e' identico per costruzione.
 
 from __future__ import annotations
 
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -42,7 +43,6 @@ from metis.security.policies import Context
 from metis.stt.whisper_engine import WhisperEngine
 from metis.tools import finestre
 from metis.tools.registry import Registry, carica_tutti, serve_conferma
-from metis.tts import create_engine
 from metis.tts.kokoro_engine import Player
 
 __all__ = ["SYSTEM", "Opzioni", "Sistema", "CicloAudio", "costruisci_sistema",
@@ -58,6 +58,10 @@ class Opzioni:
     whisper: str = "small"
     log_level: str = "INFO"
     minutes: float = 0.0
+    # M7 — avvio robusto: quanto aspettare Ollama prima di partire senza, e se
+    # salutare a voce quando l'avvio e' riuscito.
+    attesa_ollama_s: float = 120.0
+    saluto: bool = True
 
     @classmethod
     def da_args(cls, args) -> "Opzioni":
@@ -67,6 +71,7 @@ class Opzioni:
             whisper=getattr(args, "whisper", "small"),
             log_level=getattr(args, "log_level", "INFO"),
             minutes=getattr(args, "minutes", 0.0),
+            saluto=getattr(args, "saluto", True),
         )
 
 
@@ -86,6 +91,7 @@ class Sistema:
     memoria: Memoria | None = None
     pianificatore: Any = None
     casa: Any = None
+    vram: Any = None              # M7: la sorveglianza della memoria grafica
     avvio_s: float = 0.0
     note: list[str] = field(default_factory=list)
 
@@ -96,7 +102,12 @@ class Sistema:
         sta partendo finisce da sola, e i job futuri restano in `jobs.db` —
         e' il loro posto, e al prossimo avvio ripartono.
         """
-        for pezzo in (self.pianificatore, self.casa):
+        from metis.core.errors import SALUTE
+
+        # M7: anche la sorveglianza dei servizi. E' un thread demone e morirebbe
+        # con il processo, ma "uscita pulita" nel piano vuol dire nessun thread
+        # lasciato a se' stesso, non "tanto muore da solo".
+        for pezzo in (self.pianificatore, self.casa, self.vram, SALUTE):
             if pezzo is not None:
                 try:
                     pezzo.ferma()
@@ -250,13 +261,44 @@ def costruisci_sistema(opz: Opzioni, log,
     """
     t0 = time.perf_counter()
 
+    from metis.core.errors import SALUTE, Categoria
+    from metis.tts import crea_robusta
+
     stt = WhisperEngine(opz.whisper)
     llm = LlmClient()
-    tts = create_engine()
+    # M7 — la voce con il ripiego: Piper, poi Kokoro, poi solo testo.
+    tts = crea_robusta(log)
     player = Player(sample_rate=tts.sample_rate)
 
+    def su_oom() -> None:
+        """Ollama senza memoria grafica: si sposta Whisper sul processore."""
+        if stt.su_cpu():
+            log.warning("memoria grafica esaurita", azione="Whisper spostato su CPU")
+
+    llm.su_oom = su_oom
+
     riporta(f"STT {opz.whisper:<8} : {stt.warmup():6.0f} ms")
-    riporta(f"LLM {llm.model:<8} : {llm.warmup():6.0f} ms")
+
+    # M7 — AVVIO ROBUSTO, passo 1 del piano (§4.4). Con l'autostart Metis
+    # parte prima che Ollama sia pronto: si aspetta invece di cadere. Se non
+    # arriva, si parte lo stesso — i comandi rapidi funzionano senza modello —
+    # e la sonda in sottofondo lo scalda quando torna.
+    ollama_ok = attendi_ollama(llm, riporta, opz.attesa_ollama_s)
+    if ollama_ok:
+        riporta(f"LLM {llm.model:<8} : {llm.warmup():6.0f} ms")
+    else:
+        SALUTE.giu(Categoria.INFERENZA)
+        riporta("LLM          : non risponde. Parto lo stesso e riprovo in sottofondo")
+        log.error("ollama non disponibile all'avvio", attesa_s=opz.attesa_ollama_s)
+
+    def sonda_inferenza() -> bool:
+        if not llm.disponibile():
+            return False
+        llm.warmup()                    # 58 s a freddo: meglio qui che al turno
+        log.info("ollama di nuovo disponibile")
+        return True
+
+    SALUTE.sorveglia(Categoria.INFERENZA, sonda_inferenza)
     riporta(f"TTS          : {tts.warmup():6.0f} ms")
 
     det: WakeWordDetector | None = None
@@ -305,7 +347,8 @@ def costruisci_sistema(opz: Opzioni, log,
     def fine_turno(m) -> None:
         b = m.breakdown()
         log.info("turno", totale_ms=round(b["totale"]), stt_ms=round(b["stt"]),
-                 ttft_ms=round(b["ttft"]), tts_ms=round(b["tts"]), tokens=m.tokens)
+                 ttft_ms=round(b["ttft"]), tts_ms=round(b["tts"]), tokens=m.tokens,
+                 tok_s=round(m.tok_per_s, 1))   # M7: NFR-3 si legge da qui
         if on_turno is not None:
             on_turno(m)
         clear_turn()
@@ -341,12 +384,126 @@ def costruisci_sistema(opz: Opzioni, log,
     if azioni is not None:
         pian, casa = costruisci_integrazioni(orch, pezzi.get("audit"), log, riporta)
 
+    # M7 — la memoria grafica sorvegliata: oltre 7,5 GB Whisper va sul
+    # processore. Un thread suo, ogni dieci secondi.
+    vram = sorveglia_vram(stt, log)
+
     avvio = time.perf_counter() - t0
     riporta(f"pronti in {avvio:.1f} s")
 
+    # M7 — passo 6 del piano: il saluto, una volta sola e SOLO se l'avvio e'
+    # andato a buon fine. E' il modo piu' semplice di sapere che Metis e' vivo
+    # senza guardare lo schermo — che con l'autostart e' proprio il caso.
+    # Passa dalla coda degli annunci: parte al primo passaggio in DORMIENTE.
+    if opz.saluto and ollama_ok:
+        orch.annuncia(saluto())
+
     return Sistema(orchestrator=orch, player=player, detector=det,
-                   memoria=memoria, pianificatore=pian, casa=casa,
+                   memoria=memoria, pianificatore=pian, casa=casa, vram=vram,
                    avvio_s=avvio, **pezzi)
+
+
+def attendi_ollama(llm, riporta: Callable[[str], None], massimo_s: float,
+                   passo_s: float = 2.0, attendi=time.sleep) -> bool:
+    """Aspetta che Ollama risponda, fino a `massimo_s`. True se risponde.
+
+    Il passo e' corto, ma ogni sondaggio a vuoto costa di suo 2,26 s — e' il
+    tempo di una connessione rifiutata su Windows, misurato in M7 — quindi
+    un'attesa di 120 s fa una trentina di tentativi, non sessanta.
+    """
+    t0 = time.perf_counter()
+    ultimo_avviso = -10.0
+    while True:
+        if llm.disponibile():
+            return True
+        trascorsi = time.perf_counter() - t0
+        if trascorsi >= massimo_s:
+            return False
+        if trascorsi - ultimo_avviso >= 10.0:
+            riporta(f"LLM          : Ollama non risponde, aspetto "
+                    f"({trascorsi:.0f}/{massimo_s:.0f} s)")
+            ultimo_avviso = trascorsi
+        attendi(passo_s)
+
+
+def saluto(ora: int | None = None) -> str:
+    """Una frase breve, secondo l'ora. Niente "come posso aiutarla": un
+    assistente che si presenta a ogni accensione diventa rumore in una
+    settimana."""
+    from datetime import datetime
+
+    h = datetime.now().hour if ora is None else ora
+    if 5 <= h < 13:
+        apertura = "Buongiorno"
+    elif 13 <= h < 18:
+        apertura = "Buon pomeriggio"
+    else:
+        apertura = "Buonasera"
+    return f"{apertura}. Sono operativo."
+
+
+SOGLIA_VRAM_GB = 7.5
+
+
+class Sorveglianza:
+    """Un thread di sorveglianza che si puo' fermare. Vedi `Sistema.chiudi`."""
+
+    def __init__(self, bersaglio: Callable[[threading.Event], None], nome: str):
+        self.fermo = threading.Event()
+        self.thread = threading.Thread(target=bersaglio, args=(self.fermo,),
+                                       daemon=True, name=nome)
+        self.thread.start()
+
+    def ferma(self, attesa_s: float = 1.0) -> None:
+        self.fermo.set()
+        self.thread.join(attesa_s)
+
+
+def sorveglia_vram(stt, log, soglia_gb: float = SOGLIA_VRAM_GB,
+                   periodo_s: float = 10.0, leggi=None) -> Sorveglianza:
+    """Oltre la soglia, Whisper va sul processore. Una volta sola.
+
+    La riga "VRAM > 7,5 GB" della matrice. La causa tipica non e' Metis ma
+    un altro processo — un gioco, un modello caricato in un'altra finestra —
+    che si prende la memoria grafica: Whisper `small` ne libera 0,28 GB
+    (misurato in M7), il modello linguistico resta dov'e' e la
+    trascrizione passa da 0,5 a 1,7 secondi per frase. Piu' lento, ma vivo.
+
+    L'indicatore rosso in GUI c'e' gia': e' la barra della VRAM del cruscotto,
+    colorata dalla telemetria sopra la stessa soglia.
+
+    L'attesa e' `fermo.wait` e non `time.sleep`: con la seconda, all'uscita il
+    thread restava vivo fino a dieci secondi — il "thread orfano" che il
+    criterio di uscita pulita esclude.
+    """
+
+    def leggi_nvml() -> float:
+        import pynvml
+
+        pynvml.nvmlInit()
+        h = pynvml.nvmlDeviceGetHandleByIndex(0)
+        return pynvml.nvmlDeviceGetMemoryInfo(h).used / 1024**3
+
+    lettore = leggi or leggi_nvml
+
+    def ciclo(fermo: threading.Event) -> None:
+        from metis.core.errors import Categoria, messaggio
+        from metis.tools import notify
+
+        while not fermo.is_set():
+            try:
+                usata = lettore()
+            except Exception:                      # noqa: BLE001
+                return                             # niente GPU: niente da sorvegliare
+            if usata > soglia_gb:
+                if stt.su_cpu():
+                    log.warning("memoria grafica oltre soglia", usata_gb=round(usata, 2),
+                                azione="Whisper spostato su CPU")
+                    notify.mostra("Metis", messaggio(Categoria.VRAM))
+                return                             # fatto: non c'e' altro da spostare
+            fermo.wait(periodo_s)
+
+    return Sorveglianza(ciclo, "metis-vram")
 
 
 def costruisci_integrazioni(orch, audit, log, riporta: Callable[[str], None]):
@@ -473,20 +630,66 @@ class Consegne:
         try:
             posta.invia(to, subject, dati.get("body", ""))
         except Exception as exc:                   # noqa: BLE001
-            # Non partita: lo si dice in tutti i modi possibili, perche'
-            # l'utente conta che sia partita e non e' davanti al PC.
-            motivo = str(exc)[:160]
+            if self._rimanda(dati, exc):
+                return
+            # Non partita, e non partira': lo si dice in tutti i modi
+            # possibili, perche' l'utente conta che sia partita e non e'
+            # davanti al PC. Il motivo e' la frase di un `Rifiuto` — gia' in
+            # persona — oppure quella della matrice degli errori, MAI il
+            # testo di un'eccezione.
+            from metis.tools.registry import Rifiuto
+
+            motivo = str(exc) if isinstance(exc, Rifiuto) else \
+                "il server di posta non ha risposto per un'ora"
             self._registra("schedule_email", Tier.T3, args, Outcome.ERROR,
-                           "invio_programmato", motivo, True)
+                           "invio_programmato", f"{type(exc).__name__}: {exc}"[:200],
+                           True)
             notify.mostra("Email NON inviata", f"A {to}: {motivo}")
             self.orch.annuncia(f"Attenzione: l'email programmata a {to} "
-                               f"non e' partita. {motivo}")
+                               f"non e' partita: {motivo}.")
             return
         self._registra("schedule_email", Tier.T3, args, Outcome.OK,
                        "invio_programmato",
                        f"inviata, confermata il {dati.get('confermata_il', '?')}",
                        True)
         notify.mostra("Email inviata", f"A {to}: {subject}")
+
+    def _rimanda(self, dati: dict, exc: BaseException) -> bool:
+        """M7 — un invio fallito per un motivo passeggero si riprogramma fra
+        dieci minuti, fino a un'ora. Ritorna True se l'ha rimandato.
+
+        "Non perdere l'email" e' la riga della matrice: l'utente l'ha
+        confermata e conta che parta. Un server SMTP che non risponde per un
+        minuto non e' una buona ragione per buttarla via.
+        """
+        from datetime import datetime, timedelta
+
+        from metis.core.errors import Categoria, messaggio
+        from metis.security.audit import Outcome, Tier
+        from metis.tools import notify, posta
+        from metis.tools import scheduler as sch
+
+        rimandi = int(dati.get("rimandi", 0))
+        if not posta.transitorio(exc) or rimandi >= posta.MAX_RIMANDI:
+            return False
+        quando = datetime.now().replace(second=0, microsecond=0) + \
+            timedelta(minutes=posta.RIMANDO_MIN)
+        try:
+            sch.pianificatore().email(dati.get("to", ""), dati.get("subject", ""),
+                                      dati.get("body", ""), quando,
+                                      rimandi=rimandi + 1,
+                                      confermata_il=dati.get("confermata_il"))
+        except Exception:                          # noqa: BLE001
+            return False
+        self._registra("schedule_email", Tier.T3,
+                       {"to": dati.get("to", ""), "subject": dati.get("subject", "")},
+                       Outcome.ERROR, "invio_programmato",
+                       f"rimandata ({rimandi + 1}/{posta.MAX_RIMANDI}): "
+                       f"{type(exc).__name__}: {exc}"[:200], True)
+        frase = messaggio(Categoria.POSTA)
+        notify.mostra("Email rimandata", frase)
+        self.orch.annuncia(frase)
+        return True
 
     def spegni(self, dati: dict) -> None:
         from metis.security.audit import Outcome, Tier
@@ -520,6 +723,14 @@ class Consegne:
 TICK_S = 0.5          # ogni quanto si controllano i timeout degli stati
 
 
+# M7 — senza blocchi per questo tempo, il microfono si considera perso. Lo
+# stream e' sempre aperto e consegna ~31 blocchi al secondo in QUALUNQUE
+# stato, DORMIENTE compreso: tre secondi di silenzio assoluto non sono una
+# pausa del parlato, sono un device che non c'e' piu'.
+SILENZIO_DEVICE_S = 3.0
+RIAPERTURA_S = 2.0
+
+
 class CicloAudio:
     """Il ciclo che alimenta l'orchestratore.
 
@@ -532,46 +743,124 @@ class CicloAudio:
     vede i singoli blocchi audio, e viene chiamato ~31 volte al secondo,
     quindi deve costare quasi niente. In GUI e' un emit di segnale, e il
     diradamento lo fa chi riceve.
+
+    M7 — IL MICROFONO PUO' NON ESSERCI, E METIS NON SI CHIUDE
+    Fino a M6, un Yeti assente all'avvio faceva sollevare `find_input_device`
+    e Metis si chiudeva; uno scollegato mentre gira lasciava il ciclo ad
+    aspettare blocchi che non arrivavano, senza dirlo. Con l'autostart il
+    primo caso e' normale — il login avviene prima che Windows abbia
+    enumerato i device USB — e il secondo e' questione di tempo.
+
+    Adesso il ciclo non esce: prova a riaprire ogni due secondi, lo dice UNA
+    volta tramite `on_microfono(False)`, e quando torna lo dice di nuovo con
+    `on_microfono(True)`. Intanto `tick()` continua a girare: i timeout
+    scattano, i promemoria si annunciano, lo scheduler vive.
     """
 
     def __init__(self, orchestrator, tick_s: float = TICK_S,
-                 on_blocco: Callable[[object], None] | None = None):
+                 on_blocco: Callable[[object], None] | None = None,
+                 on_microfono: Callable[[bool], None] | None = None,
+                 apri_cattura: Callable[[], object] | None = None,
+                 silenzio_device_s: float = SILENZIO_DEVICE_S,
+                 riapertura_s: float = RIAPERTURA_S):
         self.orchestrator = orchestrator
         self.tick_s = tick_s
         self.on_blocco = on_blocco
+        self.on_microfono = on_microfono
+        self._apri = apri_cattura
+        self.silenzio_device_s = silenzio_device_s
+        self.riapertura_s = riapertura_s
         self._ferma = False
         self.capture = None
         self.durata_s = 0.0
+        self.microfono_ok: bool | None = None
+        self.perdite = 0
 
     def ferma(self) -> None:
         """Chiamabile da un altro thread: il ciclo esce al giro successivo."""
         self._ferma = True
 
+    def _segnala(self, ok: bool) -> None:
+        """Solo i CAMBI: un microfono assente per un'ora e' un avviso, non
+        milleottocento."""
+        if self.microfono_ok is ok:
+            return
+        if ok is False:
+            self.perdite += 1
+        self.microfono_ok = ok
+        if self.on_microfono is not None:
+            try:
+                self.on_microfono(ok)
+            except Exception:                      # noqa: BLE001
+                pass
+
     def esegui(self, limite_s: float | None = None) -> float:
-        from metis.audio.capture import AudioCapture
+        if self._apri is None:
+            from metis.audio.capture import AudioCapture
+
+            self._apri = AudioCapture
 
         self._ferma = False
         t0 = time.perf_counter()
-        ultimo_tick = t0
-        self.capture = AudioCapture()
+        self._ultimo_tick = t0
         try:
-            with self.capture as cap:
-                while not self._ferma:
-                    blocco = cap.read(timeout=0.25)
-                    if blocco is not None:
-                        self.orchestrator.on_audio(blocco)
-                        if self.on_blocco is not None:
-                            self.on_blocco(blocco)
-
-                    ora = time.perf_counter()
-                    if ora - ultimo_tick >= self.tick_s:
-                        # I timeout scattano qui, non dal flusso audio: se il
-                        # microfono smettesse di consegnare blocchi, la
-                        # macchina resterebbe appesa per sempre.
-                        self.orchestrator.tick()
-                        ultimo_tick = ora
-                    if limite_s is not None and ora - t0 > limite_s:
-                        break
+            while not self._ferma and not self._scaduto(t0, limite_s):
+                try:
+                    self.capture = self._apri()
+                    self.capture.start()
+                except Exception:                  # noqa: BLE001
+                    # Device assente o occupato. Si aspetta tenendo vivo il
+                    # tick, e si riprova.
+                    self.capture = None
+                    self._segnala(False)
+                    self._attendi_tickando(self.riapertura_s, t0, limite_s)
+                    continue
+                try:
+                    self._leggi(t0, limite_s)
+                finally:
+                    try:
+                        self.capture.stop()
+                    except Exception:              # noqa: BLE001
+                        pass
+                if not self._ferma and not self._scaduto(t0, limite_s):
+                    # Uscito da `_leggi` per silenzio del device: perso.
+                    self._segnala(False)
+                    self._attendi_tickando(self.riapertura_s, t0, limite_s)
         finally:
             self.durata_s = time.perf_counter() - t0
         return self.durata_s
+
+    def _leggi(self, t0: float, limite_s: float | None) -> None:
+        """Legge finche' arrivano blocchi. Ritorna quando smettono."""
+        ultimo_blocco = time.perf_counter()
+        while not self._ferma and not self._scaduto(t0, limite_s):
+            blocco = self.capture.read(timeout=0.25)
+            ora = time.perf_counter()
+            if blocco is not None:
+                ultimo_blocco = ora
+                self._segnala(True)
+                self.orchestrator.on_audio(blocco)
+                if self.on_blocco is not None:
+                    self.on_blocco(blocco)
+            elif ora - ultimo_blocco > self.silenzio_device_s:
+                return
+            self._forse_tick(ora)
+
+    def _forse_tick(self, ora: float) -> None:
+        # I timeout scattano qui, non dal flusso audio: se il microfono
+        # smettesse di consegnare blocchi, la macchina resterebbe appesa.
+        if ora - self._ultimo_tick >= self.tick_s:
+            self.orchestrator.tick()
+            self._ultimo_tick = ora
+
+    def _attendi_tickando(self, secondi: float, t0: float,
+                          limite_s: float | None) -> None:
+        fine = time.perf_counter() + secondi
+        while (not self._ferma and time.perf_counter() < fine
+               and not self._scaduto(t0, limite_s)):
+            time.sleep(min(0.1, self.tick_s))
+            self._forse_tick(time.perf_counter())
+
+    @staticmethod
+    def _scaduto(t0: float, limite_s: float | None) -> bool:
+        return limite_s is not None and time.perf_counter() - t0 > limite_s

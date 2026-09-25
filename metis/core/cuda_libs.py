@@ -42,13 +42,8 @@ def register_cuda_dll_dirs() -> list[Path]:
     if _registered or sys.platform != "win32":
         return []
 
-    try:
-        import nvidia
-    except ImportError:
-        return []
-
     added: list[Path] = []
-    for pkg_root in map(Path, nvidia.__path__):
+    for pkg_root in _radici_nvidia():
         for bin_dir in sorted(pkg_root.glob("*/bin")):
             if any(bin_dir.glob("*.dll")):
                 os.add_dll_directory(str(bin_dir))
@@ -60,3 +55,21 @@ def register_cuda_dll_dirs() -> list[Path]:
 
     _registered = True
     return added
+
+
+def _radici_nvidia() -> list[Path]:
+    """Dove stanno le cartelle `nvidia/*/bin`.
+
+    M7 — nel bundle di PyInstaller `import nvidia` fallisce: e' un namespace
+    package senza codice, e nel bundle ci sono solo le DLL, copiate da
+    `metis.spec` in `_internal/nvidia/<pacchetto>/bin`. Trovato con la prova
+    su cartella pulita: "cublas64_12.dll is not found", e Metis non partiva.
+    """
+    if getattr(sys, "frozen", False):
+        base = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+        return [base / "nvidia"]
+    try:
+        import nvidia
+    except ImportError:
+        return []
+    return list(map(Path, nvidia.__path__))

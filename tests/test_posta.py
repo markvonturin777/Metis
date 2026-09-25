@@ -209,3 +209,51 @@ def test_il_router_sa_chi_e_me(tmp_path, monkeypatch):
     r = ToolRouter.__new__(ToolRouter)
     r.registry = REG
     assert "io@esempio.it" in r._prompt()
+
+
+# --- M7: l'override locale -------------------------------------------------------
+
+def _config(tmp_path, monkeypatch, principale: str, locale: str | None):
+    f = tmp_path / "email.toml"
+    f.write_text(principale, encoding="utf-8")
+    if locale is not None:
+        (tmp_path / "email.local.toml").write_text(locale, encoding="utf-8")
+    monkeypatch.setattr(posta, "CONFIG", f)
+
+
+def test_il_locale_aggiunge_destinatari(tmp_path, monkeypatch):
+    _config(tmp_path, monkeypatch, '[allowlist]\nindirizzi = ["a@esempio.it"]\n',
+            '[allowlist]\nindirizzi = ["B@esempio.it"]\n')
+    assert posta.allowlist() == {"a@esempio.it", "b@esempio.it"}
+
+
+def test_per_me_vince_il_locale(tmp_path, monkeypatch):
+    _config(tmp_path, monkeypatch, '[utente]\nindirizzo = "repo@esempio.it"\n',
+            '[utente]\nindirizzo = "io@esempio.it"\n')
+    assert posta.indirizzo_utente() == "io@esempio.it"
+
+
+def test_un_locale_vuoto_lascia_il_me_del_repository(tmp_path, monkeypatch):
+    _config(tmp_path, monkeypatch, '[utente]\nindirizzo = "repo@esempio.it"\n',
+            '[utente]\nindirizzo = ""\n')
+    assert posta.indirizzo_utente() == "repo@esempio.it"
+
+
+def test_un_locale_illeggibile_non_apre_niente(tmp_path, monkeypatch):
+    _config(tmp_path, monkeypatch, '[allowlist]\nindirizzi = []\n', "non e' toml [[[")
+    assert posta.allowlist() == frozenset()
+
+
+def test_il_locale_e_ignorato_da_git():
+    import subprocess
+
+    r = subprocess.run(["git", "check-ignore", "-q", "config/email.local.toml"])
+    assert r.returncode == 0, "config/email.local.toml finirebbe nel repository"
+
+
+def test_un_percorso_esplicito_legge_solo_quello(tmp_path, monkeypatch):
+    """E' cio' che usa `test_l_allowlist_del_repository_e_vuota`: il file
+    del repository da solo, qualunque cosa ci sia nel locale."""
+    _config(tmp_path, monkeypatch, '[allowlist]\nindirizzi = []\n',
+            '[allowlist]\nindirizzi = ["b@esempio.it"]\n')
+    assert posta.allowlist(tmp_path / "email.toml") == frozenset()

@@ -4,9 +4,10 @@ Misura lo stadio 'prima frase' (dal primo token al primo chunk pronto), che
 in M0 e' l'unico rimasto fuori budget. Non serve il microfono: lo stadio e'
 interamente LLM + segmentazione.
 """
-import time, warnings, numpy as np
+import warnings
+import numpy as np
 warnings.filterwarnings("ignore")
-from metis.llm.client import LlmClient
+from metis.llm.client import LlmClient  # noqa: E402  (dopo filterwarnings)
 
 SYSTEM = ("Sei Metis, assistente personale. Rispondi in italiano, formale con "
           "ironia discreta. MASSIMO DUE FRASI BREVI.")
@@ -21,7 +22,8 @@ PROMPTS = [
 
 c = LlmClient()
 c.warmup()
-print(f"{'first_max_chars':>16} | {'prima_frase p50':>16} | {'p95':>7} | {'car p50':>8} | budget 330")
+print(f"{'first_max_chars':>16} | {'prima_frase p50':>16} | {'p95':>7} | "
+      f"{'car p50':>8} | budget 330")
 print("-" * 72)
 
 for cap in (30, 45, 60, 90, None):

@@ -126,8 +126,7 @@ def test_i_segnali_del_nucleo_atterrano_sul_thread_principale(app_qt):
     from metis.core.avvio import Opzioni
     from metis.gui.app import Applicazione
 
-    principale = threading.get_ident()
-    app = Applicazione(Opzioni(tools=False, wakeword=False))
+    app = Applicazione(Opzioni(tools=False, wakeword=False), tray=False)
     atterrati: list[int] = []
 
     vero_stato = app._stato

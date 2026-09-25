@@ -257,9 +257,14 @@ class Pianificatore:
     def promemoria(self, testo: str, quando: datetime) -> Voce:
         return self._aggiungi(PROMEMORIA, testo, quando)
 
-    def email(self, to: str, subject: str, body: str, quando: datetime) -> Voce:
+    def email(self, to: str, subject: str, body: str, quando: datetime,
+              rimandi: int = 0, confermata_il: str | None = None) -> Voce:
+        """`rimandi` conta gli invii gia' falliti (M7, SMTP che non risponde);
+        `confermata_il` si conserva attraverso i rimandi: la conferma e' una
+        sola, quella data dall'utente la prima volta."""
         return self._aggiungi(EMAIL, subject, quando, to=to, subject=subject,
-                              body=body, confermata_il=tempo.adesso()
+                              body=body, rimandi=rimandi,
+                              confermata_il=confermata_il or tempo.adesso()
                               .strftime(tempo.FORMATO))
 
     def spegnimento(self, dispositivo: str, quando: datetime,

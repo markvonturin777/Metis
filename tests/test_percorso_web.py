@@ -52,6 +52,7 @@ class FakeSynth:
 class FakeGen:
     ttft_ms: float = 80.0
     tokens: int = 12
+    tok_per_s: float = 50.0
     text: str = "Secondo la fonte, il rendimento e' al tre e settantacinque."
 
 

@@ -43,7 +43,8 @@ dependencies = [
 [project.optional-dependencies]
 # `aiosmtpd` e `trustme`: un server SMTP vero e cifrato in locale, per provare
 # la posta senza un account e senza spegnere la verifica del certificato.
-dev = ["pytest", "pytest-cov", "ruff", "aiosmtpd", "trustme"]
+# `pyinstaller`: il bundle di M7 (metis.spec).
+dev = ["pytest", "pytest-cov", "ruff", "aiosmtpd", "trustme", "pyinstaller"]
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -57,6 +58,23 @@ include = ["metis*"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+
+[tool.ruff.lint]
+# E741 ("l" ambiguo): `l, t, r, b` sono i nomi standard dei lati di un
+# rettangolo nel codice geometrico di M4 (finestre, monitor, UIA).
+# Rinominarli in `sinistra, alto, destra, basso` renderebbe illeggibili le
+# formule. Eccezione dichiarata qui, in M7, per avere un lint a zero su cui
+# il prossimo errore si veda.
+select = ["E", "F", "W"]
+ignore = ["E741"]
+
+[tool.ruff.lint.per-file-ignores]
+# Nei test e nei banchi le sequenze di eventi si scrivono su una riga:
+# `o.sm.fire(PTT); o.sm.fire(SPEECH_START)` si legge come una sequenza, che e'
+# quello che e'. Nel codice di Metis la regola vale.
+"tests/**" = ["E701", "E702"]
+"benchmarks/**" = ["E701", "E702"]
+"wakeword/**" = ["E701", "E702"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

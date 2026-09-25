@@ -3,7 +3,7 @@
 > Stato vivo del progetto. Si aggiorna mentre si lavora.
 > Riferimento: [Specifica V1.0](../SPECS/Metis_V1.0_Specifica_Ufficiale.md) · [Piano](../SPECS/plan/README.md)
 
-**Ultimo aggiornamento:** 2026-09-23 — **M6: codice completo, verifiche sui servizi veri aperte.** Promemoria che sopravvivono al riavvio, email programmate, Home Assistant. 90/90 decisioni di Qwen su date e dispositivi; mancano Home Assistant, un account SMTP e un riavvio vero del PC
+**Ultimo aggiornamento:** 2026-09-25 — **M7: codice e strumenti pronti, prove lunghe aperte.** Matrice degli errori, tray, autostart, soak, verifica NFR, bundle provato su cartella pulita. Il soak breve ha trovato un difetto presente da M4 — Ollama ricaricava il modello due volte per turno — e le latenze sono scese da 5,8–15 s a 1,3–2,4 s
 
 ---
 
@@ -31,17 +31,21 @@ Un file per iterazione. Ogni file ha: prerequisiti, attività spuntabili, misure
 | **M4** | [Automazione PC](M4_tracking.md) | ✅ | 28/31 | 10/12 | 2026-09-21 | 2026-09-21 | `m4-automation` |
 | **M5** | [Conoscenza](M5_tracking.md) | ✅ | 30/30 | 13/13 | 2026-09-22 | 2026-09-22 | `m5-knowledge` |
 | **M6** | [Integrazioni](M6_tracking.md) | 🔄 | 32/34 | 9/15 | 2026-09-23 | — | `m6-integrations` |
-| **M7** | [Consolidamento V1.0](M7_tracking.md) | ⬜ | 0/44 | 0/13 | — | — | `v1.0` |
-| | **Totale** | | **224/278** | **63/87** | | | |
+| **M7** | [Consolidamento V1.0](M7_tracking.md) | 🔄 | 30/39 | 5/13 | 2026-09-23 | — | `v1.0` |
+| | **Totale** | | **254/273** | **68/87** | | | |
 
 > Oltre a queste ci sono **30 caselle di prerequisito** e **131 esiti di test** nelle tabelle dei singoli file: 531 punti di controllo in totale.
 
-**Iterazione corrente:** **M6 — Integrazioni, in attesa dei servizi veri.**
-Il codice è completo e provato contro un Home Assistant e un server SMTP
-finti che parlano il protocollo vero. Restano sei criteri che chiedono tre
-cose che su questa macchina non ci sono ancora: Home Assistant, un account
-SMTP con password per app, e un riavvio vero del PC con un promemoria in
-coda. Il comando per chiuderli è in [M6 §6](M6_tracking.md).
+**Iterazione corrente:** **M7 — Consolidamento V1.0, in attesa delle prove lunghe.**
+Tutto il codice di M7 è scritto e verificato. Mancano le prove che chiedono
+tempo o la voce dell'utente: 72 ore di soak, 100 interazioni reali (NFR-1/2/3),
+50 frasi registrate (NFR-5), l'autostart provato con un riavvio vero,
+l'installazione da zero con [docs/INSTALL.md](../docs/INSTALL.md). I comandi
+sono in [M7 §5](M7_tracking.md). **NFR-1 è a rischio** (M7 §4.1).
+
+**M6 in pausa** per scelta: Home Assistant, account SMTP e riavvio vero
+rimandati. Gli indirizzi email vanno in `config/email.local.toml`, ignorato
+da git — non in `email.toml`, che è nel repository.
 
 **Da sapere prima di usare M6:** le notifiche di Windows sono **disattivate**
 per questo account (`ToastEnabled = 0`). Metis lo dice all'avvio; i
@@ -59,9 +63,9 @@ I valori si riempiono man mano. La colonna "misurato" va aggiornata a ogni misur
 
 | NFR | Metrica | Target | Misurato | Quando | Esito |
 | :-- | :-- | :-- | :-- | :-- | :-: |
-| 1 | Latenza e2e p50 / p95 | < 1,2 s / < 1,8 s | **1119 / 1625 ms** | M0 ✅ | ✅ |
+| 1 | Latenza e2e p50 / p95 | < 1,2 s / < 1,8 s | **1119 / 1625 ms** in M0, senza router · **1,9–2,3 s** in conversazione nel soak breve di M7, con router | M0 ✅ · M7 ⚠️ | 🟡 |
 | 2 | TTFT | < 400 ms | **87 ms** in conversazione · ~330–400 a 2k · 627 a 3,6k | M0 ✅ | 🟡 |
-| 3 | Throughput | ≥ 45 tok/s | **67,1 tok/s** | M0 ✅ | ✅ |
+| 3 | Throughput | ≥ 45 tok/s | **67,1 tok/s** · 51–59 nel soak breve di M7 | M0 ✅ | ✅ |
 | 4 | Picco VRAM | ≤ 7,2 GB | **6,58 GB** con LLM+STT, soak 72 min | M0 ✅ | ✅ |
 | 5 | WER italiano | < 12% | **8,6%** su 10 frasi | M0 parziale | 🟡 |
 | 6 | Falsi risvegli | < 1 / 8 h | ⏸️ non applicabile in V1.0: senza wake word non ci sono risvegli | v2 | ⏸️ |
@@ -120,6 +124,11 @@ Ogni decisione che si scosta dalla specifica o che chiude un punto aperto va ann
 | 2026-09-23 | M6 | La conferma si può **aggiungere** sotto T3 (`ToolSpec.conferma`) | La data di un promemoria T1 va confermata sempre. È un `or`: nessun modo di toglierla a un T3 |
 | 2026-09-23 | M6 | Il tier non si abbassa da `home_assistant.toml`; il modello non nomina mai un `entity_id` | Un file che abbassa un tier toglie una conferma con una riga; un `entity_id` libero renderebbe il perimetro quello di Home Assistant |
 | 2026-09-23 | M6 | Email solo verso l'allowlist, ricontrollata **all'invio** | Togliere un indirizzo dal file blocca anche le email già programmate verso di lui |
+| 2026-09-25 | M7 | **Un** retry verso Ollama, non tre; il recupero lo fa `SALUTE` in sottofondo | Su Windows una connessione rifiutata costa 2,26 s: tre tentativi erano 8 s di silenzio |
+| 2026-09-25 | M7 | Una sola finestra di contesto (`NUM_CTX`) per router e conversazione | Con valori diversi Ollama ricarica il modello a ogni cambio: 3,6 s, due volte per turno, da M4 |
+| 2026-09-25 | M7 | Con la tray, chiudere la finestra non chiude Metis; la pausa dell'ascolto non si toglie col PTT | L'uscita deve passare da un solo percorso; una pausa che si toglie per sbaglio non è una pausa |
+| 2026-09-25 | M7 | Indirizzi email veri in `config/email.local.toml`, ignorato da git | `email.toml` è nel repository: un indirizzo scritto lì è pubblicato al primo push |
+| 2026-09-25 | M7 | Il soak sostituisce il microfono, non usa un loopback, e scrive in un log suo | Nessun loopback qui; NFR-1 si misura sulle interazioni reali, non va mescolato con le sintetiche |
 
 ---
 
@@ -135,6 +144,8 @@ Le idee che emergono durante lo sviluppo finiscono qui, non nella V1.0. È la co
 | 4 | Modalità analisi profonda con Qwen 30B-A3B su CPU | Specifica | Già progettata in §3.3 |
 | 5 | Streaming videocamera in GUI | Specifica | — |
 | 6 | Temi e personalizzazione estetica | Specifica | — |
+| 7 | Router e conversazione in parallelo | M7 | La leva più grande su NFR-1 (0,3–0,6 s). Si decide sui numeri delle 100 interazioni reali |
+| 8 | "Ricordamelo fra 10 minuti" sulla notifica | M6 | Non verificabile con le notifiche spente su questa macchina |
 
 ---
 

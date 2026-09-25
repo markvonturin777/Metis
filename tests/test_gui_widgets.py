@@ -100,8 +100,6 @@ def test_si_decide_una_volta_sola(qt):
 def test_mostra_gli_argomenti_per_intero(qt):
     """'Metis vuole eseguire send_email' non e' un consenso informato."""
     d = dialogo()
-    testo = " ".join(w.text() for w in d.findChildren(type(d.nega).__mro__[1])
-                     if hasattr(w, "text"))
     tutto = _tutto_il_testo(d)
     assert "marco@esempio.it" in tutto and "Riepilogo" in tutto
     assert "T3" in tutto and "send_email" in tutto

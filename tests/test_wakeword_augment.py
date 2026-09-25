@@ -6,7 +6,6 @@ Il test vive qui e non in wakeword/ perche' verifica codice, non dati.
 """
 import importlib.util
 import numpy as np
-import pytest
 
 spec = importlib.util.spec_from_file_location("ef", "wakeword/extract_features.py")
 ef = importlib.util.module_from_spec(spec)

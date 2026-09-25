@@ -17,9 +17,17 @@ TRE VINCOLI, NESSUNO NEGOZIABILE
     cifratura      SSL implicito, oppure STARTTLS sulla 587. Mai in chiaro:
                    non esiste un ramo che parli SMTP senza TLS.
     credenziali    dal Credential Manager. Mancanti = rifiuto, non default.
-    destinatari    solo `config/email.toml`. Il controllo si rifa' all'invio,
-                   quindi togliere un indirizzo blocca anche le email gia'
-                   programmate verso di lui.
+    destinatari    solo `config/email.toml` (e il suo `.local`, sotto). Il
+                   controllo si rifa' all'invio, quindi togliere un indirizzo
+                   blocca anche le email gia' programmate verso di lui.
+
+M7 — GLI INDIRIZZI VERI STANNO IN `config/email.local.toml`
+`email.toml` e' nel repository, e il repository non deve contenere
+l'indirizzo di nessuno: scriverlo li' vuol dire pubblicarlo al primo push.
+Accanto c'e' `email.local.toml`, stesso formato, ignorato da git. Gli
+indirizzi dei due file si UNISCONO; per "me" vince il locale. Il locale puo'
+solo aggiungere destinatari, mai toglierli: un file locale illeggibile
+lascia l'allowlist del repository, cioe' vuota.
 """
 
 from __future__ import annotations
@@ -43,15 +51,33 @@ TIMEOUT_S = 15.0
 PORTA_STARTTLS = 587
 
 
+def locale_di(path: Path) -> Path:
+    """`config/email.toml` -> `config/email.local.toml`. Derivato, non
+    fisso: i test che spostano CONFIG in una cartella temporanea si portano
+    dietro anche il locale, e non leggono quello vero della macchina."""
+    return path.with_name(f"{path.stem}.local{path.suffix}")
+
+
+def _leggi(path: Path) -> dict:
+    try:
+        return tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        # Illeggibile = vuoto. Deny-by-default.
+        return {}
+
+
+def _file(path: Path | None) -> list[Path]:
+    """Con un percorso esplicito, quello solo. Altrimenti il file del
+    repository e il suo locale."""
+    return [path] if path is not None else [CONFIG, locale_di(CONFIG)]
+
+
 def allowlist(path: Path | None = None) -> frozenset[str]:
     """Gli indirizzi ammessi. Si rilegge a ogni chiamata: il file e' piccolo,
     e togliere un indirizzo deve avere effetto subito, senza riavviare."""
-    try:
-        dati = tomllib.loads((path or CONFIG).read_text(encoding="utf-8"))
-    except (OSError, tomllib.TOMLDecodeError):
-        # Un'allowlist illeggibile e' un'allowlist vuota. Deny-by-default.
-        return frozenset()
-    voci = dati.get("allowlist", {}).get("indirizzi", [])
+    voci = []
+    for f in _file(path):
+        voci += _leggi(f).get("allowlist", {}).get("indirizzi", [])
     return frozenset(str(v).strip().lower() for v in voci if str(v).strip())
 
 
@@ -63,11 +89,11 @@ def indirizzo_utente(path: Path | None = None) -> str:
     che configurare il proprio indirizzo apre la posta verso di lui senza che
     nessuno l'abbia deciso esplicitamente.
     """
-    try:
-        dati = tomllib.loads((path or CONFIG).read_text(encoding="utf-8"))
-    except (OSError, tomllib.TOMLDecodeError):
-        return ""
-    return str(dati.get("utente", {}).get("indirizzo", "")).strip()
+    for f in reversed(_file(path)):          # il locale per primo
+        io = str(_leggi(f).get("utente", {}).get("indirizzo", "")).strip()
+        if io:
+            return io
+    return ""
 
 
 def motivo_destinatario(to: str, path: Path | None = None) -> str | None:
@@ -79,6 +105,33 @@ def motivo_destinatario(to: str, path: Path | None = None) -> str | None:
     if to.strip().lower() not in ammessi:
         return f"{to} non e' fra i destinatari autorizzati"
     return None
+
+
+# M7 — quante volte si rimanda un invio fallito, e di quanto. Sei volte dieci
+# minuti: un'ora. Oltre, il problema non e' passeggero e va detto.
+RIMANDO_MIN = 10
+MAX_RIMANDI = 6
+
+
+def transitorio(exc: BaseException) -> bool:
+    """L'errore passera' da solo? Decide se rimandare l'invio o rinunciare.
+
+    Si' per la rete e per i codici 4xx (il server dice "riprova piu' tardi").
+    No per cio' che non cambia aspettando: credenziali e destinatari
+    respinti — gia' `Rifiuto` —, i 5xx, e il certificato che non si verifica.
+    Rimandare questi ultimi vorrebbe dire presentare sei volte le stesse
+    credenziali sbagliate, e al sesto tentativo molti server bloccano
+    l'account.
+    """
+    if isinstance(exc, Rifiuto):
+        return False
+    if isinstance(exc, ssl.SSLCertVerificationError):
+        return False
+    if isinstance(exc, smtplib.SMTPResponseException):
+        return 400 <= exc.smtp_code < 500
+    if isinstance(exc, (smtplib.SMTPServerDisconnected, smtplib.SMTPConnectError)):
+        return True
+    return isinstance(exc, (OSError, TimeoutError))
 
 
 def componi(mittente: str, to: str, subject: str, body: str) -> EmailMessage:

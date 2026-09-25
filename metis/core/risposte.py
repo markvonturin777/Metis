@@ -33,6 +33,10 @@ from metis.security.broker import Result
 _APP = {"vscode": "Visual Studio Code", "github_desktop": "GitHub Desktop",
         "chrome": "Chrome"}
 
+# Gli stadi del broker che rifiutano una tool call malformata. Il loro
+# dettaglio e' un messaggio tecnico (JSON, Pydantic, nome sconosciuto).
+_STADI_TECNICI = frozenset({"json", "registro", "schema"})
+
 _DOVE = {0: "sul primo schermo", 1: "sul secondo schermo",
          2: "sul terzo schermo", 3: "sul quarto schermo"}
 
@@ -43,11 +47,22 @@ def descrivi(result: Result) -> str:
             # Lo strumento ha scelto di non agire, e il motivo e' gia' una
             # frase rivolta all'utente: si pronuncia cosi' com'e'.
             return result.detail if result.detail.endswith(".") else result.detail + "."
+        if result.stage in _STADI_TECNICI:
+            # M7 — "Non lo faccio: to: String should match pattern..." era il
+            # messaggio di Pydantic, pronunciato. Questi tre stadi rifiutano
+            # una tool call MALFORMATA: il difetto e' della decisione, non
+            # della richiesta, e il dettaglio serve al log, non all'utente.
+            return "Non ho capito la richiesta abbastanza bene per agire."
         return f"Non lo faccio: {result.detail}"
     if result.outcome is Outcome.ERROR:
         if "non ancora disponibile" in result.detail:
             return "Quella capacita' non c'e' ancora."
-        return f"Non ci sono riuscito: {result.detail}"
+        # M7 — era "Non ci sono riuscito: {detail}", e `detail` e' il testo
+        # dell'eccezione: "ConnectionError: ...", pronunciato. La matrice
+        # degli errori vieta che arrivi all'utente; resta nell'audit log.
+        from metis.core.errors import Categoria, messaggio
+
+        return messaggio(Categoria.STRUMENTO)
 
     v = result.value if isinstance(result.value, dict) else {}
 
@@ -170,6 +185,10 @@ def descrivi(result: Result) -> str:
         return f"Cancellato: {v.get('testo', '')}."
 
     if result.tool == "send_email":
+        if v.get("rimandata"):
+            from metis.core.errors import Categoria, messaggio
+
+            return messaggio(Categoria.POSTA)
         return f"Email inviata a {v.get('to', '')}."
 
     # -- M6: nel mondo fisico ------------------------------------------------

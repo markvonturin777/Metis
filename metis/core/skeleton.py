@@ -28,7 +28,7 @@ from metis.audio.vad import SpeechSegmenter  # noqa: E402
 from metis.core.metrics import TurnMetrics, report  # noqa: E402
 from metis.llm.client import LlmClient  # noqa: E402
 from metis.stt.whisper_engine import WhisperEngine  # noqa: E402
-from metis.tts import create_engine, load_config  # noqa: E402
+from metis.tts import create_engine  # noqa: E402
 from metis.tts.kokoro_engine import Player  # noqa: E402
 
 SYSTEM = (
@@ -50,7 +50,6 @@ def main() -> None:
     stt = WhisperEngine("small")
     llm = LlmClient()
     tts = create_engine()
-    cfg = load_config()["streaming"]
     print(f"  STT warmup : {stt.warmup():6.0f} ms")
     print(f"  LLM warmup : {llm.warmup():6.0f} ms")
     print(f"  TTS warmup : {tts.warmup():6.0f} ms")

@@ -4,8 +4,12 @@ Le voci inglesi di libritts leggono "Metis" all'inglese. Prima di generare
 migliaia di campioni va verificato QUALE grafia si avvicina alla pronuncia
 italiana, altrimenti si addestra il modello sul suono sbagliato.
 """
-import io, wave, pathlib
-import numpy as np, soundfile as sf, soxr
+import io
+import wave
+import pathlib
+import numpy as np
+import soundfile as sf
+import soxr
 from piper import PiperVoice, SynthesisConfig
 
 OUT = pathlib.Path("wakeword/pronuncia"); OUT.mkdir(parents=True, exist_ok=True)

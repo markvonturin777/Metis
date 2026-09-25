@@ -34,4 +34,20 @@ def presenta_email(call) -> dict[str, str]:
                     presenta=presenta_email)
 def _send_email(call: SendEmail) -> dict:
     """Invia una email a un destinatario autorizzato. Conferma obbligatoria."""
-    return posta.invia(call.to, call.subject, call.body)
+    try:
+        return posta.invia(call.to, call.subject, call.body)
+    except Exception as exc:                      # noqa: BLE001
+        # M7 — "non perdere l'email". Se il server non risponde per un motivo
+        # passeggero, l'invio confermato adesso parte fra dieci minuti invece
+        # di andare perso: la conferma e' gia' stata data, e riguardava
+        # QUESTA email, non l'orario al secondo.
+        if not posta.transitorio(exc):
+            raise
+        from datetime import datetime, timedelta
+
+        from metis.tools.scheduler import pianificatore
+
+        quando = datetime.now().replace(second=0, microsecond=0) + \
+            timedelta(minutes=posta.RIMANDO_MIN)
+        pianificatore().email(call.to, call.subject, call.body, quando, rimandi=1)
+        return {"to": call.to, "rimandata": quando.strftime("%H:%M")}

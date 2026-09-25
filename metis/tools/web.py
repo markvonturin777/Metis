@@ -51,6 +51,8 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from metis.core.errors import MATRICE, Categoria
+
 from metis.llm.schemas import WebFetch, WebSearch
 from metis.security.audit import Tier
 from metis.tools.registry import REGISTRY, Rifiuto
@@ -70,7 +72,9 @@ DB = Path("data/web_cache.db")
 # Un fallimento della rete e una pagina che non si lascia leggere si dicono
 # in modo diverso: il primo e' un guasto dell'ambiente, il secondo un limite
 # di quella pagina. Confonderli manderebbe l'utente a controllare il wifi.
-NON_RAGGIUNGIBILE = "Le fonti non sono raggiungibili al momento."
+# M7: la frase e' quella della matrice degli errori, riga "rete assente" — che
+# aggiunge la meta' che conta: il resto di Metis funziona ancora.
+NON_RAGGIUNGIBILE = MATRICE[Categoria.RETE].messaggio
 
 
 @dataclass(frozen=True)
@@ -461,13 +465,20 @@ def _ripulisci(html: str) -> str:
         c.extract()
     for t in zuppa(list(_MUTI)):
         t.decompose()
+    # M7 — `find_all` da' una LISTA, e distruggere un elemento distrugge anche
+    # i suoi discendenti che in quella lista ci sono ancora: un
+    # `<div style="display:none">` con dentro uno `<span style=...>` faceva
+    # cadere il `.get` sul figlio gia' distrutto. Trovato dal soak su una
+    # pagina vera (ilmeteo.it); da M5 quella pagina diventava "errore".
     for t in zuppa.find_all(style=True):
-        if _invisibile(str(t.get("style", ""))):
+        if not t.decomposed and _invisibile(str(t.get("style", ""))):
             t.decompose()
     for t in zuppa.find_all(hidden=True):
-        t.decompose()
+        if not t.decomposed:
+            t.decompose()
     for t in zuppa.find_all(attrs={"aria-hidden": "true"}):
-        t.decompose()
+        if not t.decomposed:
+            t.decompose()
     for t in zuppa.find_all(True):
         for attributo in ("alt", "title", "aria-label", "data-text"):
             if t.has_attr(attributo):

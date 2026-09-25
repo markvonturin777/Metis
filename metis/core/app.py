@@ -22,7 +22,6 @@ console — le scorciatoie globali, cosa si stampa, il riepilogo finale.
 from __future__ import annotations
 
 import argparse
-import time
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -109,9 +108,11 @@ def main() -> None:
     print("=" * 62)
     try:
         print(f"  microfono    : #{find_input_device()}")
-    except RuntimeError as e:
-        print(f"  microfono    : {e}")
-        return
+    except RuntimeError:
+        # M7: non si esce piu'. Con l'autostart il login arriva prima che
+        # Windows abbia enumerato i device USB: il ciclo audio aspetta il
+        # microfono e lo dice quando arriva.
+        print("  microfono    : non trovato, lo aspetto")
 
     sis = costruisci_sistema(Opzioni.da_args(args), log,
                              riporta=lambda r: print(f"  {r}"))
@@ -143,7 +144,21 @@ def main() -> None:
     print(f"  {DEFAULT_KILL_SWITCH:<24} kill switch: zittisce e sospende T2/T3")
     print(f"  {'Ctrl+C':<24} esci\n")
 
-    ciclo = CicloAudio(orch)
+    def microfono(ok: bool) -> None:
+        from metis.core.errors import Categoria, messaggio
+        from metis.tools import notify
+
+        if ok:
+            print("  [microfono] disponibile")
+            return
+        frase = messaggio(Categoria.AUDIO_INGRESSO)
+        print(f"  [microfono] {frase}")
+        # Una notifica e non la voce: senza microfono Metis puo' ancora
+        # parlare, ma l'utente non potrebbe rispondere, e il messaggio deve
+        # restare leggibile anche quando nessuno era li' ad ascoltare.
+        notify.mostra("Metis", frase)
+
+    ciclo = CicloAudio(orch, on_microfono=microfono)
     try:
         ciclo.esegui(limite_s=args.minutes * 60 if args.minutes else None)
         if args.minutes:

@@ -6,7 +6,6 @@ vivo e' difficile da riprodurre.
 """
 from dataclasses import dataclass, field
 import numpy as np
-import pytest
 
 from metis.audio.capture import Block
 from metis.core.orchestrator import Deps, Orchestrator
@@ -37,6 +36,7 @@ class FakeTranscript:
 class FakeGen:
     ttft_ms: float = 100.0
     tokens: int = 10
+    tok_per_s: float = 50.0
     text: str = "risposta finta"
 
 
@@ -239,8 +239,33 @@ def test_un_errore_nel_turno_non_appende_la_macchina():
 
     assert o.counters.errors == 1
     assert isinstance(visti[0], ConnectionError)
-    assert o.sm.state is State.ERRORE, "la macchina e' rimasta appesa"
+    # Fino a M6 il turno finiva in ERRORE e Metis taceva. Da M7 passa da
+    # ERRORE, dice la frase della matrice e torna in ascolto: la macchina
+    # non resta appesa, e l'utente sa perche' non ha avuto risposta.
+    stati = [t.to for t in o.sm.history]
+    assert State.ERRORE in stati, "il turno fallito non e' passato da ERRORE"
+    assert o.sm.state is State.IN_ASCOLTO, "la macchina e' rimasta appesa"
     assert player.stopped == 1, "l'audio gia' accodato continuerebbe a suonare"
+
+
+def test_un_errore_si_dice_in_persona_mai_con_il_testo_dell_eccezione():
+    """M7: nessun traceback raggiunge l'utente. Si sente la frase della
+    matrice degli errori, e il testo dell'eccezione resta nel log."""
+    detti = []
+    o, _ = make()
+    o.d.tts_synth = lambda t: (detti.append(t), FakeSynth())[1]
+
+    def llm_rotto(history, cancel=None, **kw):
+        raise ConnectionError("Failed to connect to Ollama. Please check...")
+        yield  # pragma: no cover
+
+    o.d.llm_stream = llm_rotto
+    o.sm.fire(Event.WAKE_WORD); o.sm.fire(Event.SPEECH_START); o.sm.fire(Event.SPEECH_END)
+    o._run_turn(_segmento())
+
+    assert detti == ["L'infrastruttura di inferenza non risponde. Provo a "
+                     "ristabilire il collegamento."]
+    assert not any("Ollama" in d or "Error" in d for d in detti)
 
 
 def test_errore_durante_la_riproduzione_finisce_in_errore():
@@ -474,3 +499,16 @@ def test_un_errore_nel_broker_non_appende_il_turno():
     o._run_turn(_segmento())
     assert o.counters.errors == 1
     assert o.sm.state in (State.ERRORE, State.IN_ASCOLTO)
+
+
+def test_il_throughput_arriva_alle_metriche_del_turno():
+    """M7: mancava da M1. `tokens` si copiava, `tok_per_s` no: il cruscotto
+    mostrava 0 tok/s a ogni turno e NFR-3 non si poteva leggere dal log."""
+    visti = []
+    o, _ = make()
+    o.d.on_turn_end = visti.append
+    o.sm.fire(Event.PTT)
+    o.sm.fire(Event.SPEECH_START)
+    o.sm.fire(Event.SPEECH_END)
+    o._start_turn(_segmento())
+    assert visti and visti[-1].tok_per_s == 50.0

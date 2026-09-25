@@ -181,25 +181,58 @@ def split_sentences(
     return out, buf
 
 
+# M7 — LA FINESTRA DI CONTESTO E' UNA SOLA, PER TUTTE LE CHIAMATE
+# Ollama tiene in memoria il modello con UNA dimensione di contesto. Una
+# chiamata con `num_ctx` diverso lo fa ricaricare: 3,6 s misurati, su un
+# modello gia' caldo. Il router di M4 non passava `num_ctx` (default di
+# Ollama: 4096) e la conversazione passava 8192: ogni turno pagava DUE
+# ricaricamenti, ~7 s, e i comandi andavano in timeout di ELABORAZIONE.
+# Nessun banco se n'era accorto perche' ognuno misurava un percorso solo —
+# il router con il router, la conversazione con la conversazione. L'ha
+# trovato il soak, che li alterna come l'uso vero. Da qui la costante unica,
+# importata da `toolcall.py`, e un test che le confronta.
+NUM_CTX = 8192
+
+
 class LlmClient:
     def __init__(
         self,
         model: str = MODEL,
         host: str = "http://127.0.0.1:11434",
-        num_ctx: int = 8192,
+        num_ctx: int = NUM_CTX,
         temperature: float = 0.7,
     ):
         self.model = model
+        self.host = host
         self.client = ollama.Client(host=host)
         self.options = {"num_ctx": num_ctx, "temperature": temperature, "top_p": 0.9}
+        # M7 — chi libera memoria grafica quando Ollama la esaurisce. Lo
+        # imposta chi costruisce il sistema, che sa che esiste Whisper.
+        self.su_oom = None
+        self.fallimenti = 0
+        self._attendi = time.sleep            # i test lo sostituiscono
+
+    def disponibile(self, timeout: float = 2.0) -> bool:
+        """Ollama risponde? Per l'avvio robusto: non carica niente."""
+        try:
+            ollama.Client(host=self.host, timeout=timeout).list()
+            return True
+        except Exception:                          # noqa: BLE001
+            return False
 
     def warmup(self) -> float:
         """Carica il modello in VRAM. Misurato in M0: 58 s a freddo.
 
         Va fatto all'avvio, mai al primo turno dell'utente.
+
+        M7: apre lo stream direttamente, senza `_raw_stream`. Il riscaldamento
+        si usa anche quando Ollama TORNA dopo essere stato giu' — la sonda di
+        `errors.SALUTE` lo chiama proprio in quel momento — e passare da
+        `_raw_stream` vorrebbe dire trovarsi rifiutati perche' il servizio
+        risulta ancora giu'. Solleva se Ollama non risponde.
         """
         t0 = time.perf_counter()
-        for _ in self._raw_stream([{"role": "user", "content": "Ciao."}]):
+        for _ in self._apri_stream([{"role": "user", "content": "Ciao."}]):
             pass
         return (time.perf_counter() - t0) * 1000.0
 
@@ -233,9 +266,9 @@ class LlmClient:
             # muore: vedi `Memoria.compatta`.
             return ""
 
-    def _raw_stream(self, messages: list[dict]) -> Iterator[str]:
+    def _apri_stream(self, messages: list[dict]):
         try:
-            stream = self.client.chat(
+            return self.client.chat(
                 model=self.model,
                 messages=messages,
                 stream=True,
@@ -247,11 +280,57 @@ class LlmClient:
             # direttiva testuale che Qwen 3 riconosce.
             msgs = [dict(m) for m in messages]
             msgs[-1]["content"] += " /no_think"
-            stream = self.client.chat(
+            return self.client.chat(
                 model=self.model, messages=msgs, stream=True, options=self.options
             )
 
-        for chunk in stream:
+    def _raw_stream(self, messages: list[dict]) -> Iterator[str]:
+        """I pezzi del testo generato. Riprova PRIMA del primo token.
+
+        M7 — LA CONNESSIONE AVVIENE AL PRIMO `next()`
+        In streaming `chat()` ritorna subito un generatore, e l'errore di
+        connessione arriva solo quando lo si legge. Per questo si riprova
+        l'apertura PIU' la lettura del primo pezzo, insieme: riprovare solo
+        `chat()` non riproverebbe niente.
+
+        Dopo il primo token non si riprova: il TTS ha gia' cominciato a
+        parlare, e ripartire da capo ripeterebbe la meta' gia' detta.
+
+        Memoria grafica esaurita: si chiama `su_oom` — che sposta il
+        riconoscimento vocale sul processore — e si riprova una volta.
+        """
+        from metis.core.errors import SALUTE, Categoria, Esaurito, classifica, riprova
+
+        # Noto come giu': non si prova nemmeno. Vedi `errors.Salute`.
+        SALUTE.richiedi(Categoria.INFERENZA)
+        oom_gestito = False
+
+        def apri():
+            nonlocal oom_gestito
+            try:
+                it = iter(self._apri_stream(messages))
+                return it, next(it, None)
+            except Exception as exc:              # noqa: BLE001
+                if (classifica(exc) is Categoria.INFERENZA_OOM
+                        and self.su_oom is not None and not oom_gestito):
+                    oom_gestito = True
+                    self.su_oom()
+                    it = iter(self._apri_stream(messages))
+                    return it, next(it, None)
+                raise
+
+        try:
+            it, primo = riprova(apri, Categoria.INFERENZA, attendi=self._attendi)
+        except Esaurito:
+            self.fallimenti += 1
+            SALUTE.giu(Categoria.INFERENZA)
+            raise
+        SALUTE.su(Categoria.INFERENZA)
+        for chunk in ([primo] if primo is not None else []):
+            piece = chunk.get("message", {}).get("content", "")
+            if piece:
+                yield piece
+        for chunk in it:
             piece = chunk.get("message", {}).get("content", "")
             if piece:
                 yield piece

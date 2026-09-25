@@ -93,7 +93,8 @@ def test_max_chars_non_spezza_frasi_gia_brevi():
 
 
 def test_nessun_testo_perduto_con_max_chars():
-    lunga = "Prima parte della frase molto lunga, seconda parte altrettanto lunga, terza parte finale."
+    lunga = ("Prima parte della frase molto lunga, seconda parte altrettanto lunga, "
+             "terza parte finale.")
     chunk, resto = split_sentences(lunga, 25, 60)
     assert " ".join([*chunk, resto]).strip().replace("  ", " ") == lunga
 

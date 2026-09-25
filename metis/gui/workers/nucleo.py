@@ -82,19 +82,44 @@ class Nucleo(QObject):
             # Microfono assente, Ollama giu', voce non scaricata: l'utente
             # deve leggerlo in finestra, non in un traceback su un terminale
             # che con la GUI potrebbe non esserci nemmeno.
-            self.errore.emit(f"{type(exc).__name__}: {exc}")
+            # M7: la frase in persona nella finestra, il testo tecnico nel
+            # log. Prima si mostrava "ConnectionError: ..." — un traceback
+            # abbreviato, ma sempre un traceback.
+            from metis.core.errors import messaggio, tecnico
+
+            self._log.error("avvio fallito", errore=tecnico(exc))
+            self.errore.emit(messaggio(exc))
             self.finito.emit()
             return
 
         self.ciclo = CicloAudio(self.sistema.orchestrator,
-                                on_blocco=self._su_blocco)
+                                on_blocco=self._su_blocco,
+                                on_microfono=self._microfono)
         try:
             self.ciclo.esegui(
                 limite_s=self.opzioni.minutes * 60 if self.opzioni.minutes else None)
         except Exception as exc:              # noqa: BLE001
-            self.errore.emit(f"ciclo audio: {type(exc).__name__}: {exc}")
+            from metis.core.errors import messaggio, tecnico
+
+            self._log.error("ciclo audio fallito", errore=tecnico(exc))
+            self.errore.emit(messaggio(exc))
         finally:
             self.finito.emit()
+
+    def _microfono(self, ok: bool) -> None:
+        """M7 — il microfono c'e' o non c'e'. Una riga in conversazione e una
+        notifica: la voce di Metis funziona, ma senza microfono l'utente non
+        potrebbe rispondere, e il messaggio deve restare leggibile anche se
+        nessuno era li' ad ascoltare."""
+        from metis.core.errors import Categoria, messaggio
+        from metis.tools import notify
+
+        if ok:
+            self.errore.emit("Il microfono e' di nuovo disponibile.")
+            return
+        frase = messaggio(Categoria.AUDIO_INGRESSO)
+        self.errore.emit(frase)
+        notify.mostra("Metis", frase)
 
     def _su_blocco(self, blocco) -> None:
         """~31 volte al secondo: deve costare quasi niente.
@@ -171,6 +196,20 @@ class Nucleo(QObject):
         self._log.warning("kill switch",
                           capacita="SOSPESE" if sospeso else "ripristinate")
         return sospeso
+
+    def pausa(self) -> bool:
+        """M7 — commuta la pausa dell'ascolto. Ritorna lo stato risultante.
+
+        Prima che il sistema sia pronto non c'e' niente da mettere in pausa,
+        e si risponde False: la tray non deve mostrare una spunta che non
+        corrisponde a nulla.
+        """
+        if self.sistema is None:
+            return False
+        orch = self.sistema.orchestrator
+        orch.pausa(not orch.in_pausa)
+        self._log.warning("ascolto", stato="IN PAUSA" if orch.in_pausa else "ripreso")
+        return orch.in_pausa
 
     def ferma(self) -> None:
         """Esce dal ciclo al giro successivo, entro ~250 ms."""

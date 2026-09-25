@@ -70,6 +70,7 @@ import numpy as np
 
 from metis.audio.capture import Block
 from metis.audio.vad import Segment, SpeechSegmenter
+from metis.core.errors import Categoria, messaggio
 from metis.core.metrics import TurnMetrics
 from metis.core.state_machine import Event, State, StateMachine, Transition
 from metis.llm.client import CancelToken
@@ -165,6 +166,7 @@ class Counters:
     barge_ins: int = 0
     frames_to_vad: int = 0
     frames_muted: int = 0
+    frames_in_pausa: int = 0      # M7: scartati con l'ascolto in pausa
     turns: int = 0
     discarded: int = 0
     errors: int = 0
@@ -200,6 +202,7 @@ class Orchestrator:
         self._annuncio: threading.Thread | None = None
         self._lock = threading.Lock()
         self._wake_gap = False        # il rilevatore ha saltato dei frame
+        self._in_pausa = False        # M7: vedi `pausa`
         self.synchronous = False      # solo nei test: evita i thread
 
     @property
@@ -232,6 +235,14 @@ class Orchestrator:
         l'intera strategia anti-eco.
         """
         st = self.sm.state
+
+        # M7 — in pausa il microfono non arriva a nessuno, nemmeno al
+        # rilevatore di wake word: e' l'unico punto in cui lo si puo'
+        # garantire, perche' e' l'unica porta da cui entrano i frame.
+        if self._in_pausa:
+            self.counters.frames_in_pausa += 1
+            self._wake_gap = True
+            return
 
         # Il rilevatore di wake word riceve anche durante PARLATO: e' il
         # barge-in. Cerca un pattern specifico, quindi l'eco degli
@@ -290,6 +301,12 @@ class Orchestrator:
         # continuava a dire "un momento, consulto le fonti" a un utente che
         # aveva appena chiesto di smettere. L'elenco va tenuto uguale a
         # STT_MUTED meno DORMIENTE: sono gli stati in cui esce audio.
+        if self._in_pausa and st not in (State.PARLATO, State.GENERAZIONE,
+                                         State.RICERCA_WEB):
+            # In pausa il PTT resta un modo per zittire Metis, non per
+            # riaprire il microfono: una pausa che si toglie con un tasto
+            # premuto per sbaglio non e' una pausa.
+            return
         if st in (State.PARLATO, State.GENERAZIONE, State.RICERCA_WEB):
             t0 = time.perf_counter()
             self.sm.fire(evento)                   # -> INTERROTTO
@@ -365,7 +382,48 @@ class Orchestrator:
             self._stop_everything()
             if self.d.on_error is not None:
                 self.d.on_error(exc)
-            self.sm.fire(Event.FAILED)
+            self._dichiara_errore(exc)
+
+    def _dichiara_errore(self, exc: BaseException) -> None:
+        """M7 — il turno fallito DICE perche', in persona.
+
+        Fino a M6 finiva in ERRORE e Metis taceva: con Ollama spento l'utente
+        parlava e non succedeva niente, e un assistente che smette di
+        rispondere senza dire perche' sembra rotto anche quando si riprendera'
+        da solo. Adesso la frase della matrice degli errori si pronuncia. MAI
+        il testo dell'eccezione: quello e' andato nel log, con `on_error`.
+
+        La sequenza e' ERRORE -> PARLATO -> IN_ASCOLTO. Si passa a PARLATO
+        PRIMA di accodare l'audio: ERRORE non sta in STT_MUTED, e la regola
+        di M5 dice che dove esce audio il microfono e' chiuso.
+
+        Se la sintesi stessa e' il guasto, non si dice niente e si lascia
+        scadere ERRORE: c'e' poco da fare quando e' la voce che manca.
+        """
+        # Da RICERCA_WEB, FAILED porta in GENERAZIONE e serve un secondo
+        # FAILED per arrivare in ERRORE: si insiste finche' ci si arriva.
+        for _ in range(3):
+            if self.sm.state is State.ERRORE:
+                break
+            if self.sm.fire(Event.FAILED) is not State.ERRORE and \
+                    self.sm.state not in (State.GENERAZIONE, State.PARLATO):
+                break
+        if self.sm.state is not State.ERRORE:
+            return
+
+        frase = messaggio(exc)
+        if not frase:
+            return
+        try:
+            pcm = self.d.tts_synth(frase).pcm
+        except Exception:                        # noqa: BLE001
+            return
+        self.mem.aggiungi("assistant", frase)
+        self.sm.fire(Event.DONE)                 # ERRORE -> PARLATO
+        self.d.player.enqueue(pcm)
+        self.d.player.wait_drained()
+        if self.sm.state is State.PARLATO:
+            self.sm.fire(Event.PLAYBACK_DONE)
 
     # -- turno -------------------------------------------------------------
 
@@ -424,7 +482,9 @@ class Orchestrator:
             return                                   # gia' in IN_ASCOLTO
 
         if gm is not None:
-            m.tokens = gm.tokens
+            # M7: anche il throughput. Mancava da M1 — lo copiava solo lo
+            # skeleton — e il cruscotto mostrava 0 tok/s a ogni turno.
+            m.tokens, m.tok_per_s = gm.tokens, gm.tok_per_s
             m.reply = gm.text
             self.mem.aggiungi("assistant", gm.text)
         self.counters.turns += 1
@@ -539,7 +599,7 @@ class Orchestrator:
             # scenario che questo progetto esiste per evitare.
             self.counters.ricerche_degradate += 1
             self.sm.fire(Event.FAILED)                # -> GENERAZIONE
-            frase = getattr(ctx, "motivo", "") or "Le fonti non sono raggiungibili al momento."
+            frase = getattr(ctx, "motivo", "") or messaggio(Categoria.RETE)
             return self._chiudi_parlando(m, frase)
 
         with self._lock:
@@ -559,7 +619,9 @@ class Orchestrator:
             return
 
         if gm is not None:
-            m.tokens = gm.tokens
+            # M7: anche il throughput. Mancava da M1 — lo copiava solo lo
+            # skeleton — e il cruscotto mostrava 0 tok/s a ogni turno.
+            m.tokens, m.tok_per_s = gm.tokens, gm.tok_per_s
             m.reply = gm.text
             # In memoria entra la RISPOSTA, mai le fonti. Vedi la nota in
             # testa a `llm/grounding.py`: un testo ostile che restasse in
@@ -757,9 +819,42 @@ class Orchestrator:
         self.seg.reset()
         self.sm.reset()
 
+    # -- M7: pausa dell'ascolto --------------------------------------------
+
+    @property
+    def in_pausa(self) -> bool:
+        return self._in_pausa
+
+    def pausa(self, attiva: bool) -> None:
+        """Sospende wake word e VAD. Dalla tray: "Pausa ascolto".
+
+        Diversa dal kill switch, e le due cose non vanno confuse. Il kill
+        switch toglie a Metis le mani (T2/T3) e lo zittisce; la pausa gli
+        toglie le orecchie e basta. Un turno gia' in corso finisce — la
+        risposta a una domanda gia' fatta si da' — ma appena Metis
+        tornerebbe ad ascoltare, torna invece a dormire (`tick`).
+
+        Lo stream audio resta aperto: riaprirlo alla ripresa costerebbe
+        50-200 ms e a volte fallisce, esattamente come nel half-duplex.
+        """
+        self._in_pausa = attiva
+        if attiva:
+            self._chiudi_ascolto()
+
+    def _chiudi_ascolto(self) -> None:
+        """Da IN_ASCOLTO o TRASCRIZIONE a DORMIENTE, passando dalla tabella
+        delle transizioni (e quindi notificando la GUI), non da `sm.reset`."""
+        if self.sm.state is State.TRASCRIZIONE:
+            self.sm.fire(Event.NO_SPEECH)
+        if self.sm.state is State.IN_ASCOLTO:
+            self.seg.reset()
+            self.sm.fire(Event.TIMEOUT)
+
     def tick(self) -> None:
         """Da chiamare ~2 Hz: timeout degli stati e manutenzione della memoria."""
         self.sm.check_timeout()
+        if self._in_pausa:
+            self._chiudi_ascolto()
         self._forse_annuncia()
         self._forse_riassumi()
 

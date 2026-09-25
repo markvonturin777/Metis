@@ -44,9 +44,11 @@ class Telemetria(QObject):
 
             pynvml.nvmlInit()
             self._gpu = pynvml.nvmlDeviceGetHandleByIndex(0)
-        except Exception as exc:              # noqa: BLE001
+        except Exception:                     # noqa: BLE001
             # Nessuna GPU o driver assente: il resto del cruscotto funziona.
-            self.errore.emit(f"GPU non leggibile: {type(exc).__name__}")
+            # M7: niente nome d'eccezione verso l'utente, vedi `core/errors.py`.
+            self.errore.emit("La memoria grafica non e' leggibile: il cruscotto "
+                             "mostra solo processore e RAM.")
             self._gpu = None
 
         ultimo_gpu = 0.0

@@ -3,7 +3,6 @@
 Il Yeti e' nativo a 48 kHz stereo; la pipeline vuole 16 kHz mono.
 Va deciso CHI fa il resampling: il motore audio di Windows o noi.
 """
-import numpy as np
 import sounddevice as sd
 
 DEV = 15  # WASAPI - Microfono (Yeti Classic)
@@ -27,4 +26,4 @@ print(f"  high : {d['default_high_input_latency'] * 1000:.1f} ms")
 
 print("\n=== dimensione blocco per Silero VAD ===")
 print("  Silero vuole esattamente 512 campioni a 16 kHz = 32,0 ms")
-print(f"  a 48 kHz sarebbero 1536 campioni, decimati 3:1 -> 512")
+print("  a 48 kHz sarebbero 1536 campioni, decimati 3:1 -> 512")

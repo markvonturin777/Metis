@@ -3,7 +3,7 @@
 Misura il costo reale dell'endpointing, che nella specifica e' stimato
 200-300 ms ed e' il pavimento irriducibile della latenza.
 """
-import sys, time
+import sys
 import numpy as np
 from metis.audio.capture import AudioCapture
 from metis.audio.vad import SpeechSegmenter
@@ -52,7 +52,7 @@ if costs:
     print(f"  endpointing min-max: {np.min(costs):6.0f} - {np.max(costs):.0f} ms")
     print(f"  dispersione        : {np.std(costs):6.0f} ms   <-- deve essere piccola")
     print(f"  atteso teorico     : {MIN_SILENCE_MS} ms + 1 blocco = {MIN_SILENCE_MS+32} ms")
-    print(f"  budget specifica   : 200-300 ms")
+    print("  budget specifica   : 200-300 ms")
     print(f"  durata media frase : {np.mean(durs):6.2f} s")
     m = np.mean(costs)
     if m > 350:   print("  !! sopra budget: prova min_silence_ms piu' basso")

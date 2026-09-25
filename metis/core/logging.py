@@ -23,6 +23,7 @@ aiuto al debug ma parte del meccanismo di sicurezza.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import uuid
 from pathlib import Path
@@ -31,6 +32,7 @@ import structlog
 
 LOG_DIR = Path("data/logs")
 JSONL = LOG_DIR / "metis.jsonl"
+STDERR = LOG_DIR / "metis.stderr.log"
 _configured = False
 
 # I colori stanno in `metis/core/palette.py`, insieme a quelli della GUI.
@@ -75,11 +77,60 @@ def _console(logger, name, event_dict):
     return f"{head}  {rest}" if rest else head
 
 
+def garantisci_flussi(stderr_file: Path = STDERR) -> bool:
+    """M7 — senza console `sys.stdout` e `sys.stderr` sono None. Li rimpiazza.
+
+    Succede con `pythonw.exe` — quello che usa l'avvio automatico — e con un
+    bundle PyInstaller senza console. Trovato provando l'autostart: la prima
+    riga di log faceva `TypeError: cannot create weak reference to
+    'NoneType'` dentro structlog, e Metis moriva a ogni accesso senza una
+    finestra, senza un log, senza niente.
+
+    stdout va nel nulla: la console e' un doppione del JSONL, che resta.
+    stderr va su file, perche' e' dove finiscono i traceback che nessuno ha
+    previsto — proprio quelli che, senza console, sarebbero invisibili.
+
+    Ritorna True se ha dovuto rimpiazzare qualcosa.
+    """
+    rimpiazzati = False
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, "w", encoding="utf-8")
+        _anche_il_descrittore(sys.stdout, 1)
+        rimpiazzati = True
+    if sys.stderr is None:
+        try:
+            stderr_file.parent.mkdir(parents=True, exist_ok=True)
+            sys.stderr = stderr_file.open("a", encoding="utf-8", buffering=1)
+        except OSError:
+            sys.stderr = open(os.devnull, "w", encoding="utf-8")
+        _anche_il_descrittore(sys.stderr, 2)
+        rimpiazzati = True
+    return rimpiazzati
+
+
+def _anche_il_descrittore(f, fd: int) -> None:
+    """Il descrittore di sistema, non solo l'oggetto Python.
+
+    Rimpiazzare `sys.stdout` basta a Python, non alle librerie native —
+    CTranslate2, onnxruntime, PortAudio — che scrivono direttamente sui
+    descrittori 1 e 2. Sotto pythonw quei descrittori non esistono, e il
+    runtime C tratta la scrittura come un parametro invalido: il processo
+    termina con 0xC0000409, senza traceback. Misurato cosi', con la sola
+    correzione Python: GUI avviata, nucleo mai pronto, processo morto.
+    """
+    try:
+        f.flush()
+        os.dup2(f.fileno(), fd)
+    except (OSError, ValueError):
+        pass
+
+
 def configure(level: str = "INFO", jsonl: bool = True, console: bool = True) -> None:
     """Idempotente: chiamarla piu' volte non duplica i sink."""
     global _configured
     if _configured:
         return
+    garantisci_flussi()
 
     procs = [
         structlog.contextvars.merge_contextvars,

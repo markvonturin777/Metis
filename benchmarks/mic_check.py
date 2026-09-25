@@ -24,7 +24,8 @@ def listen(seconds: float, label: str) -> tuple[np.ndarray, np.ndarray, int]:
         for b in cap.blocks(timeout=1.0):
             rms.append(b.rms_dbfs); peak.append(b.peak_dbfs)
             if time.time() - last > 0.1:
-                print(f"\r  {bar(b.rms_dbfs)}  rms {b.rms_dbfs:6.1f}  peak {b.peak_dbfs:6.1f} dBFS", end="")
+                print(f"\r  {bar(b.rms_dbfs)}  rms {b.rms_dbfs:6.1f}  "
+                      f"peak {b.peak_dbfs:6.1f} dBFS", end="")
                 last = time.time()
             if time.time() > t_end:
                 break
@@ -75,7 +76,7 @@ print(f"  VOCE rms p95                   : {voice_p95:6.1f} dBFS")
 print(f"  picco assoluto                 : {peak_max:6.1f} dBFS")
 print(f"  margine prima del clipping     : {headroom:6.1f} dB")
 print(f"  fattore di cresta              : {crest:6.1f} dB   (normale 12-18)")
-print(f"  obiettivo picco                :  -12.0 .. -6.0 dBFS")
+print("  obiettivo picco                :  -12.0 .. -6.0 dBFS")
 print(f"  SNR reale                      : {snr:6.1f} dB")
 print(f"  blocchi persi                  : {d1 + d2}")
 
@@ -88,7 +89,9 @@ if peak_max > -3.0:
 elif peak_max > -6.0:
     print(f"  ~  Margine stretto ({headroom:.1f} dB). Abbassa il guadagno di un filo.")
 if voice_rms < -35:
-    print(f"  ~  Voce debole ({voice_rms:.0f} dBFS rms). Alza il guadagno o avvicinati."); ok = False
+    print(f"  ~  Voce debole ({voice_rms:.0f} dBFS rms). "
+          "Alza il guadagno o avvicinati.")
+    ok = False
 elif voice_rms > -14:
     print(f"  ~  Voce molto forte ({voice_rms:.0f} dBFS rms).")
 if crest > 25:

@@ -20,6 +20,7 @@ Scelte e motivi:
 
 from __future__ import annotations
 
+import threading
 import time
 import tomllib
 from dataclasses import dataclass
@@ -78,7 +79,31 @@ class WhisperEngine:
         # Il vocabolario di dominio e' attivo PER DEFAULT: senza, 'Metis'
         # diventa 'Mattis'. Passare None per disattivarlo esplicitamente.
         self.domain_prompt = load_domain_prompt() if domain_prompt is ... else domain_prompt
+        self.device = device
         self.model = WhisperModel(model_size, device=device, compute_type=compute_type)
+        self._lock = threading.Lock()
+
+    def su_cpu(self) -> bool:
+        """M7 — sposta il riconoscimento vocale sul processore. Ritorna True
+        se l'ha spostato adesso.
+
+        Si usa quando la memoria grafica finisce: Ollama in OOM, oppure un
+        altro processo che si prende la VRAM. Whisper `small` occupa ~0,5 GB
+        di VRAM; sul processore trascrive piu' lentamente — un secondo circa
+        per frase invece di qualche centinaio di millisecondi — ma trascrive,
+        e il modello linguistico, che senza GPU non vivrebbe, resta dov'e'.
+
+        Il nuovo modello si carica PRIMA di rilasciare il vecchio e lo scambio
+        avviene sotto lock: una trascrizione in corso finisce sul modello che
+        stava usando, invece di trovarsi il pavimento sfilato da sotto.
+        """
+        if self.device == "cpu":
+            return False
+        nuovo = WhisperModel(self.model_size, device="cpu", compute_type="int8")
+        with self._lock:
+            vecchio, self.model, self.device = self.model, nuovo, "cpu"
+        del vecchio
+        return True
 
     def warmup(self) -> float:
         """Prima trascrizione: carica i pesi in VRAM e compila i kernel.
@@ -99,16 +124,17 @@ class WhisperEngine:
         """
         prompt = self.domain_prompt if initial_prompt is ... else initial_prompt
         t0 = time.perf_counter()
-        segments, info = self.model.transcribe(
-            pcm,
-            language=self.language,
-            beam_size=1,
-            vad_filter=False,
-            condition_on_previous_text=False,
-            initial_prompt=prompt,
-        )
-        # transcribe() e' pigro: il lavoro avviene consumando il generatore.
-        segs = list(segments)
+        with self._lock:                # vedi `su_cpu`: lo scambio del modello
+            segments, info = self.model.transcribe(
+                pcm,
+                language=self.language,
+                beam_size=1,
+                vad_filter=False,
+                condition_on_previous_text=False,
+                initial_prompt=prompt,
+            )
+            # transcribe() e' pigro: il lavoro avviene consumando il generatore.
+            segs = list(segments)
         latency = (time.perf_counter() - t0) * 1000.0
 
         text = " ".join(s.text.strip() for s in segs).strip()

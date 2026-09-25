@@ -49,6 +49,8 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
+from metis.core.errors import MATRICE, Categoria
+
 # --- budget del contesto ------------------------------------------------------
 
 # §1.3 del piano, con una correzione: il system prompt definitivo misura 640
@@ -194,7 +196,7 @@ ISTRUZIONE = (
     "risposta, dillo."
 )
 
-SENZA_FONTI = "Le fonti non sono raggiungibili al momento."
+SENZA_FONTI = MATRICE[Categoria.RETE].messaggio          # M7: una frase sola, la matrice
 
 
 @dataclass

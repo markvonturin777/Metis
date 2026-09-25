@@ -24,6 +24,12 @@ LE SCORCIATOIE GLOBALI ARRIVANO DA UN TERZO THREAD
 `pynput` chiama da un thread suo. Quel callback non tocca widget: chiama i
 metodi del nucleo, che sono sicuri, e per aggiornare l'interfaccia emette un
 segnale come tutti gli altri.
+
+M7 — LA TRAY
+Con l'area di notifica disponibile, chiudere una finestra la nasconde e
+Metis resta vivo nella tray; si esce solo da "Esci". Senza tray (una sessione
+remota, un desktop minimale) resta il comportamento di prima: chiudere
+l'ultima finestra e' uscire. Vedi `metis/gui/tray.py`.
 """
 
 from __future__ import annotations
@@ -33,6 +39,18 @@ import sys
 import warnings
 
 warnings.filterwarnings("ignore")
+
+# M7 — prima di tutto il resto, in quest'ordine. La cartella di lavoro, perche'
+# il bundle puo' partire da dist\Metis dove config/ non c'e' (`fissa_radice`).
+# Poi i flussi: con `pythonw` e con il bundle non c'e' console, e qualunque
+# import che scriva su stderr cadrebbe (`garantisci_flussi`).
+from metis.core.radice import fissa_radice  # noqa: E402
+
+fissa_radice()
+
+from metis.core.logging import garantisci_flussi  # noqa: E402
+
+garantisci_flussi()
 
 # PRIMA DI QT, E NON E' UNA PREFERENZA DI STILE.
 # Il contesto DPI di un processo si fissa al primo uso e poi non cambia
@@ -47,8 +65,8 @@ from metis.tools.display import set_dpi_awareness  # noqa: E402
 
 DPI_PER_MONITOR = set_dpi_awareness()
 
-from PySide6.QtCore import QObject, QThread, QTimer, Signal, Slot  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
+from PySide6.QtCore import QEvent, QObject, QThread, QTimer, Signal, Slot  # noqa: E402
+from PySide6.QtWidgets import QApplication, QSystemTrayIcon  # noqa: E402
 
 from metis.audio.ptt import (  # noqa: E402
     DEFAULT_HOTKEY,
@@ -61,6 +79,7 @@ from metis.gui.conferma import PonteConferma  # noqa: E402
 from metis.gui.fullscreen_view import FullscreenView  # noqa: E402
 from metis.gui.lag import MisuratoreLag  # noqa: E402
 from metis.gui.minimal_view import MinimalView  # noqa: E402
+from metis.gui.tray import IconaTray  # noqa: E402
 from metis.gui.widgets.conferma import DialogoConferma  # noqa: E402
 from metis.gui.widgets.conversazione import Conversazione  # noqa: E402
 from metis.gui.widgets.telemetria import Telemetria as CruscottoTelemetria  # noqa: E402
@@ -72,6 +91,7 @@ class Segnali(QObject):
     """Ponte per chi non e' Qt: il thread delle scorciatoie globali."""
 
     kill_cambiato = Signal(bool)
+    pausa_cambiata = Signal(bool)
 
 
 class Applicazione(QObject):
@@ -94,7 +114,8 @@ class Applicazione(QObject):
     uno che emette da un thread vero e controlla dove atterra.
     """
 
-    def __init__(self, opzioni: Opzioni, fullscreen: bool = False):
+    def __init__(self, opzioni: Opzioni, fullscreen: bool = False,
+                 tray: bool | None = None):
         super().__init__()
         self.opzioni = opzioni
         self.log = get_logger()
@@ -126,6 +147,20 @@ class Applicazione(QObject):
 
         self.lag = MisuratoreLag()
         self.segnali = Segnali()
+
+        # --- M7: tray ------------------------------------------------------
+        # `tray=None` vuol dire "se c'e' l'area di notifica". I test la
+        # forzano, in un senso o nell'altro.
+        if tray is None:
+            tray = QSystemTrayIcon.isSystemTrayAvailable()
+        self.tray: IconaTray | None = IconaTray(self) if tray else None
+        self._avvisato_tray = False
+        self._vista_attiva = "fullscreen" if fullscreen else "minimal"
+        if self.tray is not None:
+            self.qt.setQuitOnLastWindowClosed(False)
+            for vista in (self.minimal, self.fullscreen):
+                vista.installEventFilter(self)
+
         self._collega()
         self._scorciatoie()
 
@@ -167,6 +202,17 @@ class Applicazione(QObject):
         self.segnali.kill_cambiato.connect(self.fullscreen.imposta_kill)
         self.lag.freeze.connect(self._freeze)
 
+        if self.tray is not None:
+            t = self.tray
+            t.chiede_minimal.connect(self.mostra_minimal)
+            t.chiede_fullscreen.connect(self.mostra_fullscreen)
+            t.chiede_kill.connect(self._kill)
+            t.chiede_pausa.connect(self._pausa)
+            t.chiede_uscita.connect(self.esci)
+            t.cliccata.connect(self.riporta)
+            self.segnali.kill_cambiato.connect(t.imposta_kill)
+            self.segnali.pausa_cambiata.connect(t.imposta_pausa)
+
     def _scorciatoie(self) -> None:
         self.hotkeys = GlobalHotkeys()
         # Chiamate dal thread di pynput: toccano il nucleo, che e' sicuro,
@@ -180,6 +226,8 @@ class Applicazione(QObject):
     def _stato(self, da: str, evento: str, a: str) -> None:
         self.minimal.imposta_stato(a)
         self.fullscreen.imposta_stato(a)
+        if self.tray is not None:
+            self.tray.imposta_stato(a)
 
     @Slot(str, bool)
     def _trascritto(self, testo: str, sospetto: bool) -> None:
@@ -209,11 +257,15 @@ class Applicazione(QObject):
 
     @Slot(str)
     def _errore(self, testo: str) -> None:
-        self.conversazione.sistema(f"errore: {testo}")
+        # Il testo arriva gia' in persona dalla matrice degli errori: niente
+        # prefisso "errore:", che lo farebbe sembrare un messaggio di sistema.
+        self.conversazione.sistema(testo)
 
     @Slot(float)
     def _freeze(self, ms: float) -> None:
-        self.log.warning("freeze interfaccia", ms=round(ms))
+        # M7: con la fase, perche' NFR-8 si giudica sull'esercizio e la
+        # verifica (tests/nfr) legge il log, non il riassunto a video.
+        self.log.warning("freeze interfaccia", ms=round(ms), fase=self.lag.fase)
 
     @Slot()
     def _ptt(self) -> None:
@@ -249,6 +301,15 @@ class Applicazione(QObject):
         sospeso = self.nucleo.kill_switch()
         self.segnali.kill_cambiato.emit(sospeso)
 
+    @Slot()
+    def _pausa(self) -> None:
+        # Chiamata diretta, come il PTT: il thread del nucleo e' occupato dal
+        # ciclo audio e uno slot in coda non partirebbe mai.
+        in_pausa = self.nucleo.pausa()
+        self.segnali.pausa_cambiata.emit(in_pausa)
+        self.conversazione.sistema("Ascolto in pausa." if in_pausa
+                                   else "Ascolto ripreso.")
+
     @Slot(str, str, dict, float)
     def _mostra_conferma(self, strumento: str, tier: str, argomenti: dict,
                          timeout_s: float) -> None:
@@ -274,15 +335,46 @@ class Applicazione(QObject):
 
     @Slot()
     def mostra_minimal(self) -> None:
+        self._vista_attiva = "minimal"
         self.fullscreen.hide()
         self.minimal.show()
         self.minimal.raise_()
 
     @Slot()
     def mostra_fullscreen(self) -> None:
+        self._vista_attiva = "fullscreen"
         self.minimal.hide()
         self.fullscreen.show()
         self.fullscreen.raise_()
+
+    @Slot()
+    def riporta(self) -> None:
+        """Clic sull'icona: torna l'ultima vista usata, in primo piano."""
+        vista = self.fullscreen if self._vista_attiva == "fullscreen" else self.minimal
+        if vista.isVisible() and not vista.isMinimized():
+            vista.raise_()
+            vista.activateWindow()
+            return
+        self.mostra_fullscreen() if vista is self.fullscreen else self.mostra_minimal()
+        vista.showNormal()
+        vista.activateWindow()
+
+    def eventFilter(self, oggetto, evento) -> bool:
+        # La X di una vista con la tray presente: la finestra si nasconde (lo
+        # fa Qt, qui si lascia passare l'evento) e la prima volta si avvisa,
+        # perche' un programma che "non si chiude" sembra un programma rotto.
+        if (evento.type() == QEvent.Type.Close and self.tray is not None
+                and not self._avvisato_tray):
+            self._avvisato_tray = True
+            self.tray.avvisa("Resto nell'area di notifica. Per uscire: Esci, "
+                             "dal menu dell'icona.")
+        return False
+
+    @Slot()
+    def esci(self) -> None:
+        """L'unica uscita con la tray presente. Passa da `aboutToQuit`, cioe'
+        da `chiudi`: vedi la nota in testa a `tray.py`."""
+        self.qt.quit()
 
     # -- ciclo di vita -----------------------------------------------------
 
@@ -292,12 +384,19 @@ class Applicazione(QObject):
         self.thread_nucleo.start()
         self.thread_telemetria.start()
         self.hotkeys.start()
+        if self.tray is not None:
+            self.tray.mostra()
         self.qt.aboutToQuit.connect(self.chiudi)
         codice = self.qt.exec()
         print("\n  " + self.lag.riassunto())
         return codice
 
     def chiudi(self) -> None:
+        # L'icona per prima: se resta, Windows la lascia nell'area di notifica
+        # finche' il mouse non ci passa sopra — un fantasma che sembra Metis
+        # ancora vivo.
+        if self.tray is not None:
+            self.tray.nascondi()
         self.lag.ferma()
         self.hotkeys.stop()
         self.minimal.salva_posizione()

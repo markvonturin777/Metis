@@ -81,8 +81,16 @@ _SOSPETTA = re.compile(
 
 # Valori di prova dichiarati come tali nei test e nelle fixture: sono finti per
 # costruzione e servono a far girare la suite.
+#
+# M7: la lista era piu' corta, e il test passava lo stesso — perche' scorre
+# i file TRACCIATI, e quando e' stato scritto i file di test di M6 non erano
+# ancora stati committati. Dopo il commit li ha visti. Erano tutti valori
+# finti; ma e' la prova che il test guarda cio' che sta nel repository, non
+# cio' che sta sul disco.
 _DI_PROVA = {"password-di-prova-per-app", "token-di-prova", "segretissima",
-             "token-sbagliato"}
+             "token-sbagliato", "sbagliata",
+             # i tre del meta-test qui sotto, scritti apposta per essere presi
+             "abcd1234", "abcd1234efgh", "eyJhbGciOiJIUzI1NiJ9"}
 
 
 def test_nessuna_credenziale_nel_repository():
