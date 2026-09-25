@@ -120,6 +120,10 @@ si leggono in Home Assistant → Impostazioni → Dispositivi ed entità. Un dis
 
 ## 5. Avvio
 
+Il modo più semplice è un doppio clic su **`Metis.bat`** nella radice del progetto: parte
+senza console. `Metis.bat --console` tiene aperta la finestra con i log, per quando qualcosa
+non parte; le altre opzioni (`--fullscreen`, `--no-tools`, …) passano all'applicazione.
+
 ```powershell
 .venv\Scripts\python.exe -m metis.gui.app                # overlay minimal
 .venv\Scripts\python.exe -m metis.gui.app --fullscreen   # control room

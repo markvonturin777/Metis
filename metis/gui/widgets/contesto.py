@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from metis.gui.testo import elastica, per_etichetta, url_breve
 from metis.llm.grounding import BUDGET, CONTESTO_MAX
 
 # Un colore per voce del budget. Gli stessi nomi delle chiavi di
@@ -87,16 +88,17 @@ class PannelloContesto(QWidget):
         self.legenda.setTextFormat(Qt.RichText)
         radice.addWidget(self.legenda)
 
-        self.slot = QLabel("—")
-        self.slot.setWordWrap(True)
+        # Slot e fonti portano testo che arriva da fuori: vedi
+        # `metis/gui/testo.py` sul link di 1500 caratteri che allargava la
+        # finestra oltre lo schermo.
+        self.slot = elastica(QLabel("—"))
         self.slot.setAlignment(Qt.AlignTop)
         self.slot.setStyleSheet(
             "background: #0b1220; border: 1px solid #1e293b; border-radius: 6px;"
             " padding: 8px; font-size: 11px; color: #cbd5e1;")
         radice.addWidget(self.slot)
 
-        self.fonti = QLabel("—")
-        self.fonti.setWordWrap(True)
+        self.fonti = elastica(QLabel("—"))
         self.fonti.setAlignment(Qt.AlignTop)
         self.fonti.setStyleSheet(
             "background: #0b1220; border: 1px solid #1e293b; border-radius: 6px;"
@@ -126,14 +128,18 @@ class PannelloContesto(QWidget):
             f"CONTESTO  {totale} / {CONTESTO_MAX} token  "
             f"({occupato * 100:.0f}% dello spazio utile){coda}")
 
-        self.slot.setText(stato.get("slot") or "nessun riferimento attivo")
+        self.slot.setText(per_etichetta(stato.get("slot") or "nessun riferimento attivo"))
 
         fonti = stato.get("fonti") or []
         if fonti:
             self.fonti.setText("FONTI DELL'ULTIMO TURNO — contenuto non fidato\n"
-                               + "\n".join(f"{i}. {u}" for i, u in enumerate(fonti, 1)))
+                               + "\n".join(f"{i}. {url_breve(u)}"
+                                            for i, u in enumerate(fonti, 1)))
+            # Gli URL interi restano a portata di mouse.
+            self.fonti.setToolTip("\n".join(fonti))
         else:
             self.fonti.setText("nessuna fonte nell'ultimo turno")
+            self.fonti.setToolTip("")
 
     def _barra(self, conteggio: dict, totale: int) -> None:
         utile = max(1, CONTESTO_MAX - BUDGET["risposta"])

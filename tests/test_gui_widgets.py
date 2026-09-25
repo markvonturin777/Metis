@@ -511,7 +511,7 @@ def test_il_pannello_contesto_mostra_le_voci_del_budget(app_qt):
                 "fonti": ["https://a.it/x", "https://b.it/y"], "riassunti": 2})
     assert "4940" in p.totale.text() and "2 riassunti" in p.totale.text()
     assert "Chrome" in p.slot.text()
-    assert "https://b.it/y" in p.fonti.text()
+    assert "b.it/y" in p.fonti.text() and "https://b.it/y" in p.fonti.toolTip()
     assert "web 3400" in p.legenda.text()
 
 
@@ -700,3 +700,54 @@ def test_il_pannello_contesto_non_blocca_l_interfaccia(app_qt):
         peggiore = max(peggiore, (time.perf_counter() - t0) * 1000)
 
     assert peggiore < 100.0, f"{peggiore:.0f} ms per aggiornamento: NFR-8"
+
+
+# --- M7: testo lungo che allargava la finestra -------------------------------------
+
+LINK_BING = ("https://www.bing.com/aclick?ld=e8" + "7G1qS5Cs3bZcU-1FQBLKqTVUCUwj8UNEw" * 45
+             + "&u=aHR0cHM6Ly9jaC5qb29ibGUub3JnL2l0")
+
+
+def test_url_breve_tiene_dominio_e_inizio():
+    from metis.gui.testo import url_breve
+
+    b = url_breve(LINK_BING)
+    assert b.startswith("bing.com/aclick?ld=") and b.endswith("…")
+    assert len(b) <= 70
+    assert url_breve("https://ch.jooble.org/it/") == "ch.jooble.org/it"
+
+
+def test_le_parole_lunghe_diventano_spezzabili():
+    from metis.gui.testo import ZWSP, spezzabile
+
+    s = spezzabile("corto " + "x" * 100)
+    assert s.startswith("corto ") and s.count(ZWSP) == 2
+    assert spezzabile("niente da spezzare qui") == "niente da spezzare qui"
+
+
+def test_un_link_enorme_non_allarga_la_control_room(app_qt):
+    """Il caso reale: annunci di lavoro cercati dalla control room, un link
+    di tracciamento di Bing fra le fonti e negli slot. La finestra si
+    allargava oltre lo schermo e la conversazione finiva a una lettera per
+    riga. La larghezza minima non deve dipendere dal testo mostrato."""
+    from metis.gui.fullscreen_view import FullscreenView
+    from metis.gui.widgets.conversazione import Conversazione
+    from metis.gui.widgets.telemetria import Telemetria
+
+    v = FullscreenView(Conversazione(), Telemetria())
+    v.resize(1400, 900)
+    v.show()              # senza show il layout non si ricalcola e il test non vede niente
+    try:
+        app_qt.processEvents()
+        conv = v.conversazione.width()
+        v.contesto.aggiorna({"slot": f"[CONTESTO CORRENTE]\nUltima fonte: {LINK_BING}",
+                             "fonti": [LINK_BING, "https://ch.jooble.org/it/"]})
+        v.imposta_corrente(f"Ecco il link: {LINK_BING}")
+        for _ in range(20):
+            app_qt.processEvents()
+        # Misurato senza la correzione: finestra a 11 767 px, conversazione a 102.
+        assert v.width() == 1400
+        assert v.conversazione.width() == conv
+        assert v.contesto.fonti.toolTip().startswith(LINK_BING)   # l'URL intero c'e' ancora
+    finally:
+        v.hide()

@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from metis.core.palette import esadecimale
+from metis.gui.testo import elastica, per_etichetta
 from metis.gui.widgets.audit import VistaAudit
 from metis.gui.widgets.comandi import PannelloComandi
 from metis.gui.widgets.contesto import PannelloContesto
@@ -138,8 +139,9 @@ class FullscreenView(QWidget):
         self.vu = VuMeter()
         lay.addWidget(self.vu)
 
-        self.corrente = QLabel("—")
-        self.corrente.setWordWrap(True)
+        # Elastica: una risposta con un URL lungo non deve allargare la
+        # colonna. Vedi `metis/gui/testo.py`.
+        self.corrente = elastica(QLabel("—"))
         self.corrente.setAlignment(Qt.AlignTop)
         self.corrente.setStyleSheet(
             "background: #0b1220; border: 1px solid #1e293b; border-radius: 6px;"
@@ -169,7 +171,7 @@ class FullscreenView(QWidget):
 
     @Slot(str)
     def imposta_corrente(self, testo: str) -> None:
-        self.corrente.setText(testo or "—")
+        self.corrente.setText(per_etichetta(testo or "—"))
 
     @Slot(bool)
     def imposta_kill(self, sospeso: bool) -> None:

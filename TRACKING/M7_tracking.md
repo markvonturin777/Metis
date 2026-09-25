@@ -293,6 +293,7 @@ presa sui numeri delle 100 interazioni reali.
 | 8 | Tre copie della frase "fonti non raggiungibili", nessuna era quella della matrice | `Categoria.RETE` definita e mai usata | Una frase sola, dalla matrice |
 | 9 | **Il bundle non trovava cuBLAS** | `nvidia` è un namespace package: nel bundle `import nvidia` fallisce, le cartelle delle DLL non si registravano, e le DLL non erano nemmeno raccolte. Whisper non partiva | Lo spec copia `nvidia/*/bin` in `_internal`, `cuda_libs` le cerca lì quando è congelato |
 | 10 | La DLL di `uiautomation` non era nel bundle | Caricata con ctypes da `uiautomation/bin`: PyInstaller la segnala e non la prende. L'automazione delle finestre di M4 non sarebbe partita | Aggiunta esplicitamente nello spec |
+| 11 | **Un link lungo allargava la control room oltre lo schermo** | Trovato dall'utente cercando annunci di lavoro: un link di tracciamento di Bing (~1500 caratteri, senza spazi) fra fonti e slot. Una `QLabel` va a capo solo sugli spazi: finestra da 1400 a 11 767 px, conversazione da 665 a 102 px | `metis/gui/testo.py`: URL mostrati come dominio + inizio (intero nel tooltip), parole lunghe spezzabili, etichette che non impongono la larghezza. Test a finestra visibile: senza `show()` il layout non si ricalcola e il difetto non si vede |
 
 ---
 
