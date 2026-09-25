@@ -3,7 +3,7 @@
 | | |
 | :-- | :-- |
 | **Stato** | ✅ Chiusa |
-| **Piano** | [M2_Capability_Broker.md](../SPECS/plan/M2_Capability_Broker.md) |
+| **Piano** | [M2_Capability_Broker.md](../plan/M2_Capability_Broker.md) |
 | **Durata prevista** | 8 giorni |
 | **Inizio** | 2026-09-21 |
 | **Fine** | 2026-09-21 |

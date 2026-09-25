@@ -3,7 +3,7 @@
 | | |
 | :-- | :-- |
 | **Stato** | ✅ Chiusa |
-| **Piano** | [M1_Fondamenta_Vocali.md](../SPECS/plan/M1_Fondamenta_Vocali.md) |
+| **Piano** | [M1_Fondamenta_Vocali.md](../plan/M1_Fondamenta_Vocali.md) |
 | **Durata prevista** | 8 giorni |
 | **Inizio** | 2026-09-21 |
 | **Fine** | 2026-09-21 |

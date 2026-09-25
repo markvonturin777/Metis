@@ -3,7 +3,7 @@
 | | |
 | :-- | :-- |
 | **Stato** | ✅ Chiusa |
-| **Piano** | [M5_Conoscenza.md](../SPECS/plan/M5_Conoscenza.md) |
+| **Piano** | [M5_Conoscenza.md](../plan/M5_Conoscenza.md) |
 | **Durata prevista** | 8 giorni |
 | **Inizio** | 2026-09-22 |
 | **Fine** | 2026-09-22 |

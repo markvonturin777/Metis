@@ -17,7 +17,7 @@
 > V1.0 passa dal push-to-talk e percorre lo stesso codice.
 >
 > Decisione completa: [§21 della specifica](../Metis_V1.0_Specifica_Ufficiale.md) ·
-> misure: [TRACKING/M1_tracking.md](../../TRACKING/M1_tracking.md)
+> misure: [TRACKING/M1_tracking.md](../TRACKING/M1_tracking.md)
 
 
 > **Maturità:** P1 Attento · **Durata:** 1,5 settimane (8 giorni) · **Tag:** `m1-voice`

@@ -3,7 +3,7 @@
 | | |
 | :-- | :-- |
 | **Stato** | 🔄 Codice completo — verifiche sui servizi veri aperte |
-| **Piano** | [M6_Integrazioni.md](../SPECS/plan/M6_Integrazioni.md) |
+| **Piano** | [M6_Integrazioni.md](../plan/M6_Integrazioni.md) |
 | **Durata prevista** | 8 giorni |
 | **Inizio** | 2026-09-23 |
 | **Fine** | — |

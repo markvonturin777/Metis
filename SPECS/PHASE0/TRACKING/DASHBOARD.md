@@ -1,7 +1,7 @@
 # Metis — Dashboard di Avanzamento
 
 > Stato vivo del progetto. Si aggiorna mentre si lavora.
-> Riferimento: [Specifica V1.0](../SPECS/Metis_V1.0_Specifica_Ufficiale.md) · [Piano](../SPECS/plan/README.md)
+> Riferimento: [Specifica V1.0](../Metis_V1.0_Specifica_Ufficiale.md) · [Piano](../plan/README.md)
 
 **Ultimo aggiornamento:** 2026-09-25 — **M7: codice e strumenti pronti, prove lunghe aperte.** Matrice degli errori, tray, autostart, soak, verifica NFR, bundle provato su cartella pulita. Il soak breve ha trovato un difetto presente da M4 — Ollama ricaricava il modello due volte per turno — e le latenze sono scese da 5,8–15 s a 1,3–2,4 s
 
@@ -11,8 +11,8 @@
 
 | Cartella | Natura | Si modifica |
 | :-- | :-- | :-- |
-| [`SPECS/`](../SPECS/) | Specifica e piano — **come si fa** | Raramente, per decisioni |
-| `TRACKING/` | Stato — **a che punto sei** | Continuamente |
+| [`SPECS/PHASE0/plan/`](../plan/) e la [specifica](../Metis_V1.0_Specifica_Ufficiale.md) | Specifica e piano — **come si fa** | Raramente, per decisioni |
+| `SPECS/PHASE0/TRACKING/` | Stato — **a che punto sei** | Continuamente |
 
 Un file per iterazione. Ogni file ha: prerequisiti, attività spuntabili, misure da registrare, criteri di uscita, decision gate, registro problemi e diario.
 
@@ -40,7 +40,7 @@ Un file per iterazione. Ogni file ha: prerequisiti, attività spuntabili, misure
 Tutto il codice di M7 è scritto e verificato. Mancano le prove che chiedono
 tempo o la voce dell'utente: 72 ore di soak, 100 interazioni reali (NFR-1/2/3),
 50 frasi registrate (NFR-5), l'autostart provato con un riavvio vero,
-l'installazione da zero con [docs/INSTALL.md](../docs/INSTALL.md). I comandi
+l'installazione da zero con [docs/INSTALL.md](../../../docs/INSTALL.md). I comandi
 sono in [M7 §5](M7_tracking.md). **NFR-1 è a rischio** (M7 §4.1).
 
 **M6 in pausa** per scelta: Home Assistant, account SMTP e riavvio vero

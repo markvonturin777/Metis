@@ -3,7 +3,7 @@
 | | |
 | :-- | :-- |
 | **Stato** | ✅ **Completata** |
-| **Piano** | [M0_Walking_Skeleton.md](../SPECS/plan/M0_Walking_Skeleton.md) |
+| **Piano** | [M0_Walking_Skeleton.md](../plan/M0_Walking_Skeleton.md) |
 | **Durata prevista** | 7 giorni |
 | **Inizio** | 2026-09-20 |
 | **Fine** | 2026-09-20 |
@@ -470,7 +470,7 @@ l'anno), *"Gnocchi fatti a mano, pasta frolla..."* (la pasta frolla non c'entra)
 | **Motore TTS definitivo** | Giudizio di ascolto §4 | ✅ **Piper `it_IT-paola-medium`** | 102 ms contro gli 858 di Kokoro |
 | **Budget di latenza** | p50 < 1,5 s (tolleranza M0) | ✅ **confermato** | p50 1119 ms su 40 turni, ~830 atteso dopo le correzioni |
 
-Se un criterio non passa, la leva è in [M0 §7](../SPECS/plan/M0_Walking_Skeleton.md#7-decision-gate-d0).
+Se un criterio non passa, la leva è in [M0 §7](../plan/M0_Walking_Skeleton.md#7-decision-gate-d0).
 
 ---
 

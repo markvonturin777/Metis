@@ -250,9 +250,9 @@ def verdict(ok: bool) -> str:
 
 
 def print_table(reports: list[ModelReport], vram_total: float) -> None:
-    """Stampa la tabella gia' nel formato di TRACKING/M0_tracking.md §3.1."""
+    """Stampa la tabella gia' nel formato di SPECS/PHASE0/TRACKING/M0_tracking.md §3.1."""
     print(f"\n\n{'=' * 70}")
-    print("  RISULTATI — da incollare in TRACKING/M0_tracking.md §3.1")
+    print("  RISULTATI — da incollare in SPECS/PHASE0/TRACKING/M0_tracking.md §3.1")
     print(f"{'=' * 70}\n")
 
     head = "| Metrica | Target | " + " | ".join(r.model for r in reports) + " | Esito |"
@@ -276,7 +276,7 @@ def print_table(reports: list[ModelReport], vram_total: float) -> None:
     print(f"\nVRAM totale della scheda: {vram_total:.2f} GB")
     print("\nNota: questi numeri coprono SOLO l'LLM. In M0 giorno 3 va aggiunta")
     print("la VRAM dello STT (faster-whisper small, stima ~0,6 GB) per avere")
-    print("il budget reale di TRACKING/M0_tracking.md §3.3.\n")
+    print("il budget reale di SPECS/PHASE0/TRACKING/M0_tracking.md §3.3.\n")
 
 
 def main() -> None:

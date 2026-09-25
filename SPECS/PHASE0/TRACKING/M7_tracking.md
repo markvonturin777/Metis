@@ -3,7 +3,7 @@
 | | |
 | :-- | :-- |
 | **Stato** | 🔄 Codice e strumenti pronti — le prove lunghe e quelle con l'utente sono aperte |
-| **Piano** | [M7_Consolidamento_V1.md](../SPECS/plan/M7_Consolidamento_V1.md) |
+| **Piano** | [M7_Consolidamento_V1.md](../plan/M7_Consolidamento_V1.md) |
 | **Durata prevista** | 8 giorni |
 | **Inizio** | dopo il commit di M6 (2026-09-23) |
 | **Fine** | — |

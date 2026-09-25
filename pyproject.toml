@@ -51,7 +51,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-# Senza questo, l'autodiscovery scambia SPECS/, TRACKING/, Claude/ e config/
+# Senza questo, l'autodiscovery scambia SPECS/, Claude/, config/ e docs/
 # per pacchetti Python e rifiuta di procedere.
 include = ["metis*"]
 

@@ -3,7 +3,7 @@
 | | |
 | :-- | :-- |
 | **Stato** | ✅ Chiusa |
-| **Piano** | [M3_Interfaccia_Grafica.md](../SPECS/plan/M3_Interfaccia_Grafica.md) |
+| **Piano** | [M3_Interfaccia_Grafica.md](../plan/M3_Interfaccia_Grafica.md) |
 | **Durata prevista** | 10 giorni |
 | **Inizio** | 2026-09-21 |
 | **Fine** | 2026-09-21 |

@@ -3,7 +3,7 @@
 | | |
 | :-- | :-- |
 | **Stato** | ✅ Chiusa |
-| **Piano** | [M4_Automazione_PC.md](../SPECS/plan/M4_Automazione_PC.md) |
+| **Piano** | [M4_Automazione_PC.md](../plan/M4_Automazione_PC.md) |
 | **Durata prevista** | 8 giorni |
 | **Inizio** | 2026-09-21 |
 | **Fine** | 2026-09-21 |

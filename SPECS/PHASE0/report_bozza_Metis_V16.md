@@ -1,6 +1,6 @@
 # Report di Analisi — Bozza Progetto "Metis" V16
 
-> **Documento analizzato:** `SPECS/bozza Metis V16.md`
+> **Documento analizzato:** `SPECS/PHASE0/bozza Metis V16.md`
 > **Data analisi:** 2026-09-20
 > **Stato repository:** sola documentazione — nessun codice implementato (`README.md`, `SPECS/`, cartella `Claude/` vuota)
 > **Natura:** revisione architetturale, analisi di fattibilità e piano di rientro
