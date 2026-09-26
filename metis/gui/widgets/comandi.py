@@ -42,25 +42,23 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from metis.gui import tema
 from metis.memory.commands import Errore, Libreria
 
-_STILE = """
-QDialog, QWidget { background: #0f172a; color: #e2e8f0; }
-QLineEdit, QPlainTextEdit, QListWidget {
-    background: #0b1220; border: 1px solid #1e293b; border-radius: 4px;
-    padding: 6px; selection-background-color: #1d4ed8;
-}
-QPushButton {
-    background: #1e293b; border: none; border-radius: 4px; padding: 7px 14px;
-}
-QPushButton:hover { background: #334155; }
-QPushButton:disabled { color: #475569; }
+# PHASE1 — il resto (dialogo, campi, pulsanti) viene dal foglio di `tema`.
+_STILE = f"""
+QListWidget {{
+    background: {tema.SFONDO_ALTO}; border: 1px solid {tema.BORDO};
+    border-radius: {tema.RAGGIO_PICCOLO}px; padding: 6px;
+    selection-background-color: {tema.ACCENTO_SCURO};
+}}
 """
+_MONO = f"font-family: '{tema.FONT_NUMERI}';"
 
 
 def _etichetta(testo: str) -> QLabel:
     lab = QLabel(testo)
-    lab.setStyleSheet("color: #64748b; font-size: 11px; letter-spacing: 1px;")
+    lab.setStyleSheet(f"color: {tema.TESTO_TENUE}; font-size: 11px; letter-spacing: 1px;")
     return lab
 
 
@@ -105,7 +103,7 @@ class EditorComandi(QDialog):
 
         self.avvisi = QLabel("")
         self.avvisi.setWordWrap(True)
-        self.avvisi.setStyleSheet("color: #f59e0b; font-size: 11px;")
+        self.avvisi.setStyleSheet(f"color: {tema.ATTENZIONE}; font-size: 11px;")
         lay.addWidget(self.avvisi)
         return box
 
@@ -129,13 +127,12 @@ class EditorComandi(QDialog):
         self.campo_azioni = QPlainTextEdit()
         self.campo_azioni.setPlaceholderText(
             '[{"tool": "open_application", "app": "vscode"}]')
-        self.campo_azioni.setStyleSheet("font-family: Consolas, monospace;")
+        self.campo_azioni.setStyleSheet(_MONO)
         lay.addWidget(self.campo_azioni, 1)
 
         self.strumenti = QLabel("")
         self.strumenti.setWordWrap(True)
-        self.strumenti.setStyleSheet("color: #475569; font-size: 10px;"
-                                     " font-family: Consolas, monospace;")
+        self.strumenti.setStyleSheet(f"color: {tema.TESTO_SECONDARIO}; font-size: 10px; {_MONO}")
         self.strumenti.setText("disponibili · " + " · ".join(
             f"{s.name} ({s.tier.value})"
             for s in sorted(self.libreria.registry.disponibili(),
@@ -150,7 +147,7 @@ class EditorComandi(QDialog):
 
         self.esito = QLabel("")
         self.esito.setWordWrap(True)
-        self.esito.setStyleSheet("color: #ef4444; font-size: 12px;")
+        self.esito.setStyleSheet(f"color: {tema.ERRORE}; font-size: 12px;")
         lay.addWidget(self.esito)
 
         riga = QHBoxLayout()
@@ -234,11 +231,11 @@ class EditorComandi(QDialog):
             else:
                 c = self.libreria.modifica(self._id_corrente, dato)
         except Errore as exc:
-            self.esito.setStyleSheet("color: #ef4444; font-size: 12px;")
+            self.esito.setStyleSheet(f"color: {tema.ERRORE}; font-size: 12px;")
             self.esito.setText(str(exc))
             return
         self._id_corrente = c.id
-        self.esito.setStyleSheet("color: #22c55e; font-size: 12px;")
+        self.esito.setStyleSheet(f"color: {tema.OK}; font-size: 12px;")
         self.esito.setText(f"Salvato. '{c.id}' vale da adesso, "
                            "senza riavviare.")
         self._ricarica_elenco()
@@ -274,16 +271,12 @@ class PannelloComandi(QWidget):
 
         self.elenco = QLabel("—")
         self.elenco.setWordWrap(True)
-        self.elenco.setStyleSheet("color: #64748b; font-size: 11px;"
-                                  " font-family: Consolas, monospace;")
+        self.elenco.setStyleSheet(f"color: {tema.TESTO_SECONDARIO}; font-size: 11px; {_MONO}")
         lay.addWidget(self.elenco)
 
         self.bottone = QPushButton("Modifica comandi…")
         self.bottone.setEnabled(False)
-        self.bottone.setStyleSheet(
-            "QPushButton { background: #1e293b; border: none;"
-            " border-radius: 4px; padding: 6px; font-size: 11px; }"
-            "QPushButton:disabled { color: #475569; }")
+        self.bottone.setStyleSheet("QPushButton { padding: 6px; font-size: 11px; }")
         self.bottone.clicked.connect(self._apri)
         lay.addWidget(self.bottone)
 

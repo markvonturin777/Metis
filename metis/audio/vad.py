@@ -94,6 +94,27 @@ class SpeechSegmenter:
         self._speech_blocks = 0
         self._max_prob = 0.0
 
+    def forza(self) -> Segment | None:
+        """La frase in corso, consegnata subito: il troncamento chiesto da fuori.
+
+        PHASE1 — la macchina a stati ha un suo tempo massimo per TRASCRIZIONE
+        (30 s, sull'orologio), e questo segmentatore il suo (30 s di audio).
+        Quando scattava prima la macchina, il segmento arrivava in uno stato
+        che non lo aspettava piu' e veniva scartato: ELABORAZIONE senza turno,
+        poi ERRORE. Con `forza` il troncamento lo decide chi ha l'orologio, e
+        l'audio raccolto non si perde. None se non c'e' una frase in corso.
+        """
+        if not self._active or not self._buf:
+            self.reset()
+            return None
+        now = time.perf_counter()
+        pcm = np.concatenate(self._buf)
+        seg = Segment(pcm=pcm, t_speech_start=self._t_start,
+                      t_speech_end=self._t_last_speech, t_endpoint=now,
+                      duration_s=pcm.size / TARGET_SR, max_prob=self._max_prob)
+        self.reset()
+        return seg
+
     def _prob(self, pcm: np.ndarray) -> float:
         with torch.no_grad():
             return float(self.model(torch.from_numpy(pcm), TARGET_SR).item())

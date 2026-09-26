@@ -2,7 +2,8 @@
 rem Avvia Metis con l'interfaccia grafica. Doppio clic, oppure da terminale:
 rem
 rem   Metis.bat                  overlay minimal, nessuna console
-rem   Metis.bat --fullscreen     parte dalla control room
+rem   Metis.bat --fullscreen     parte dall'Hub, la vista a schermo intero
+rem   Metis.bat --diagnostica    parte dalla vista Diagnostica (audit, contesto)
 rem   Metis.bat --console        tiene aperta questa finestra con i log:
 rem                              serve quando qualcosa non parte
 rem

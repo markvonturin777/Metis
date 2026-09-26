@@ -686,22 +686,40 @@ Il contesto è vincolato a 8k token dalla VRAM (§3.2). Strategia:
 | Comunicazione | **Esclusivamente** via `Signal`/`Slot`. Nessun accesso diretto ai widget da thread secondari. |
 | Frame rate | ≥ 30 fps anche durante l'inferenza, nessun freeze > 100 ms |
 
-### 11.2 Le due modalità
+### 11.2 Le tre viste
 
-| Modalità | Contenuto |
-| :-- | :-- |
-| **Minimal** — widget overlay sempre in primo piano | Indicatore di stato (colore per stato della macchina §5), livello audio, ultima frase trascritta, pulsante push-to-talk |
-| **Fullscreen** — control room | Conversazione completa scorrevole, dashboard hardware, console log, editor dei comandi custom, audit log, pannello conferme T3, metriche di latenza |
+> **PHASE1** ([piano](../PHASE1/Piano_Interfaccia_Hub.md), decisione D-UI 4): da due modalità a tre viste. La control room resta, come "Diagnostica".
+
+| Vista | Per cosa | Contenuto |
+| :-- | :-- | :-- |
+| **Minimal** — overlay sempre in primo piano | Guardare di sfuggita mentre si lavora | Nucleo in miniatura (64 px), stato in parole, livello audio, ultima frase, push-to-talk, kill switch |
+| **Hub** — la vista di tutti i giorni | "Cosa sta facendo Metis, e come sta il sistema?" | Sistema e sessione, meteo, fotocamera (segnaposto, D-UI 1); il nucleo animato; la conversazione a fumetti con input di testo, pulisci ed esporta |
+| **Diagnostica** — la control room di PHASE0 | "Perché Metis ha fatto così?" | Conversazione come registro, dashboard hardware, contesto del prompt, editor dei comandi custom, audit log, metriche di latenza |
+
+Una vista alla volta; i dati sono gli stessi oggetti (la conversazione è un modello, disegnato a fumetti nell'Hub e come registro nella Diagnostica).
 
 ### 11.3 Dashboard di telemetria
 
 | Widget | Sorgente | Frequenza |
 | :-- | :-- | :-- |
 | CPU %, RAM | `psutil` | 2 Hz |
+| Disco di sistema | `psutil` | 0,2 Hz |
 | VRAM, temperatura GPU | `nvidia-ml-py` | 1 Hz (non di più: la query è costosa) |
 | TTFT, tok/s, tempo TTS | Orchestratore | Per turno |
 | Latenza end-to-end | Orchestratore | Per turno, con storico p50/p95 |
 | Stato macchina a stati | Orchestratore | A ogni transizione |
+| Meteo (Hub) | Open-Meteo, su un thread suo; nessuna chiave, escono solo le coordinate | Ogni 15 minuti, 2 dopo un fallimento |
+
+### 11.4 L'Hub (PHASE1)
+
+| Elemento | Regola |
+| :-- | :-- |
+| **Nucleo** | Colore dalla palette unica (`metis/core/palette.py`), un movimento per stato; l'onda di `PARLATO` segue la voce letta dal player, non dal motore. Disegnato con `QPainter` (p95 2,2 ms a 1080p), 30 fps, **fermo con la vista nascosta**, in pausa e con "riduci animazioni" |
+| **Input di testo** | `Orchestrator.on_testo`, evento `TESTO`: stesso router, stesso broker, stessa conferma T3 della voce. Metis risponde a voce e per iscritto (D-UI 2); i turni scritti sono esclusi da NFR-1/NFR-2 |
+| **Pulisci / Esporta** | "Pulisci" azzera vista, memoria e slot, con conferma predefinita su Annulla (D-UI 3); "Esporta" scrive Markdown in un file scelto dall'utente |
+| **Muto** | La voce tace, la coda scorre con i tempi di sempre; le risposte restano scritte |
+| **Impostazioni** | Città del meteo, riduci animazioni, vista all'avvio, muto all'avvio, in `config/gui.local.toml` (ignorato da git). La geocodifica la fa il worker del meteo: nessuna rete sul thread della GUI |
+| **Colori** | Solo in `metis/gui/tema.py` (cornice) e `metis/core/palette.py` (stati); un test lo verifica |
 
 ---
 

@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QApplication
 from metis.gui.lag import MisuratoreLag
 from metis.gui.widgets.conferma import DialogoConferma
 from metis.gui.widgets.conversazione import Conversazione
+from metis.gui import tema
 from metis.gui.widgets.stato import IndicatoreStato, VuMeter
 from metis.gui.widgets.telemetria import Telemetria
 
@@ -204,14 +205,15 @@ def test_soglia_vram_accende_l_allarme(qt):
     t = Telemetria()
     t.aggiorna_risorse({"cpu": 10, "ram_percento": 20, "vram_gb": 7.8,
                         "vram_totale_gb": 8, "vram_allarme": True})
-    assert "ef4444" in t.barre["vram"].styleSheet()
+    # PHASE1: il gettone, non il valore — la palette e' cambiata, il rosso no.
+    assert tema.ERRORE in t.barre["vram"].styleSheet()
 
 
 def test_sotto_soglia_resta_verde(qt):
     t = Telemetria()
     t.aggiorna_risorse({"cpu": 10, "ram_percento": 20, "vram_gb": 6.5,
                         "vram_totale_gb": 8, "vram_allarme": False})
-    assert "22c55e" in t.barre["vram"].styleSheet()
+    assert tema.OK in t.barre["vram"].styleSheet()
 
 
 def test_la_finestra_delle_latenze_scorre(qt):
@@ -230,7 +232,7 @@ def test_le_latenze_oltre_il_target_si_colorano(qt):
     t = Telemetria()
     for _ in range(10):
         t.aggiorna_turno({"totale_ms": 2500, "ttft_ms": 100, "tok_per_s": 60})
-    assert "f59e0b" in t.valori["p50"].styleSheet()
+    assert tema.ATTENZIONE in t.valori["p50"].styleSheet()
 
 
 # --- indicatore e VU ---------------------------------------------------------
@@ -321,15 +323,11 @@ def test_nessun_campione_non_esplode(qt):
 # --- le due viste sono due proiezioni, non due applicazioni -----------------
 
 @pytest.fixture
-def applicazione(qt):
+def applicazione(qt, crea_applicazione):
     """Costruita senza avviare i thread: qui interessa il cablaggio, non
-    il nucleo. Con `tools=False` non tocca ne' Ollama ne' il microfono."""
-    from metis.core.avvio import Opzioni
-    from metis.gui.app import Applicazione
-
-    a = Applicazione(Opzioni(tools=False, wakeword=False))
-    yield a
-    a.hotkeys.stop()
+    il nucleo. Con `tools=False` non tocca ne' Ollama ne' il microfono.
+    Smontata da `crea_applicazione`, in conftest.py."""
+    return crea_applicazione()
 
 
 def test_il_passaggio_fra_viste_non_perde_la_conversazione(applicazione):
@@ -606,7 +604,7 @@ def test_la_vista_audit_non_blocca_l_interfaccia(app_qt, tmp_path):
     """
     import time
 
-    from metis.gui.fullscreen_view import FOGLIO
+    from metis.gui import tema
     from metis.security.audit import Entry, Outcome, Tier
 
     from metis.gui.widgets.audit import VistaAudit
@@ -615,7 +613,7 @@ def test_la_vista_audit_non_blocca_l_interfaccia(app_qt, tmp_path):
     v = VistaAudit(audit)
     # Il foglio di stile fa parte della misura: sotto QStyleSheetStyle ogni
     # calcolo di dimensione costa molto di più, ed è la condizione vera.
-    v.setStyleSheet(FOGLIO)
+    v.setStyleSheet(tema.foglio())   # PHASE1: il foglio di tutta l'app
     v.resize(1200, 300)
     v.show()
     app_qt.processEvents()
@@ -669,7 +667,7 @@ def test_il_pannello_contesto_non_blocca_l_interfaccia(app_qt):
     faceva, e per questo ha lasciato passare il blocco della vista audit."""
     import time
 
-    from metis.gui.fullscreen_view import FOGLIO
+    from metis.gui import tema
     from metis.gui.widgets.contesto import PannelloContesto
     from metis.llm.prompts import SYSTEM
     from metis.memory.conversation import Memoria
@@ -683,7 +681,7 @@ def test_il_pannello_contesto_non_blocca_l_interfaccia(app_qt):
     slots.vista_finestra("Chrome - Investing.com", "chrome.exe", 1)
 
     p = PannelloContesto()
-    p.setStyleSheet(FOGLIO)
+    p.setStyleSheet(tema.foglio())   # PHASE1: il foglio di tutta l'app
     p.resize(400, 300)
     p.show()
     app_qt.processEvents()

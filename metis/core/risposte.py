@@ -159,7 +159,10 @@ def descrivi(result: Result) -> str:
         return f"Ho {n} fonti."
 
     if result.tool == "web_fetch":
-        return f"Ho letto {(v.get('titolo') or v.get('url') or 'la pagina')[:60]}."
+        # Il titolo, o il nome del sito: un indirizzo non si pronuncia.
+        from metis.llm.client import sito
+
+        return f"Ho letto {(v.get('titolo') or sito(v.get('url', '')) or 'la pagina')[:60]}."
 
     # -- M6: nel tempo -------------------------------------------------------
     #
@@ -284,7 +287,7 @@ def domanda_conferma(call: dict) -> str:
 FILLERS: tuple[str, ...] = (
     "Un momento, consulto le fonti.",
     "Verifico.",
-    "Le fonti, subito.",
+    "Controllo le fonti.",          # PHASE1: era "Le fonti, subito.", che non si dice
     "Un istante, non vorrei inventarmi nulla.",
     "Guardo.",
 )

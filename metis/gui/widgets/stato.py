@@ -20,6 +20,7 @@ from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QSizePolicy, QWidget
 
 from metis.core.palette import esadecimale, significato
+from metis.gui import tema
 
 VU_HZ = 15.0
 DB_MIN, DB_MAX = -60.0, -6.0        # sotto -60 e' silenzio, sopra -6 e' clipping
@@ -58,7 +59,7 @@ class IndicatoreStato(QWidget):
         lay.addWidget(self.pallino)
         self.etichetta = QLabel(significato(self.stato)) if con_testo else None
         if self.etichetta is not None:
-            self.etichetta.setStyleSheet("color: #cbd5e1; font-size: 13px;")
+            self.etichetta.setStyleSheet(f"color: {tema.TESTO}; font-size: 13px;")
             lay.addWidget(self.etichetta)
         lay.addStretch(1)
 
@@ -73,7 +74,13 @@ class IndicatoreStato(QWidget):
 
 
 class VuMeter(QWidget):
-    """Barra del livello in ingresso, ridisegnata a 15 Hz."""
+    """Barra del livello in ingresso, ridisegnata a 15 Hz.
+
+    PHASE1 — IL TIMER GIRA SOLO SE SI VEDE
+    Fino a qui batteva 15 volte al secondo anche con la vista nascosta: non
+    ridisegnava (Qt non disegna un widget invisibile), ma svegliava il thread
+    della GUI per niente, per giorni. E' la stessa regola del nucleo.
+    """
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -82,8 +89,18 @@ class VuMeter(QWidget):
         self._livello = 0.0          # 0..1, gia' normalizzato
         self._picco_grezzo = DB_MIN
         self._timer = QTimer(self)
+        self._timer.setInterval(int(1000 / VU_HZ))
         self._timer.timeout.connect(self._ridisegna)
-        self._timer.start(int(1000 / VU_HZ))
+
+    def showEvent(self, e) -> None:
+        super().showEvent(e)
+        self._timer.start()
+
+    def hideEvent(self, e) -> None:
+        super().hideEvent(e)
+        self._timer.stop()
+        self._livello = 0.0
+        self._picco_grezzo = DB_MIN
 
     @Slot(float, float)
     def campiona(self, rms_db: float, picco_db: float) -> None:
@@ -105,9 +122,13 @@ class VuMeter(QWidget):
 
     def paintEvent(self, _) -> None:
         p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setPen(Qt.NoPen)
         r = self.rect()
-        p.fillRect(r, QColor("#1e293b"))
+        raggio = r.height() / 2
+        p.setBrush(QColor(tema.TRACCIA))
+        p.drawRoundedRect(r, raggio, raggio)
         larghezza = int(r.width() * self._livello)
         if larghezza > 0:
-            colore = "#22c55e" if self._livello < 0.85 else "#f59e0b"
-            p.fillRect(0, 0, larghezza, r.height(), QColor(colore))
+            p.setBrush(QColor(tema.ACCENTO_PIENO if self._livello < 0.85 else tema.ATTENZIONE))
+            p.drawRoundedRect(0, 0, larghezza, r.height(), raggio, raggio)

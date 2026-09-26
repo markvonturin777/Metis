@@ -33,6 +33,7 @@ from PySide6.QtCore import QObject, Signal, Slot
 from metis.core.avvio import CicloAudio, Opzioni, costruisci_sistema
 from metis.core.logging import get_logger
 from metis.security.killswitch import KILL_SWITCH
+from metis.tts.kokoro_engine import SILENZIO_DB
 
 CONTATORI_HZ = 2.0          # ogni quanto si spedisce lo stato dei contatori
 
@@ -47,6 +48,7 @@ class Nucleo(QObject):
     dice = Signal(str)                  # frase che sta per pronunciare
     turno = Signal(dict)                # metriche del turno concluso
     livello = Signal(float, float)      # rms, picco in dBFS
+    voce = Signal(float)                # PHASE1: livello della voce di Metis, dBFS
     contatori = Signal(dict)
     contesto = Signal(dict)             # M5: budget, slot, fonti dell'ultimo turno
     errore = Signal(str)
@@ -60,6 +62,10 @@ class Nucleo(QObject):
         self.ciclo: CicloAudio | None = None
         self._log = get_logger()
         self._ultimo_contatori = 0.0
+        self._muto = False
+        self._voce_prima = SILENZIO_DB
+        self._fermato = False       # PHASE1: vedi `ferma`
+        self._microfono_perso = False
 
     # -- sul thread del nucleo ---------------------------------------------
 
@@ -77,6 +83,8 @@ class Nucleo(QObject):
                 on_dice=self.dice.emit,
                 on_turno=lambda m: self.turno.emit(self._metriche(m)),
             )
+            # Il muto chiesto prima che il sistema esistesse vale comunque.
+            self._applica_muto()
             self.pronto.emit(self.sistema.avvio_s)
         except Exception as exc:              # noqa: BLE001
             # Microfono assente, Ollama giu', voce non scaricata: l'utente
@@ -92,9 +100,17 @@ class Nucleo(QObject):
             self.finito.emit()
             return
 
+        if self._fermato:
+            # Chiuso durante l'avvio: i modelli sono carichi, ma il ciclo non
+            # parte. Vedi `ferma`.
+            self.finito.emit()
+            return
         self.ciclo = CicloAudio(self.sistema.orchestrator,
                                 on_blocco=self._su_blocco,
                                 on_microfono=self._microfono)
+        if self._fermato:
+            self.finito.emit()
+            return
         try:
             self.ciclo.esegui(
                 limite_s=self.opzioni.minutes * 60 if self.opzioni.minutes else None)
@@ -115,8 +131,15 @@ class Nucleo(QObject):
         from metis.tools import notify
 
         if ok:
-            self.errore.emit("Il microfono e' di nuovo disponibile.")
+            # Il ciclo audio segnala anche il PRIMO blocco (da "non so" a
+            # "c'e'"). Fino a PHASE1 ogni avvio si apriva con "di nuovo
+            # disponibile" di un microfono mai mancato. Si dice solo dopo
+            # averne detto l'assenza.
+            if self._microfono_perso:
+                self._microfono_perso = False
+                self.errore.emit("Il microfono e' di nuovo disponibile.")
             return
+        self._microfono_perso = True
         frase = messaggio(Categoria.AUDIO_INGRESSO)
         self.errore.emit(frase)
         notify.mostra("Metis", frase)
@@ -130,11 +153,28 @@ class Nucleo(QObject):
         potrebbe voler usare diversamente.
         """
         self.livello.emit(blocco.rms_dbfs, blocco.peak_dbfs)
+        self._voce()
         ora = time.perf_counter()
         if ora - self._ultimo_contatori >= 1.0 / CONTATORI_HZ:
             self._ultimo_contatori = ora
             self.contatori.emit(self._stato_contatori())
             self.contesto.emit(self._stato_contesto())
+
+    def _voce(self) -> None:
+        """PHASE1 — il livello della voce, letto dal player al ritmo del
+        microfono: l'onda del nucleo la segue senza un thread in piu'.
+
+        Si spedisce solo mentre Metis parla, piu' un ultimo silenzio per
+        chiudere: a riposo sarebbero 31 eventi al secondo per dire "niente".
+        """
+        player = getattr(self.sistema, "player", None)
+        leggi = getattr(player, "livello_uscita", None)
+        if leggi is None:
+            return
+        db = leggi()
+        if db > SILENZIO_DB or self._voce_prima > SILENZIO_DB:
+            self.voce.emit(db)
+        self._voce_prima = db
 
     def _stato_contatori(self) -> dict:
         c = self.sistema.orchestrator.counters
@@ -211,8 +251,53 @@ class Nucleo(QObject):
         self._log.warning("ascolto", stato="IN PAUSA" if orch.in_pausa else "ripreso")
         return orch.in_pausa
 
+    # -- PHASE1: i comandi dell'Hub. Chiamate dirette, come ptt() ----------
+
+    def testo(self, testo: str) -> bool:
+        """Un messaggio scritto. True se il turno e' partito."""
+        if self.sistema is None:
+            return False
+        return self.sistema.orchestrator.on_testo(testo)
+
+    def azzera(self) -> bool:
+        """"Pulisci" (D-UI 3): memoria dell'orchestratore e slot del contesto.
+
+        Gli slot stanno fuori dall'orchestratore ("l'ultima finestra",
+        "l'ultima fonte"): se restassero, "chiudila" dopo aver pulito
+        risolverebbe ancora un riferimento della conversazione cancellata.
+        """
+        if self.sistema is None:
+            return False
+        if not self.sistema.orchestrator.azzera_conversazione():
+            return False
+        from metis.memory.slots import SLOTS
+
+        SLOTS.reset()
+        self._log.info("conversazione azzerata")
+        return True
+
+    def muto(self, attivo: bool) -> bool:
+        self._muto = attivo
+        self._applica_muto()
+        self._log.info("voce", stato="muta" if attivo else "attiva")
+        return attivo
+
+    def _applica_muto(self) -> None:
+        player = getattr(self.sistema, "player", None)
+        if player is not None and hasattr(player, "imposta_muto"):
+            player.imposta_muto(self._muto)
+
     def ferma(self) -> None:
-        """Esce dal ciclo al giro successivo, entro ~250 ms."""
+        """Esce dal ciclo al giro successivo, entro ~250 ms.
+
+        PHASE1 — ANCHE DURANTE L'AVVIO
+        Prima si fermava solo un ciclo gia' esistente. Chiudendo Metis mentre
+        caricava i modelli la richiesta andava persa: l'avvio finiva, il ciclo
+        partiva e non si fermava piu', e Qt distruggeva un thread vivo —
+        `abort()`, uscita 0xC0000409. Ora la richiesta resta, e l'avvio non
+        fa partire il ciclo.
+        """
+        self._fermato = True
         if self.ponte is not None:
             self.ponte.annulla()          # chi aspetta una conferma non resti appeso
         if self.ciclo is not None:

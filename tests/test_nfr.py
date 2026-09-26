@@ -104,3 +104,43 @@ def test_la_tabella_ha_tutti_e_dieci(tmp_path):
     assert [e.nfr for e in esiti] == list(range(1, 11))
     assert tabella(esiti).count("\n") == 12
     assert all(e.stato != "verde" for e in esiti)     # senza dati, niente verde
+
+
+def test_la_suite_non_scrive_nel_log_di_metis():
+    """PHASE1 — la suite scriveva kill switch e pause finte nel file da cui
+    `verifica_nfr.py` certifica l'uso reale. Vedi `tests/conftest.py`."""
+    from pathlib import Path
+
+    import metis.core.logging as mlog
+
+    vero = Path("data/logs/metis.jsonl")
+    prima = vero.stat().st_size if vero.exists() else 0
+    mlog.get_logger().info("prova della suite", test="log separato")
+    assert mlog.JSONL != vero and mlog.JSONL.exists()
+    assert "prova della suite" in mlog.JSONL.read_text(encoding="utf-8")
+    assert (vero.stat().st_size if vero.exists() else 0) == prima
+
+
+def test_nfr8_dice_quanto_e_durato_l_uso():
+    """PHASE1: "0 blocchi in 30 minuti" chiede anche i 30 minuti."""
+    eventi = [{"event": "sessione interfaccia", "esercizio_s": 1200},
+              {"event": "sessione interfaccia", "esercizio_s": 900},
+              {"event": "freeze interfaccia", "ms": 2000, "fase": "avvio"}]
+    e = nfr8(eventi)
+    assert e.stato == "verde" and "35 min di esercizio in 2 sessioni" in e.misurato
+
+
+def test_verifica_dal_conta_solo_la_prova(tmp_path):
+    from tests.nfr.verifica_nfr import verifica
+
+    log = tmp_path / "metis.jsonl"
+    righe = [{"timestamp": "2026-09-25T16:57:01", "event": "freeze interfaccia",
+              "ms": 186, "fase": "esercizio"},
+             {"timestamp": "2026-09-26T10:30:00", "event": "sessione interfaccia",
+              "esercizio_s": 1860}]
+    log.write_text("\n".join(json.dumps(r) for r in righe), encoding="utf-8")
+    tutto = {e.nfr: e for e in verifica(log, tmp_path / "nessuno.db", None)}
+    assert tutto[8].stato == "rosso"
+    prova = {e.nfr: e for e in verifica(log, tmp_path / "nessuno.db", None,
+                                        dal="2026-09-26T10:00")}
+    assert prova[8].stato == "verde" and "31 min" in prova[8].misurato

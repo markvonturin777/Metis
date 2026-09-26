@@ -151,7 +151,8 @@ def test_il_menu_e_quello_della_specifica(app_qt):
 
     t = IconaTray()
     voci = [a.text() for a in t.menu.actions() if not a.isSeparator()]
-    assert voci[1:] == ["Mostra Minimal", "Mostra Fullscreen", "Kill switch",
+    # PHASE1: tre viste. "Fullscreen" e' diventata "Diagnostica".
+    assert voci[1:] == ["Mostra Minimal", "Mostra Hub", "Mostra Diagnostica", "Kill switch",
                         "Pausa ascolto", "Esci"]
     assert voci[0].startswith("Metis — ")
     assert not t.voce_stato.isEnabled()
@@ -205,16 +206,8 @@ class _SistemaFinto:
 
 
 @pytest.fixture
-def app_con_tray(app_qt):
-    from metis.core.avvio import Opzioni
-    from metis.gui.app import Applicazione
-
-    app = Applicazione(Opzioni(tools=False, wakeword=False), tray=True)
-    yield app
-    app.hotkeys.stop()
-    app.qt.setQuitOnLastWindowClosed(True)
-    app.minimal.hide()
-    app.fullscreen.hide()
+def app_con_tray(crea_applicazione):
+    return crea_applicazione(tray=True)
 
 
 def _gira(app_qt, n=20):
@@ -304,16 +297,10 @@ def test_il_clic_sull_icona_riporta_l_ultima_vista(app_qt, app_con_tray):
     assert app.fullscreen.isVisible() and not app.minimal.isVisible()
 
 
-def test_senza_tray_si_esce_chiudendo_come_prima(app_qt):
-    from metis.core.avvio import Opzioni
-    from metis.gui.app import Applicazione
-
-    app = Applicazione(Opzioni(tools=False, wakeword=False), tray=False)
-    try:
-        assert app.tray is None
-        assert app.qt.quitOnLastWindowClosed()
-    finally:
-        app.hotkeys.stop()
+def test_senza_tray_si_esce_chiudendo_come_prima(crea_applicazione):
+    app = crea_applicazione(tray=False)
+    assert app.tray is None
+    assert app.qt.quitOnLastWindowClosed()
 
 
 # --- uscita pulita -----------------------------------------------------------
@@ -408,3 +395,72 @@ def test_il_ciclo_audio_rilascia_il_device_uscendo():
     t.join(2.0)
     assert not t.is_alive()
     assert cattura.fermata
+
+
+# --- PHASE1: chiudere durante l'avvio ------------------------------------------------------
+
+def test_chiuso_durante_l_avvio_il_ciclo_audio_non_parte(monkeypatch):
+    """Chiudendo Metis mentre caricava i modelli, `ferma()` trovava il ciclo
+    ancora da creare e la richiesta andava persa: il ciclo partiva, non si
+    fermava piu', e all'uscita Qt distruggeva un thread vivo (0xC0000409)."""
+    from metis.core.avvio import Opzioni
+    from metis.gui.workers import nucleo as modulo
+
+    n = modulo.Nucleo(Opzioni(tools=False, wakeword=False))
+    eseguiti, finiti = [], []
+    n.finito.connect(lambda: finiti.append(1))
+
+    class Sistema:
+        avvio_s = 1.0
+        orchestrator = object()
+
+    def costruisci(*a, **kw):
+        n.ferma()                         # l'utente chiude mentre si caricano i modelli
+        return Sistema()
+
+    class Ciclo:
+        def __init__(self, *a, **kw):
+            pass
+
+        def esegui(self, **kw):
+            eseguiti.append(1)
+
+        def ferma(self):
+            pass
+
+    monkeypatch.setattr(modulo, "costruisci_sistema", costruisci)
+    monkeypatch.setattr(modulo, "CicloAudio", Ciclo)
+    n.avvia()
+    assert eseguiti == [] and finiti == [1]
+
+
+def test_una_ferma_prima_di_esegui_non_si_perde():
+    """`esegui` azzerava il flag all'ingresso: una `ferma()` arrivata fra la
+    costruzione del ciclo e il suo avvio non contava."""
+    import time
+
+    from metis.core.avvio import CicloAudio
+
+    class Orch:
+        def on_audio(self, b):
+            pass
+
+        def tick(self):
+            pass
+
+    class Cattura:
+        def start(self):
+            pass
+
+        def stop(self):
+            pass
+
+        def read(self, timeout=0.25):
+            time.sleep(0.01)
+            return None
+
+    c = CicloAudio(Orch(), apri_cattura=Cattura)
+    c.ferma()
+    t0 = time.perf_counter()
+    c.esegui(limite_s=5)
+    assert time.perf_counter() - t0 < 1.0

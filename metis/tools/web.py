@@ -61,6 +61,18 @@ from metis.tools.registry import REGISTRY, Rifiuto
 
 MAX_RISULTATI = 5          # quanti ne torna la ricerca
 MAX_FONTI = 3              # quante se ne leggono davvero: vedi §1.3 del piano
+MARGINE_PUBBLICITA = 3     # risultati chiesti in piu', per quelli che si scartano
+MAX_URL = 500              # lo stesso tetto di `WebFetch.url`
+
+# Pubblicita' fra i risultati (PHASE1). ddgs restituisce anche gli annunci di
+# Bing, come link `bing.com/aclick?ld=...` da 600-1500 caratteri. Per "come
+# creare un chatbot ai" erano i primi due: `web_fetch` li rifiutava per
+# lunghezza, ma occupavano due dei tre posti da fonte, e la risposta si
+# reggeva su una pagina sola — il blog di chi vende chatbot. Erano anche la
+# "Ultima fonte" di "aprimi il primo risultato", e il link gigante nella
+# conversazione. (dominio, inizio del percorso)
+PUBBLICITA = (("bing.com", "/aclick"), ("duckduckgo.com", "/y.js"),
+              ("googleadservices.com", "/"), ("doubleclick.net", "/"))
 TTL_CACHE_S = 15 * 60
 BACKOFF_S = (1.0, 3.0, 9.0)   # tre tentativi; l'ultimo non attende nessuno
 TIMEOUT_FETCH_S = 8.0      # oltre, il filler vocale non regge
@@ -284,13 +296,14 @@ def cerca(query: str, n: int = MAX_RISULTATI, cache: Cache | None = None,
     in_cache = c.leggi(chiave)
     if in_cache is not None:
         STATO.da_cache += 1
-        return in_cache
+        # Anche qui: la cache puo' avere righe scritte prima del filtro.
+        return organici(in_cache)[:n]
 
     ultimo = ""
     for nome, motore in MOTORI:
         for i, pausa in enumerate(BACKOFF_S):
             try:
-                risultati = motore(query, n)
+                risultati = organici(motore(query, n + MARGINE_PUBBLICITA))[:n]
             except Exception as exc:              # noqa: BLE001
                 ultimo = f"{nome}: {type(exc).__name__}: {exc}"
                 STATO.tentativi_falliti += 1
@@ -311,6 +324,26 @@ def cerca(query: str, n: int = MAX_RISULTATI, cache: Cache | None = None,
 
     STATO.ultimo_errore = ultimo
     raise Rifiuto(NON_RAGGIUNGIBILE)
+
+
+def e_pubblicita(url: str) -> bool:
+    from urllib.parse import urlsplit
+
+    try:
+        parti = urlsplit(url)
+    except ValueError:
+        return True                               # non si legge: fuori
+    host = (parti.hostname or "").lower()
+    return any((host == dominio or host.endswith("." + dominio))
+               and parti.path.startswith(percorso)
+               for dominio, percorso in PUBBLICITA)
+
+
+def organici(risultati: list[Risultato]) -> list[Risultato]:
+    """Senza pubblicita' e senza link che `web_fetch` non accetterebbe: un
+    risultato che non si puo' leggere non deve occupare il posto di uno che
+    si puo'."""
+    return [r for r in risultati if len(r.url) <= MAX_URL and not e_pubblicita(r.url)]
 
 
 def _vale_la_pena(exc: Exception) -> bool:

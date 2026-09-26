@@ -131,3 +131,54 @@ def test_la_pulizia_non_tocca_il_testo_normale():
 
     normale = "Secondo Investing.com il rendimento e' al 3,75 per cento."
     assert _clean(normale) == normale
+
+
+# --- PHASE1: link e indirizzi non si pronunciano -----------------------------
+
+def test_il_link_markdown_si_pronuncia_come_nome():
+    """Visto in esercizio: "descritto su [Tuttosemplice.com](https://blog...)",
+    e Piper ha letto l'indirizzo intero."""
+    from metis.llm.client import _clean
+
+    detto = _clean("Questo e' descritto su [Tuttosemplice.com]"
+                   "(https://blog.tuttosemplice.com/ai-sul-tuo-pc-gratis-e-offline/).")
+    assert detto == "Questo e' descritto su Tuttosemplice.com."
+
+
+def test_l_indirizzo_nudo_diventa_il_nome_del_sito():
+    from metis.llm.client import _clean
+
+    assert _clean("Fonti, per esempio https://www.bing.com/aclick?ld=e8_7G&u=aH.") == \
+        "Fonti, per esempio bing."
+    assert _clean("Vedi www.ilsole24ore.com/art/x_y, poi dimmi.") == \
+        "Vedi ilsole24ore, poi dimmi."
+
+
+def test_un_link_spezzato_fra_due_pezzi_non_lascia_l_indirizzo():
+    """Il testo arriva al TTS a pezzi, e il taglio puo' cadere dentro il nome
+    del link: nessuna delle due meta' contiene il link intero."""
+    from metis.llm.client import _clean
+
+    assert _clean("secondo [Il Sole") == "secondo Il Sole"
+    assert _clean("24 Ore](https://www.ilsole24ore.com/a_b) dice cosi'.") == \
+        "24 Ore dice cosi'."
+
+
+def test_i_numeri_con_il_punto_non_sono_indirizzi():
+    from metis.llm.client import _clean
+
+    testo = "Il modello pesa 6.58 GB e la v1.2 e' uscita."
+    assert _clean(testo) == testo
+
+
+@pytest.mark.parametrize("url,nome", [
+    ("https://blog.tuttosemplice.com/ai/", "tuttosemplice"),
+    ("https://it.investing.com/news", "investing"),
+    ("https://www.bbc.co.uk/news", "bbc"),
+    ("ilsoftware.it", "ilsoftware"),
+    ("non un indirizzo", ""),
+])
+def test_sito(url, nome):
+    from metis.llm.client import sito
+
+    assert sito(url) == nome

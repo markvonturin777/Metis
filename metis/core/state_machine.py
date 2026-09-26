@@ -59,6 +59,7 @@ class Event(Enum):
     DONE = auto()
     TIMEOUT = auto()
     FAILED = auto()
+    TESTO = auto()            # PHASE1: un messaggio scritto, senza microfono
 
 
 # Gli stati in cui i frame audio NON devono raggiungere VAD e STT.
@@ -103,10 +104,14 @@ WAKE_ACTIVE = frozenset(
 TRANSITIONS: dict[tuple[State, Event], State] = {
     (State.DORMIENTE, Event.WAKE_WORD): State.IN_ASCOLTO,
     (State.DORMIENTE, Event.PTT): State.IN_ASCOLTO,
+    # PHASE1 — un messaggio scritto salta ascolto e trascrizione: il testo
+    # c'e' gia'. Da qui in poi il turno e' identico a quello parlato.
+    (State.DORMIENTE, Event.TESTO): State.ELABORAZIONE,
 
     (State.IN_ASCOLTO, Event.SPEECH_START): State.TRASCRIZIONE,
     (State.IN_ASCOLTO, Event.TIMEOUT): State.DORMIENTE,
     (State.IN_ASCOLTO, Event.PTT): State.DORMIENTE,        # toggle
+    (State.IN_ASCOLTO, Event.TESTO): State.ELABORAZIONE,
 
     (State.TRASCRIZIONE, Event.SPEECH_END): State.ELABORAZIONE,
     (State.TRASCRIZIONE, Event.NO_SPEECH): State.IN_ASCOLTO,

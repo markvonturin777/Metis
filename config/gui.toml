@@ -1,0 +1,23 @@
+# Interfaccia grafica (PHASE1).
+#
+# Questo file sta nel repository e NON contiene dati personali. La citta' del
+# meteo va in `config/gui.local.toml`, stesso formato, ignorato da git: i
+# valori del locale sostituiscono questi. Le Impostazioni dell'Hub lo
+# scriveranno da sole; intanto si puo' scrivere a mano:
+#
+#     [meteo]
+#     citta = "Milano"
+#
+# Con la sola citta', Metis trova le coordinate una volta (geocodifica di
+# Open-Meteo) e le tiene in `data/meteo.json`. Con le coordinate non serve
+# nemmeno quella:
+#
+#     [meteo]
+#     citta = "Milano"
+#     latitudine = 45.464
+#     longitudine = 9.190
+#
+# Dal PC escono solo le coordinate, ogni 15 minuti, verso api.open-meteo.com.
+
+[meteo]
+citta = ""

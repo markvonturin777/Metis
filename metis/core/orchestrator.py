@@ -275,6 +275,72 @@ class Orchestrator:
         elif segment is None and st is State.IN_ASCOLTO and self.seg._active:
             self.sm.fire(Event.SPEECH_START)
 
+    # -- PHASE1: ingresso scritto -------------------------------------------
+
+    def on_testo(self, testo: str) -> bool:
+        """Un messaggio scritto nell'Hub. True se il turno e' partito.
+
+        STESSO PERCORSO DELLA VOCE, DAL TESTO IN POI
+        Si saltano cattura, VAD e trascrizione, perche' il testo c'e' gia'; da
+        `_elabora` in poi il turno e' identico: router, broker, conferma T3,
+        risposta a voce (D-UI 2). Un ingresso laterale che scavalcasse il
+        broker sarebbe una porta senza serratura, e il test che lo esclude e'
+        `test_un_messaggio_scritto_chiede_la_conferma_t3`.
+
+        Mentre Metis parla, scrivere lo interrompe, come il push-to-talk.
+        Mentre pensa, esegue o aspetta una conferma, il messaggio non parte:
+        a meta' di quei turni non c'e' un punto in cui inserirne un altro.
+        """
+        testo = (testo or "").strip()
+        if not testo:
+            return False
+        st = self.sm.state
+        if st in (State.PARLATO, State.GENERAZIONE, State.RICERCA_WEB):
+            self.sm.fire(Event.PTT)                # -> INTERROTTO
+            self._stop_everything()
+            self.counters.barge_ins += 1
+            self.sm.fire(Event.TTS_STOPPED)        # -> IN_ASCOLTO
+            st = self.sm.state
+        if st not in (State.DORMIENTE, State.IN_ASCOLTO):
+            return False
+        if st is State.DORMIENTE:
+            self.d.player.stop()                   # un annuncio in corso: si ferma
+        if self.sm.fire(Event.TESTO) is not State.ELABORAZIONE:
+            return False
+        self.seg.reset()
+        self._avvia(self._run_testo, testo)
+        return True
+
+    def _run_testo(self, testo: str) -> None:
+        self._protetto(self._process_testo, testo)
+
+    def _process_testo(self, testo: str) -> None:
+        ora = time.perf_counter()
+        m = TurnMetrics(turn_id=uuid.uuid4().hex[:8], t_speech_end=ora, t_endpoint=ora)
+        m.t_stt_done = ora
+        m.transcript = testo
+        # NFR-1 misura dalla fine del parlato al primo audio: un turno scritto
+        # non ha parlato, e la verifica NFR lo esclude leggendo questo campo.
+        m.extra["origine"] = "testo"
+        if self.d.on_turn_start is not None:
+            self.d.on_turn_start(m.turn_id)
+        self._elabora(m, self._nuovo_token())
+
+    def azzera_conversazione(self) -> bool:
+        """"Pulisci" (D-UI 3): la memoria si svuota, finestra e riassunto.
+
+        Solo a macchina ferma. A turno in corso il turno stesso scriverebbe
+        in memoria subito dopo, e un riassunto in corso scriverebbe il suo
+        risultato su una memoria appena svuotata: la conversazione
+        "cancellata" tornerebbe sotto forma di riassunto.
+        """
+        if self.sm.state not in (State.DORMIENTE, State.IN_ASCOLTO):
+            return False
+        if self._riassunto is not None and self._riassunto.is_alive():
+            return False
+        self.mem.svuota()
+        return True
+
     def _on_wake_word(self) -> None:
         self._attiva(Event.WAKE_WORD)
 
@@ -356,27 +422,61 @@ class Orchestrator:
         with self._lock:
             return self._cancel is not None and self._cancel.cancelled
 
+    def _nuovo_token(self) -> CancelToken:
+        """Il token di QUESTO turno, creato quando il turno comincia.
+
+        PHASE1 — IL DIFETTO CHE C'ERA DA M4
+        Fino a qui il token si creava a meta' turno, e solo nei percorsi di
+        conversazione e di ricerca; prima di crearlo si controllava
+        `self._cancel`, cioe' il token del turno PRECEDENTE. Dopo un
+        barge-in quel token resta annullato, e il turno dopo lo leggeva come
+        proprio: la conversazione usciva senza dire niente (ferma in
+        GENERAZIONE fino al timeout), e il ciclo delle azioni usciva senza
+        eseguire niente (fermo in ESECUZIONE, 15 s, poi ERRORE). Trovato
+        dall'utente: "apri Chrome" dopo aver interrotto una risposta, e
+        nessuna riga nell'audit.
+
+        Qui il token nasce all'inizio del turno, sul thread del turno, e
+        viaggia come argomento fino all'ultima azione. Non ci sono corse con
+        il barge-in: il turno comincia in ELABORAZIONE, dove il barge-in non
+        esiste, e il token c'e' gia' quando si passa a GENERAZIONE,
+        RICERCA_WEB o PARLATO. Un'interruzione annulla solo il turno che
+        interrompe.
+        """
+        tok = CancelToken()
+        with self._lock:
+            self._cancel = tok
+        return tok
+
     # -- avvio del turno ---------------------------------------------------
 
     def _start_turn(self, segment: Segment) -> None:
         """Il turno gira su un thread proprio: altrimenti `on_audio` resta
         bloccato e il barge-in non puo' essere rilevato."""
+        self._avvia(self._run_turn, segment)
+
+    def _avvia(self, guscio: Callable, arg) -> None:
         if self.synchronous:
-            self._run_turn(segment)
+            guscio(arg)
             return
         self._worker = threading.Thread(
-            target=self._run_turn, args=(segment,), daemon=True, name="metis-turn"
+            target=guscio, args=(arg,), daemon=True, name="metis-turn"
         )
         self._worker.start()
 
     def _run_turn(self, segment: Segment) -> None:
+        self._protetto(self._process, segment)
+
+    def _protetto(self, lavoro: Callable, arg) -> None:
         """Guscio del turno. Ollama va giu', il modello TTS manca un file, la
         scheda audio sparisce: sul thread del turno un'eccezione passerebbe
         inosservata e lascerebbe la macchina appesa fino al timeout, cioe' 30
         secondi di Metis muto. Si chiude invece in ERRORE, che dura 5 s.
+
+        PHASE1: lo stesso guscio per il turno parlato e per quello scritto.
         """
         try:
-            self._process(segment)
+            lavoro(arg)
         except Exception as exc:                 # noqa: BLE001 - qui si cattura tutto
             self.counters.errors += 1
             self._stop_everything()
@@ -436,6 +536,7 @@ class Orchestrator:
         )
         if self.d.on_turn_start is not None:
             self.d.on_turn_start(m.turn_id)
+        tok = self._nuovo_token()
         tr = self.d.stt(segment.pcm)
         m.t_stt_done = time.perf_counter()
         m.transcript = getattr(tr, "text", "")
@@ -444,7 +545,11 @@ class Orchestrator:
             self.counters.discarded += 1
             self.sm.fire(Event.NO_SPEECH)
             return
+        self._elabora(m, tok)
 
+    def _elabora(self, m: TurnMetrics, tok: CancelToken) -> None:
+        """Il turno, dal testo in poi. Parlato o scritto, da qui e' lo stesso:
+        stesso router, stesso broker, stessa conferma T3."""
         self.mem.aggiungi("user", m.transcript)
         slot = self._contesto()
 
@@ -459,20 +564,17 @@ class Orchestrator:
             # pagina che ancora non e' stata letta. Vedi `_percorso_web`.
             query = self._query_web(decisione)
             if query:
-                return self._percorso_web(m, decisione, query, slot)
+                return self._percorso_web(m, decisione, query, slot, tok)
             if getattr(decisione, "e_strumento", False):
-                return self._esegui_strumento(m, decisione)
+                return self._esegui_strumento(m, decisione, tok)
 
         self.sm.fire(Event.INTENT_CHAT)
 
-        # Token NUOVO per questo turno. Se un barge-in e' gia' arrivato su un
-        # token precedente, non contamina questo; e se arriva adesso, non puo'
-        # essere inghiottito da un reset.
-        with self._lock:
-            if self._cancel is not None and self._cancel.cancelled:
-                return                      # annullato prima ancora di partire
-            tok = CancelToken()
-            self._cancel = tok
+        # Un barge-in arrivato fra la decisione e qui (GENERAZIONE e' gia'
+        # interrompibile) ha annullato il token di QUESTO turno: vedi
+        # `_nuovo_token` sul perche' non si guarda piu' `self._cancel`.
+        if tok.cancelled:
+            return
 
         messaggi = self.mem.messaggi(slot=slot)
         m.extra["contesto_token"] = self.mem.conteggio(slot).totale
@@ -548,7 +650,7 @@ class Orchestrator:
             return None
 
     def _percorso_web(self, m: TurnMetrics, decisione, query: str,
-                      slot: str) -> None:
+                      slot: str, tok: CancelToken) -> None:
         """Filler, fonti, risposta fondata. Il turno da qui e' contaminato.
 
         LE ALTRE AZIONI DEL PIANO NON SI ESEGUONO
@@ -602,11 +704,10 @@ class Orchestrator:
             frase = getattr(ctx, "motivo", "") or messaggio(Categoria.RETE)
             return self._chiudi_parlando(m, frase)
 
-        with self._lock:
-            if self._cancel is not None and self._cancel.cancelled:
-                return
-            tok = CancelToken()
-            self._cancel = tok
+        # Interrotto durante la ricerca (il filler stava suonando): il barge-in
+        # ha annullato il token di questo turno, e non si genera niente.
+        if tok.cancelled:
+            return
 
         self.sm.fire(Event.CONTEXT_READY)             # -> GENERAZIONE
         messaggi = self.mem.messaggi(slot=slot, domanda=ctx.messaggio(m.transcript))
@@ -656,7 +757,7 @@ class Orchestrator:
 
     # -- ramo strumenti ----------------------------------------------------
 
-    def _esegui_strumento(self, m: TurnMetrics, decisione) -> None:
+    def _esegui_strumento(self, m: TurnMetrics, decisione, tok: CancelToken) -> None:
         """Esegue le tool call del turno, in ordine, e ne pronuncia l'esito.
 
         Gli stati sono quelli veri della macchina, conferma compresa: in M2
@@ -682,7 +783,7 @@ class Orchestrator:
         # nasce in un turno contaminato anche se la prima non lo era.
         untrusted = False
         for call in decisione.calls:
-            if self.cancelled:
+            if tok.cancelled:
                 break
             nome = call.get("tool", "?")
             conferma = a.richiede_conferma(nome)
@@ -706,7 +807,12 @@ class Orchestrator:
                 break
 
         if not risultati:
-            self.sm.fire(Event.NO_SPEECH)             # niente da dire
+            # Interrotto prima della prima azione: il barge-in ha gia' portato
+            # la macchina altrove. Se per qualunque motivo fosse ancora in
+            # ESECUZIONE, se ne esce da una transizione che esiste — NO_SPEECH
+            # da qui non esiste, ed era il motivo dei 15 s di silenzio.
+            if self.sm.state is State.ESECUZIONE:
+                self.sm.fire(Event.FAILED)
             return
 
         frase = a.descrivi(risultati, decisione.risposta)
@@ -852,11 +958,27 @@ class Orchestrator:
 
     def tick(self) -> None:
         """Da chiamare ~2 Hz: timeout degli stati e manutenzione della memoria."""
+        prima = self.sm.state
         self.sm.check_timeout()
+        if prima is State.TRASCRIZIONE and self.sm.state is State.ELABORAZIONE:
+            self._tronca()
         if self._in_pausa:
             self._chiudi_ascolto()
         self._forse_annuncia()
         self._forse_riassumi()
+
+    def _tronca(self) -> None:
+        """TRASCRIZIONE e' scaduta: la tabella dice "tronca", e troncare vuol
+        dire elaborare quello che c'e'. Fino a PHASE1 non lo faceva nessuno —
+        la macchina restava in ELABORAZIONE senza un turno, e dopo 5 secondi
+        andava in ERRORE, in silenzio. Gira sul thread audio, come `on_audio`:
+        il segmentatore non si tocca da due thread.
+        """
+        seg = self.seg.forza()
+        if seg is None:
+            self.sm.fire(Event.NO_SPEECH)             # -> IN_ASCOLTO
+            return
+        self._start_turn(seg)
 
     def _forse_riassumi(self) -> None:
         """Il riassunto, e solo quando nessuno sta aspettando.

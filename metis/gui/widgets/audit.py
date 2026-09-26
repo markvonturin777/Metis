@@ -17,7 +17,8 @@ e aggiungerebbe una seconda verita'.
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QTimer, Slot
+from PySide6.QtCore import QTimer, Slot
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
@@ -29,7 +30,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-COLORI_ESITO = {"ok": "#22c55e", "denied": "#ef4444", "error": "#f59e0b"}
+from metis.gui import tema
+
+COLORI_ESITO = {"ok": tema.OK, "denied": tema.ERRORE, "error": tema.ATTENZIONE}
 COLONNE = ("ora", "tier", "strumento", "esito", "stadio", "motivo")
 
 
@@ -58,7 +61,7 @@ class VistaAudit(QWidget):
             filtri.addWidget(c)
         filtri.addStretch(1)
         self.riassunto = QLabel("—")
-        self.riassunto.setStyleSheet("color: #94a3b8; font-size: 11px;")
+        self.riassunto.setStyleSheet(f"color: {tema.TESTO_SECONDARIO}; font-size: 11px;")
         filtri.addWidget(self.riassunto)
         radice.addLayout(filtri)
 
@@ -137,9 +140,11 @@ class VistaAudit(QWidget):
                 for j, v in enumerate(valori):
                     cella = QTableWidgetItem(v)
                     if j == 3:
-                        cella.setForeground(Qt.GlobalColor.white)
+                        # PHASE1 — i colori degli esiti c'erano da M3 e non si
+                        # usavano: la cella era sempre bianca.
                         colore = COLORI_ESITO.get(r["outcome"])
                         if colore:
+                            cella.setForeground(QColor(colore))
                             cella.setToolTip(r["detail"] or "")
                     self.tabella.setItem(i, j, cella)
         finally:
@@ -155,8 +160,7 @@ class VistaAudit(QWidget):
             " ".join(f"{k}:{v}" for k, v in sorted(stat["per_esito"].items())) +
             avviso)
         self.riassunto.setStyleSheet(
-            "color: #ef4444; font-size: 11px;" if non_confermate
-            else "color: #94a3b8; font-size: 11px;")
+            f"color: {tema.ERRORE if non_confermate else tema.TESTO_SECONDARIO}; font-size: 11px;")
 
     def collega(self, audit) -> None:
         self.audit = audit

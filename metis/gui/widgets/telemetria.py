@@ -26,8 +26,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from metis.gui import tema
+
 FINESTRA_TURNI = 50
-VERDE, AMBRA, ROSSO = "#22c55e", "#f59e0b", "#ef4444"
+VERDE, AMBRA, ROSSO = tema.OK, tema.ATTENZIONE, tema.ERRORE
 
 
 def _barra(massimo: int = 100) -> QProgressBar:
@@ -40,8 +42,10 @@ def _barra(massimo: int = 100) -> QProgressBar:
 
 def _colora(barra: QProgressBar, colore: str) -> None:
     barra.setStyleSheet(
-        "QProgressBar { background: #1e293b; border: none; border-radius: 3px;"
-        " color: #cbd5e1; font-size: 11px; }"
+        # PHASE1: il valore a destra, sulla parte vuota e scura. Centrato
+        # finiva sul verde nuovo, piu' chiaro, e non si leggeva.
+        f"QProgressBar {{ background: {tema.TRACCIA}; border: none; border-radius: 3px;"
+        f" color: {tema.TESTO}; font-size: 11px; text-align: right; padding-right: 4px; }}"
         f"QProgressBar::chunk {{ background: {colore}; border-radius: 3px; }}")
 
 
@@ -68,7 +72,7 @@ class Telemetria(QWidget):
         radice.addLayout(griglia)
 
         self.temperatura = QLabel("—")
-        self.temperatura.setStyleSheet("color: #94a3b8; font-size: 11px;")
+        self.temperatura.setStyleSheet(f"color: {tema.TESTO_SECONDARIO}; font-size: 11px;")
         radice.addWidget(self.temperatura)
 
         radice.addSpacing(8)
@@ -81,7 +85,7 @@ class Telemetria(QWidget):
             griglia2.addWidget(QLabel(etichetta), riga, 0)
             v = QLabel("—")
             v.setAlignment(Qt.AlignRight)
-            v.setStyleSheet("font-family: Consolas, monospace;")
+            v.setStyleSheet(f"font-family: '{tema.FONT_NUMERI}';")
             self.valori[chiave] = v
             griglia2.addWidget(v, riga, 1)
         radice.addLayout(griglia2)
@@ -139,11 +143,11 @@ class Telemetria(QWidget):
 
 
 def _stile_valore(colore: str) -> str:
-    return f"font-family: Consolas, monospace; color: {colore};"
+    return f"font-family: '{tema.FONT_NUMERI}'; color: {colore};"
 
 
 def _titolo(testo: str) -> QLabel:
     lab = QLabel(testo)
-    lab.setStyleSheet("color: #64748b; font-size: 11px; letter-spacing: 1px;")
+    lab.setStyleSheet(f"color: {tema.TESTO_TENUE}; font-size: 11px; letter-spacing: 1px;")
     lab.setFrameShape(QFrame.NoFrame)
     return lab

@@ -261,3 +261,56 @@ def test_elementi_invisibili_annidati_non_fanno_cadere_la_pulizia():
     pulito = _ripulisci(html)
     assert "visibile" in pulito
     assert "nascosto" not in pulito and "anche" not in pulito
+
+
+# --- PHASE1: le pubblicita' non sono risultati -------------------------------
+
+ANNUNCIO = "https://www.bing.com/aclick?ld=e8eXxJ7OjXw5HkTEzaqIqLx" + "TVUCUz4TacPaqfJ_Lw8" * 40
+
+
+@pytest.mark.parametrize("url,pubblicita", [
+    (ANNUNCIO, True),
+    ("https://bing.com/aclick?ld=corto", True),
+    ("https://duckduckgo.com/y.js?ad_provider=bing&u3=x", True),
+    ("https://adclick.g.doubleclick.net/pcs/click?x", True),
+    ("https://www.googleadservices.com/pagead/aclk?sa=L", True),
+    ("https://www.bing.com/search?q=chatbot", False),
+    ("https://botpress.com/it/blog/how-to-build-your-own-ai-chatbot", False),
+    ("https://www.aranzulla.it/come-creare-un-chatbot-1595755.html", False),
+])
+def test_riconosce_le_pubblicita(url, pubblicita):
+    assert web.e_pubblicita(url) is pubblicita
+
+
+def test_le_pubblicita_non_occupano_i_posti_delle_fonti(cache, monkeypatch):
+    """Il caso visto in esercizio: i primi due risultati erano annunci di Bing
+    da 942 e 622 caratteri. `web_fetch` li rifiutava, ma occupavano due dei
+    tre posti da fonte."""
+    chieste = []
+
+    def motore(q, n):
+        chieste.append(n)
+        annunci = [web.Risultato("Chatbot IA", ANNUNCIO, ""),
+                   web.Risultato("Create AI Chatbots", "https://www.bing.com/aclick?ld=x", "")]
+        return annunci + _r(n - 2)
+
+    monkeypatch.setattr(web, "MOTORI", (("finto", motore),))
+    risultati = web.cerca("come creare un chatbot ai", cache=cache)
+    assert chieste == [web.MAX_RISULTATI + web.MARGINE_PUBBLICITA]
+    assert len(risultati) == web.MAX_RISULTATI
+    assert not any("aclick" in r.url for r in risultati)
+    assert risultati[0].url == "https://e0.it/a"          # l'ordine resta
+
+
+def test_un_link_troppo_lungo_per_web_fetch_non_e_un_risultato(cache, monkeypatch):
+    lungo = "https://esempio.it/" + "a" * 600
+    monkeypatch.setattr(web, "MOTORI", (("finto", lambda q, n: [
+        web.Risultato("lungo", lungo, "")] + _r()),))
+    assert [r.url for r in web.cerca("qualcosa", cache=cache)] == \
+        ["https://e0.it/a", "https://e1.it/a"]
+
+
+def test_la_cache_scritta_prima_del_filtro_si_filtra_in_lettura(cache):
+    cache.scrivi("vecchia query", [web.Risultato("annuncio", ANNUNCIO, "")] + _r())
+    assert [r.url for r in web.cerca("vecchia query", cache=cache)] == \
+        ["https://e0.it/a", "https://e1.it/a"]

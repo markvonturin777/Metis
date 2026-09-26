@@ -512,3 +512,121 @@ def test_il_throughput_arriva_alle_metriche_del_turno():
     o.sm.fire(Event.SPEECH_END)
     o._start_turn(_segmento())
     assert visti and visti[-1].tok_per_s == 50.0
+
+
+# --- PHASE1: dopo un barge-in il turno nuovo non eredita l'annullamento ----------------
+#
+# Il difetto trovato dall'utente: interrotta una risposta, "apri Chrome" non
+# faceva niente — ESECUZIONE per 15 s, poi ERRORE, e nessuna riga nell'audit.
+# Il ciclo delle azioni guardava il token del turno interrotto. Lo stesso
+# difetto zittiva la conversazione successiva.
+
+def _interrompi_una_risposta(o):
+    """Un turno che parla, e il PTT che lo interrompe."""
+    from metis.llm.client import CancelToken
+    o._cancel = CancelToken()
+    for ev in (Event.PTT, Event.SPEECH_START, Event.SPEECH_END, Event.INTENT_CHAT,
+               Event.FIRST_AUDIO):
+        o.sm.fire(ev)
+    o.on_ptt()
+    assert o.sm.state is State.IN_ASCOLTO and o._cancel.cancelled
+    o.sm.fire(Event.SPEECH_START); o.sm.fire(Event.SPEECH_END)
+
+
+def test_dopo_un_barge_in_l_azione_parte():
+    o, player = make(n_chunks=1)
+    eseguiti = con_azioni(o, {"tool": "open_application", "app": "chrome"})
+    _interrompi_una_risposta(o)
+    o._process(_segmento())
+    assert eseguiti == [{"tool": "open_application", "app": "chrome"}]
+    assert o.sm.state is State.IN_ASCOLTO, f"rimasta in {o.sm.state.name}"
+
+
+def test_dopo_un_barge_in_la_conversazione_risponde():
+    o, player = make(n_chunks=1)
+    _interrompi_una_risposta(o)
+    prima = len(player.queue)
+    o._process(_segmento())
+    assert len(player.queue) > prima, "il turno dopo l'interruzione e' rimasto muto"
+    assert o.sm.state is State.IN_ASCOLTO
+
+
+def test_dopo_un_barge_in_anche_il_testo_scritto_parte():
+    o, _ = make(n_chunks=1)
+    eseguiti = con_azioni(o, {"tool": "open_application", "app": "chrome"})
+    _interrompi_una_risposta(o)
+    o.sm.fire(Event.NO_SPEECH); o.sm.fire(Event.TIMEOUT)      # torna a DORMIENTE
+    assert o.on_testo("apri chrome")
+    assert eseguiti
+
+
+def test_un_barge_in_durante_la_ricerca_annulla_quel_turno():
+    """Il PTT mentre il filler suona: dopo la ricerca non si genera niente.
+    Il vecchio controllo annullava e guardava il token del turno PRECEDENTE:
+    funzionava per caso dal secondo turno in poi, e al primo turno di una
+    sessione (nessun token precedente) lasciava partire la risposta."""
+    import dataclasses
+
+    from tests.test_percorso_web import costruisci, esegui_turno
+
+    o, player, ordine = costruisci()
+    vera = o.d.conoscenza.consulta
+
+    def consulta(q):
+        o.on_ptt()                                  # "lascia stare"
+        return vera(q)
+    o.d = dataclasses.replace(o.d, conoscenza=dataclasses.replace(o.d.conoscenza,
+                                                                  consulta=consulta))
+    esegui_turno(o)
+    assert "genera" not in ordine, "ha risposto dopo essere stato interrotto"
+    assert o.sm.state is State.IN_ASCOLTO
+    assert o.counters.barge_ins == 1
+
+
+def test_un_azione_interrotta_prima_di_partire_non_resta_in_esecuzione():
+    """NO_SPEECH da ESECUZIONE non esiste: era la transizione ignorata che
+    lasciava la macchina ferma 15 secondi."""
+    from metis.llm.client import CancelToken
+    o, _ = make()
+    con_azioni(o, {"tool": "open_application", "app": "chrome"})
+    tok = CancelToken()
+    tok.cancel()
+    o.sm.fire(Event.PTT); o.sm.fire(Event.SPEECH_START); o.sm.fire(Event.SPEECH_END)
+    o._esegui_strumento(_segmento_metriche(), FintaDecisione(
+        {"tool": "open_application", "app": "chrome"}), tok)
+    assert o.sm.state is not State.ESECUZIONE
+
+
+def _segmento_metriche():
+    from metis.core.metrics import TurnMetrics
+    return TurnMetrics(turn_id="t", t_speech_end=0.0)
+
+
+# --- PHASE1: TRASCRIZIONE che scade si tronca davvero --------------------------------
+
+def _scaduta_la_trascrizione(o):
+    import time as _t
+    o.sm.fire(Event.PTT); o.sm.fire(Event.SPEECH_START)
+    o.sm._entered_at = _t.perf_counter() - 31      # trenta secondi di "parlato"
+
+
+def test_trascrizione_scaduta_elabora_l_audio_raccolto():
+    """Trovato riproducendo la sequenza dell'utente: 30 s di rumore dopo
+    un'interruzione, poi ELABORAZIONE senza turno e ERRORE in silenzio."""
+    trascritti = []
+    o, player = make(n_chunks=1)
+    o.d.stt = lambda pcm: (trascritti.append(len(pcm)), FakeTranscript("una frase lunga"))[1]
+    o.seg._active = True
+    o.seg._buf = [np.zeros(512, np.float32)] * 20
+    o.seg._speech_blocks = 20
+    _scaduta_la_trascrizione(o)
+    o.tick()
+    assert trascritti == [512 * 20], "l'audio raccolto non e' arrivato alla trascrizione"
+    assert o.sm.state is not State.ELABORAZIONE
+
+
+def test_trascrizione_scaduta_senza_audio_torna_ad_ascoltare():
+    o, _ = make()
+    _scaduta_la_trascrizione(o)
+    o.tick()
+    assert o.sm.state is State.IN_ASCOLTO

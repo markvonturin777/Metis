@@ -1,6 +1,6 @@
 # PHASE1 — Interfaccia "Hub"
 
-> **Durata stimata:** 16 giorni · **Ramo:** `svil/phase1` · **Tag:** `p1-hub`
+> **Durata stimata:** 14 giorni · **Ramo:** `svil/phase1` · **Tag:** `p1-hub`
 > **Materiale di partenza:** [`NEW FEATURES/Idee.md`](../../NEW%20FEATURES/Idee.md), [`NEW FEATURES/JARVIS_INTERFACE.png`](../../NEW%20FEATURES/JARVIS_INTERFACE.png)
 > **Riferimento normativo:** [Specifica V1.0](../PHASE0/Metis_V1.0_Specifica_Ufficiale.md), §11 (interfaccia) e §15 (NFR-8)
 
@@ -31,11 +31,11 @@ a 60 fotogrammi al secondo può rompere tre garanzie già misurate:
 ## Prerequisiti
 
 - [x] M7: codice completo, GUI di PHASE0 stabile e coperta da test
-- [ ] **Decisioni D-UI chiuse** (§Decisioni, qui sotto): cambiano il perimetro del lavoro
+- [x] **Decisioni D-UI chiuse** (2026-09-25, §Decisioni qui sotto)
 - [ ] Ramo `svil/phase1` creato da `svil/m7`
 
 **Rapporto con M7, ancora aperto.** M7 vieta nuove funzionalità prima del tag `v1.0`, e questa
-fase ne aggiunge (meteo, fotocamera, input di testo). Resta compatibile con la chiusura di M7 a
+fase ne aggiunge (meteo, input di testo). Resta compatibile con la chiusura di M7 a
 due condizioni:
 
 1. **Il soak di 72 ore non dipende dalla GUI**: `tests/soak/run_soak.py` usa `costruisci_sistema`
@@ -46,14 +46,12 @@ due condizioni:
 
 ---
 
-## Decisioni da prendere prima di iniziare (gate D-UI)
+## Decisioni (gate D-UI) — chiuse il 2026-09-25
 
-Ognuna ha una raccomandazione. Se va bene la raccomandazione, basta spuntarla.
-
-| # | Domanda | Raccomandazione | Perché |
+| # | Domanda | Decisione | Perché |
 | :-- | :-- | :-- | :-- |
-| **D-UI 1** | Il modulo **Fotocamera** mostra quale fotocamera? | **La videocamera di Home Assistant** (`camera.xiaomi_salotto`, già in `config/home_assistant.toml`). **La webcam del PC è esclusa** | La videocamera è già nel perimetro della specifica (§17 M6) e nel backlog V1.1 (#5 "Streaming videocamera in GUI"). La webcam sarebbe un sensore nuovo puntato sull'utente: un problema di privacy da trattare a parte, non un widget |
-| **D-UI 2** | A un messaggio **scritto** Metis risponde a voce o per iscritto? | **A voce e per iscritto, come sempre.** Un pulsante "muto" nella barra dei controlli toglie la voce a tutto, scritto o parlato | Un solo percorso di risposta. Una risposta solo scritta chiederebbe un secondo percorso nella macchina a stati (GENERAZIONE → PARLATO dipende dal primo audio) |
+| **D-UI 1** | Il modulo **Fotocamera** mostra quale fotocamera? | **Nessuna, per ora: il pannello c'è ed è un segnaposto vuoto.** Nessun worker, nessun collegamento | La raccomandazione era la videocamera di Home Assistant, che però non è ancora disponibile (M6 in pausa). La webcam del PC resta esclusa: sarebbe un sensore nuovo puntato sull'utente |
+| **D-UI 2** | A un messaggio **scritto** Metis risponde a voce o per iscritto? | **A voce e per iscritto, come sempre.** Il pulsante "muto" toglie la voce a tutto | Un solo percorso di risposta. Una risposta solo scritta chiederebbe un secondo percorso nella macchina a stati (GENERAZIONE → PARLATO dipende dal primo audio) |
 | **D-UI 3** | **"Pulisci"** cancella solo la vista o anche la memoria? | **Anche la memoria** (finestra, riassunto, slot), con una conferma | Pulire la vista lasciando la memoria è ingannevole: la conversazione sembra nuova, ma Metis ricorda ancora |
 | **D-UI 4** | La **control room** attuale sparisce? | **No: diventa la vista "Diagnostica"**, restilizzata e raggiungibile dall'Hub | Audit, contesto, editor dei comandi e latenze sono strumenti che servono ancora, e sono coperti da test |
 | **D-UI 5** | Da dove arriva il **meteo**? | **Open-Meteo**: nessun account, nessuna chiave. La posizione sta in `config/gui.local.toml`, ignorato da git | L'unico dato che esce dal PC sono le coordinate. Stesso schema di `email.local.toml` |
@@ -82,7 +80,7 @@ Ognuna ha una raccomandazione. Se va bene la raccomandazione, basta spuntarla.
 │ [umid][vento][perc]│                                           │       └───────────┘ │
 ├───────────────────┤                                            │                     │
 │ ◉ FOTOCAMERA      │                                            │                     │
-│  (spenta)         │                                            │                     │
+│  (non collegata)  │                                            │                     │
 ├───────────────────┤                                            │                     │
 │ ⏱ SESSIONE        │                                            │                     │
 │ attivo da 00:07:19│           [ 📷 ]  [ 🎙 ]  [ ⌨ ]  [ 🔇 ]      ├─────────────────────┤
@@ -124,7 +122,7 @@ vale per la cornice: pannelli, bordi, titoli.
 
 | Pulsante | Azione | Esiste già? |
 | :-- | :-- | :-- |
-| 📷 Fotocamera | Mostra o nasconde il flusso nel modulo a sinistra | No |
+| 📷 Fotocamera | Disattivato, con il suggerimento "non ancora collegata" (D-UI 1) | No |
 | 🎙 Microfono | **Push-to-talk**, lo stesso di `Ctrl+Alt+M`. Barrato quando l'ascolto è in pausa | Sì, è `nucleo.ptt()` |
 | ⌨ Tastiera | Porta il cursore nel campo di testo | No |
 | 🔇 Muto | Toglie la voce a Metis; le risposte restano scritte (D-UI 2) | No |
@@ -206,7 +204,7 @@ Font e icone stanno in `metis/gui/risorse/` con le loro licenze, e vanno aggiunt
 | 7 | Input di testo | `metis/core/orchestrator.py` (`on_testo`), macchina a stati |
 | 8 | Widget sistema, sessione | `metis/gui/widgets/sistema.py` |
 | 9 | Meteo | `metis/gui/workers/meteo.py`, `metis/gui/widgets/meteo.py` |
-| 10 | Fotocamera | `metis/gui/workers/fotocamera.py`, `metis/gui/widgets/fotocamera.py` |
+| 10 | Fotocamera: solo il pannello segnaposto (D-UI 1) | `metis/gui/widgets/fotocamera.py` |
 | 11 | Impostazioni | `metis/gui/impostazioni.py`, `config/gui.toml` + `gui.local.toml` |
 | 12 | Minimal, Diagnostica, dialogo T3, tray restilizzati | file esistenti |
 | 13 | Specifica §11 aggiornata, `docs/INSTALL.md` | documenti |
@@ -294,23 +292,7 @@ Font e icone stanno in `metis/gui/risorse/` con le loro licenze, e vanno aggiunt
    - la città si imposta nelle Impostazioni: la geocodifica di Open-Meteo trasforma il nome in
      coordinate, una volta sola, e il risultato va in `config/gui.local.toml`.
 
-### Giorni 11–12 — Fotocamera (D-UI 1)
-
-1. Worker che legge un'istantanea con `GET /api/camera_proxy/<entity_id>` di Home Assistant,
-   usando lo stesso token del Credential Manager di M6. Un fotogramma al secondo, **solo con il
-   modulo acceso e visibile**.
-2. **Spenta all'avvio, sempre.** Si accende con un clic, e un'indicazione "IN DIRETTA" resta
-   visibile finché è accesa.
-3. **Nessun fotogramma tocca il disco o il modello.** L'immagine vive in memoria fino al
-   fotogramma successivo. Un test verifica che il modulo non importi niente di `metis/llm` né di
-   `metis/memory` e che non scriva file.
-4. Il pulsante di accensione mostra e nasconde il flusso nella GUI. **Non accende la videocamera
-   fisica**: quello sarebbe un'azione su un dispositivo, e passerebbe dal broker come ogni altra.
-5. Home Assistant non è ancora disponibile (M6 in pausa): come in M6 si sviluppa contro un
-   server finto che risponde a `camera_proxy` con un JPEG, e la prova con la videocamera vera
-   resta un criterio aperto.
-
-### Giorni 13–14 — Le altre viste e le impostazioni
+### Giorni 11–12 — Le altre viste, le impostazioni, il segnaposto della fotocamera
 
 1. **Minimal:** stessa cornice, un nucleo in miniatura (64 px) al posto del pallino, stesse
    informazioni di oggi.
@@ -319,10 +301,13 @@ Font e icone stanno in `metis/gui/risorse/` con le loro licenze, e vanno aggiunt
    fuoco su "Nega", argomenti per intero, conto alla rovescia: i test di `test_gui_conferma.py`
    non si toccano, e se falliscono si corregge il dialogo, non il test.
 4. **Tray:** voci "Mostra Minimal / Hub / Diagnostica".
-5. **Impostazioni** (⚙): città del meteo, fotocamera (entità), riduci animazioni, vista all'avvio,
-   muto all'avvio. Si salvano in `config/gui.local.toml`, ignorato da git.
+5. **Impostazioni** (⚙): città del meteo, riduci animazioni, vista all'avvio, muto all'avvio.
+   Si salvano in `config/gui.local.toml`, ignorato da git.
+6. **Fotocamera** (D-UI 1): il pannello a sinistra con l'icona e "non collegata", e il pulsante
+   della barra disattivato. Niente worker e niente rete: quando si deciderà la sorgente,
+   si aggiunge il contenuto senza toccare il layout.
 
-### Giorni 15–16 — Verifica
+### Giorni 13–14 — Verifica
 
 1. **NFR-8 ricertificato:** 30 minuti di uso reale con l'Hub visibile e le animazioni attive,
    `MisuratoreLag` in fase di esercizio, 0 freeze oltre 100 ms. Il log porta la `fase` da M7, e
@@ -334,7 +319,7 @@ Font e icone stanno in `metis/gui/risorse/` con le loro licenze, e vanno aggiunt
    guardando le catture**, non un test.
 4. **Bundle** rigenerato con font e icone e riprovato su cartella pulita (la prova di M7).
 5. Specifica §11 aggiornata (tre viste, nucleo, input di testo), `docs/INSTALL.md` (meteo,
-   fotocamera, `gui.local.toml`).
+   `gui.local.toml`).
 
 ---
 
@@ -350,8 +335,7 @@ Font e icone stanno in `metis/gui/risorse/` con le loro licenze, e vanno aggiunt
 - [ ] I turni scritti esclusi da NFR-1/NFR-2
 - [ ] "Pulisci" azzera vista, memoria e slot; "Esporta" produce Markdown
 - [ ] Meteo senza rete: ultimo dato o frase in persona, nessun blocco
-- [ ] Fotocamera spenta all'avvio, nessun fotogramma su disco o al modello
-- [ ] Fotocamera provata con la videocamera vera di Home Assistant — *quando HA sarà disponibile*
+- [ ] Pannello fotocamera presente come segnaposto, pulsante disattivato (D-UI 1)
 - [ ] Tutti i test di M3 verdi senza modifiche: thread, lambda, conferma T3, cambio vista
 - [ ] Nessun colore esadecimale fuori da `tema.py` e `palette.py`
 - [ ] Layout corretto da 1280×720 in su, a 100/125/150% di scala
@@ -365,6 +349,7 @@ Font e icone stanno in `metis/gui/risorse/` con le loro licenze, e vanno aggiunt
 
 | Cosa | Quando |
 | :-- | :-- |
+| Contenuto del modulo fotocamera (videocamera di Home Assistant) | Quando HA sarà disponibile (D-UI 1) |
 | Webcam del PC | Solo con una decisione esplicita sulla privacy (D-UI 1) |
 | Meteo come strumento di Metis | Backlog (D-UI 6) |
 | Tema chiaro, temi personalizzabili | Backlog V1.1 #6 |
@@ -379,12 +364,12 @@ Font e icone stanno in `metis/gui/risorse/` con le loro licenze, e vanno aggiunt
 
 | Rischio | Effetto | Contromisura |
 | :-- | :-- | :-- |
-| Rifinitura estetica senza fine | La fase non chiude mai | Due revisioni sulle catture (giorni 8 e 16), poi si chiude |
+| Rifinitura estetica senza fine | La fase non chiude mai | Due revisioni sulle catture (giorni 8 e 14), poi si chiude |
 | Effetti grafici costosi (ombre, sfocature, trasparenze) | NFR-8 fallisce durante l'inferenza | Bagliore disegnato con gradienti; misura al giorno 7 |
 | Animazioni sempre accese | CPU sprecata per 72 ore in tray | Timer fermo quando non è visibile, con un test |
 | Ciano ovunque | Gli stati non si distinguono più | Colore del nucleo dalla palette; test sulle tonalità |
 | `QOpenGLWidget` instabile | Schermo nero su certi driver, problemi con l'overlay traslucido | QPainter prima; OpenGL solo se misurato e mai nell'overlay |
-| Rete o Home Assistant lenti | Blocchi della GUI | Ogni rete su un worker; timeout; la regola dei thread verificata dal test di M3 |
+| Rete lenta (meteo) | Blocchi della GUI | Ogni rete su un worker; timeout; la regola dei thread verificata dal test di M3 |
 | L'input di testo apre una porta laterale | Un'azione senza conferma | Stesso `_process`, stesso broker; test dedicato |
 | Font non caricati nel bundle | Carattere di ripiego, estetica rotta solo nel bundle | Test di caricamento; prova su cartella pulita |
 | Licenze delle risorse | Problemi di redistribuzione | Solo OFL, ISC, MIT, con i file di licenza accanto |
@@ -398,5 +383,5 @@ Alla fine di PHASE1:
 - l'Hub è la vista predefinita; Minimal e Diagnostica restano, con lo stesso tema;
 - NFR-8 è ricertificato sulla nuova interfaccia;
 - `tema.py` e `componenti.py` sono la base per qualunque vista futura;
-- restano aperti, e ereditati: la fotocamera con Home Assistant vero e i criteri di M7 (soak,
+- restano aperti, e ereditati: il contenuto della fotocamera (D-UI 1) e i criteri di M7 (soak,
   100 interazioni reali, autostart con riavvio, installazione da zero).

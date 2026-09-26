@@ -21,6 +21,18 @@ import time
 from PySide6.QtCore import QObject, Signal, Slot
 
 SOGLIA_VRAM_GB = 7.5          # §3.2 della specifica: oltre, indicatore rosso
+PERIODO_DISCO_S = 5.0
+
+
+def _leggi_disco(psutil) -> dict:
+    """Il disco di sistema, quello dove stanno Metis, i modelli e i log."""
+    import os
+
+    try:
+        u = psutil.disk_usage(os.environ.get("SystemDrive", "C:") + "\\")
+    except OSError:
+        return {}
+    return {"disco_usato_gb": round(u.used / 1024**3), "disco_totale_gb": round(u.total / 1024**3)}
 
 
 class Telemetria(QObject):
@@ -52,6 +64,8 @@ class Telemetria(QObject):
             self._gpu = None
 
         ultimo_gpu = 0.0
+        ultimo_disco = -PERIODO_DISCO_S
+        disco: dict = {}
         psutil.cpu_percent(interval=None)     # prima lettura, si scarta
         while not self._ferma:
             ora = time.perf_counter()
@@ -66,6 +80,12 @@ class Telemetria(QObject):
                 ultimo_gpu = ora
                 self._ultima_gpu = self._leggi_gpu()
             campione.update(self._ultima_gpu)
+            # PHASE1: il disco per l'Hub. Ogni 5 s: lo spazio libero non
+            # cambia due volte al secondo, e la lettura tocca il file system.
+            if ora - ultimo_disco >= PERIODO_DISCO_S:
+                ultimo_disco = ora
+                disco = _leggi_disco(psutil)
+            campione.update(disco)
             self.dati.emit(campione)
             time.sleep(self.periodo_cpu)
 

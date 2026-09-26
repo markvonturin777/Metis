@@ -63,6 +63,44 @@ _MARCATORI = re.compile(
 # Almeno una lettera o una cifra: vedi `_clean`.
 _ALFANUM = re.compile(r"[^\W_]", re.UNICODE)
 
+# PHASE1 — link e indirizzi. Il prompt vieta di pronunciarli, e il modello li
+# scrive lo stesso: "descritto su [Tuttosemplice.com](https://blog.tutto...)",
+# e Piper leggeva l'indirizzo intero. Del link markdown resta il nome;
+# l'indirizzo nudo diventa il nome del sito ("tuttosemplice"), che e' come
+# il prompt chiede di citare. Il testo arriva a pezzi e un link puo' stare a
+# cavallo di due: per questo "](indirizzo)" e le quadre si tolgono separati,
+# invece di cercare il link intero.
+_LINK_MD = re.compile(r"\]\(\s*(?:https?://|www\.)[^)\s]*\s*\)?", re.I)
+_URL = re.compile(r"(?:https?://|www\.)[^\s<>()\[\]]+?(?=[.,;:!?]*(?:\s|$|[)\]]))", re.I)
+_QUADRE = re.compile(r"[\[\]]")
+_SECONDO_LIVELLO = frozenset({"co", "com", "gov", "ac", "org", "net", "edu"})
+_HOST = re.compile(r"[a-z0-9.\-]+")
+
+
+def sito(url: str) -> str:
+    """"https://blog.tuttosemplice.com/ai/" -> "tuttosemplice". Il nome che
+    si pronuncia al posto dell'indirizzo; vuoto se non se ne ricava uno."""
+    from urllib.parse import urlsplit
+
+    try:
+        host = urlsplit(url if "//" in url else "//" + url).hostname or ""
+    except ValueError:
+        return ""
+    if not _HOST.fullmatch(host):
+        return ""
+    etichette = [e for e in host.split(".") if e and e != "www"]
+    if len(etichette) < 2:
+        return etichette[0] if etichette else ""
+    if etichette[-2] in _SECONDO_LIVELLO and len(etichette) >= 3:
+        return etichette[-3]
+    return etichette[-2]
+
+
+def _senza_link(testo: str) -> str:
+    testo = _LINK_MD.sub("", testo)
+    testo = _URL.sub(lambda m: sito(m.group(0)), testo)
+    return _QUADRE.sub("", testo)
+
 
 def _clean(chunk: str) -> str:
     """Testo pronto per il TTS: niente markdown, niente marcatori, spazi
@@ -72,7 +110,9 @@ def _clean(chunk: str) -> str:
     grassetto i termini chiave; passati cosi' come sono alla sintesi
     diventano pause innaturali e artefatti.
     """
-    ripulito = _WS.sub(" ", _MARCATORI.sub("", _MARKDOWN.sub("", chunk))).strip()
+    # I link prima del markdown: `_MARKDOWN` mangia gli underscore, che negli
+    # indirizzi ci sono.
+    ripulito = _WS.sub(" ", _MARCATORI.sub("", _MARKDOWN.sub("", _senza_link(chunk)))).strip()
     # Tolto il marcatore puo' restare un frammento di sola punteggiatura —
     # "." o ">>>." — che la sintesi trasformerebbe in un rumore breve. Un
     # chunk senza nemmeno una lettera non si pronuncia.

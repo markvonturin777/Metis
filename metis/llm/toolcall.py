@@ -35,6 +35,22 @@ volta. Poi si rinuncia. Un secondo tentativo alla cieca non serve: se il
 modello sbaglia due volte non sta sbagliando la sintassi, sta sbagliando
 l'intento, e insistere produce solo latenza.
 
+LA FRASE DELL'UTENTE, UNA VOLTA SOLA (PHASE1)
+Da M5 l'orchestratore mette la frase in memoria PRIMA di chiedere al router,
+e la cronologia che passa la contiene gia'. Qui la si riaggiungeva in coda:
+il modello la leggeva due volte, e una domanda ripetuta pesa come un ordine.
+"Sai aiutarmi nella programmazione?" apriva VS Code 5 volte su 5; detta una
+volta sola, 0 su 5. Si toglie dalla cronologia, perche' in coda deve restare:
+e' l'ultima cosa che il modello deve leggere.
+
+APRIRE UN'APPLICAZIONE CHIEDE UN VERBO (PHASE1)
+Con la cronologia giusta il modello sbaglia ancora: dopo "Ho aperto Visual
+Studio Code", "e se volessi farlo in locale?" riapriva VS Code 4 volte su 4.
+La regola nel prompt non basta a un modello da 8 miliardi, quindi c'e' anche
+nel codice: `open_application` passa solo se la frase contiene un verbo di
+apertura. Vale per le decisioni del modello, non per i comandi rapidi, che
+sono frasi scelte dall'utente ("inizia a lavorare").
+
 TEMPERATURA BASSA
 0,15 contro lo 0,7 della conversazione. Qui non serve varieta': serve che la
 stessa frase produca sempre la stessa azione, perche' un assistente che a
@@ -44,6 +60,7 @@ volte apre VS Code e a volte no e' peggio di uno che non lo apre mai.
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import dataclass
 from typing import Annotated, Literal, Union
@@ -56,6 +73,13 @@ from metis.tools.registry import Registry
 
 MODEL = "qwen3:8b"
 TEMPERATURA = 0.15
+
+# "apri", "aprimi", "riapri", "avvia", "lancia", "fai partire", "esegui",
+# "open": sulla frase normalizzata (minuscole, senza accenti). Un prefisso
+# che prende anche una parola estranea ("aprile", "avvisami") lascia passare
+# la decisione del modello, cioe' il comportamento di prima: il controllo
+# puo' solo togliere un'azione, mai aggiungerla.
+VERBO_APERTURA = re.compile(r"\b(?:ri)?(?:apr|avvi|lanci|esegu|open|start)\w*|\bpartire\b")
 
 PROMPT = """Sei il router di Metis, un assistente vocale su questo PC.
 Ricevi cio' che l'utente ha detto e scegli UNA cosa da fare.
@@ -81,11 +105,19 @@ Regole:
   "github_desktop" = GitHub Desktop, il client di git; "chrome" = il
   browser.
 - Se la richiesta corrisponde chiaramente a uno strumento, usalo.
-- Usa "web_search" quando la risposta dipende da qualcosa che cambia nel
-  tempo o che nessuno puo' sapere a memoria: notizie, prezzi, quotazioni,
-  meteo, risultati, orari, versioni, "ultime novita' su", "cosa e'
-  successo", "quanto costa oggi". Nel campo "query" scrivi cosa cercare,
+- Usa "web_search" SOLO quando la risposta dipende da qualcosa che cambia
+  nel tempo o che nessuno puo' sapere a memoria: notizie, prezzi,
+  quotazioni, meteo, risultati, orari, versioni, "ultime novita' su", "cosa
+  e' successo", "quanto costa oggi". Nel campo "query" scrivi cosa cercare,
   non la frase dell'utente parola per parola.
+- "come si fa", "come faccio", "come posso", "come funziona", "che
+  differenza c'e'", "cos'e'", "perche'", "mi spieghi", "mi consigli" sono
+  SPIEGAZIONI: "nessuno_strumento", anche quando parlano di tecnologia, di
+  programmi o di intelligenza artificiale. Metis le sa, e una pagina web
+  trovata a caso le spiega peggio. Esempi: "come si cucina il risotto",
+  "come faccio un curriculum", "che differenza c'e' tra HTTP e HTTPS",
+  "come posso migliorare il mio inglese", "e se volessi farlo da solo?" =
+  "nessuno_strumento".
 - NON usare "web_search" per definizioni, spiegazioni, calcoli, opinioni,
   storia, o per qualunque cosa che non sia cambiata di recente.
 - Altrimenti usa "nessuno_strumento": conversazione, domande, saluti,
@@ -240,13 +272,7 @@ class ToolRouter:
         schema = adapter.json_schema()
 
         messaggi = [{"role": "system", "content": self._prompt(slot)}]
-        # Solo gli ultimi scambi: il router decide su cio' che e' stato detto
-        # adesso, e un contesto lungo aumenta la latenza senza aiutare. I
-        # messaggi di sistema — persona, riassunto, slot — si saltano: quelli
-        # che servono qui sono gia' nel prompt del router, e gli altri
-        # parlano di come rispondere, non di cosa fare.
-        if storia:
-            messaggi += [m for m in storia[-5:] if m.get("role") != "system"][-4:]
+        messaggi += precedenti(storia, testo)
         messaggi.append({"role": "user", "content": testo})
 
         riparazioni = 0
@@ -298,11 +324,41 @@ class ToolRouter:
                 if isinstance(a, NessunoStrumento):
                     break
                 azioni.append(a.model_dump())
-            return Decisione(tuple(azioni), "llm", _ms(t0), riparazioni)
+            tenute = [a for a in azioni if chiesta(a, testo)]
+            nota = None if len(tenute) == len(azioni) else "open_application senza verbo"
+            return Decisione(tuple(tenute), "llm", _ms(t0), riparazioni, nota)
 
         # Due tentativi falliti: si risponde a parole. Deny-by-default anche
         # qui — nel dubbio non si agisce.
         return Decisione((), "llm", _ms(t0), riparazioni, ultimo_errore)
+
+
+def precedenti(storia: list[dict] | None, testo: str) -> list[dict]:
+    """Gli ultimi scambi, senza la frase di adesso.
+
+    Solo gli ultimi: il router decide su cio' che e' stato detto adesso, e un
+    contesto lungo aumenta la latenza senza aiutare. I messaggi di sistema —
+    persona, riassunto, slot — si saltano: quelli che servono qui sono gia'
+    nel prompt del router, e gli altri parlano di come rispondere, non di
+    cosa fare. La frase di adesso, se la cronologia la contiene gia', si
+    toglie: va in coda, una volta (vedi la nota in testa).
+    """
+    if not storia:
+        return []
+    scambi = [m for m in storia if m.get("role") != "system"]
+    if scambi and scambi[-1].get("role") == "user" and scambi[-1].get("content") == testo:
+        scambi = scambi[:-1]
+    return scambi[-4:]
+
+
+def chiesta(azione: dict, testo: str) -> bool:
+    """L'azione e' stata chiesta dalla frase? Per ora conta solo per
+    `open_application` (vedi la nota in testa)."""
+    if azione.get("tool") != "open_application":
+        return True
+    from metis.core.router import normalizza
+
+    return VERBO_APERTURA.search(normalizza(testo)) is not None
 
 
 def _ms(t0: float) -> float:

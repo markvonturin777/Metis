@@ -106,7 +106,7 @@ def test_l_app_e_l_unica_a_montare_i_thread():
 
 # --- dove atterrano davvero gli slot ----------------------------------------
 
-def test_i_segnali_del_nucleo_atterrano_sul_thread_principale(app_qt):
+def test_i_segnali_del_nucleo_atterrano_sul_thread_principale(app_qt, crea_applicazione):
     """Il test che avrebbe preso subito il difetto delle lambda.
 
     `signal.connect(lambda: ...)` non ha un oggetto ricevente: Qt non sa a
@@ -123,10 +123,7 @@ def test_i_segnali_del_nucleo_atterrano_sul_thread_principale(app_qt):
     from PySide6.QtCore import QThread
     from PySide6.QtWidgets import QApplication
 
-    from metis.core.avvio import Opzioni
-    from metis.gui.app import Applicazione
-
-    app = Applicazione(Opzioni(tools=False, wakeword=False), tray=False)
+    app = crea_applicazione(tray=False)
     atterrati: list[int] = []
 
     vero_stato = app._stato

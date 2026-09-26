@@ -8,6 +8,7 @@ TOPOLOGIA
     thread principale     QApplication, tutti i widget, il misuratore di lag
     thread "nucleo"       audio, macchina a stati, STT, LLM, broker
     thread "telemetria"   psutil 2 Hz, NVML 1 Hz
+    thread "meteo"        Open-Meteo ogni 15 minuti (PHASE1)
 
 L'unico flusso che torna indietro e' la conferma T3, e passa dal
 `PonteConferma`. Tutto il resto va in una direzione sola: il nucleo emette,
@@ -75,15 +76,20 @@ from metis.audio.ptt import (  # noqa: E402
 )
 from metis.core.avvio import Opzioni  # noqa: E402
 from metis.core.logging import configure, get_logger  # noqa: E402
+from metis.core.risposte import FILLERS  # noqa: E402
 from metis.gui.conferma import PonteConferma  # noqa: E402
+from metis.gui import impostazioni, tema  # noqa: E402
 from metis.gui.fullscreen_view import FullscreenView  # noqa: E402
+from metis.gui.hub_view import HubView  # noqa: E402
 from metis.gui.lag import MisuratoreLag  # noqa: E402
 from metis.gui.minimal_view import MinimalView  # noqa: E402
+from metis.gui.modello_conversazione import ModelloConversazione  # noqa: E402
 from metis.gui.tray import IconaTray  # noqa: E402
 from metis.gui.widgets.conferma import DialogoConferma  # noqa: E402
 from metis.gui.widgets.conversazione import Conversazione  # noqa: E402
 from metis.gui.widgets.telemetria import Telemetria as CruscottoTelemetria  # noqa: E402
 from metis.gui.workers.nucleo import Nucleo  # noqa: E402
+from metis.gui.workers.meteo import Meteo as WorkerMeteo  # noqa: E402
 from metis.gui.workers.telemetria import Telemetria as WorkerTelemetria  # noqa: E402
 
 
@@ -115,18 +121,32 @@ class Applicazione(QObject):
     """
 
     def __init__(self, opzioni: Opzioni, fullscreen: bool = False,
-                 tray: bool | None = None):
+                 tray: bool | None = None, config=impostazioni.CONFIG):
         super().__init__()
         self.opzioni = opzioni
+        # PHASE1: `config/gui.toml` e il suo locale. Un parametro perche' i
+        # test non leggano mai quello vero della macchina.
+        self.config = config
+        self.preferenze = impostazioni.leggi(config)
         self.log = get_logger()
         self.qt = QApplication.instance() or QApplication(sys.argv)
         self.qt.setApplicationName("Metis")
+        # PHASE1: font, icone e foglio di stile dell'Hub, per tutta l'applicazione.
+        self.font_disponibili = tema.applica(self.qt)
+        mancanti = [f for f, ok in self.font_disponibili.items() if not ok]
+        if mancanti:
+            self.log.warning("font mancanti", font=mancanti)
 
-        # --- widget condivisi, posseduti da qui e non dalle viste ---------
-        self.conversazione = Conversazione()
+        # --- dati e widget condivisi, posseduti da qui e non dalle viste ---
+        # PHASE1: la conversazione e' un modello, disegnato in due modi — a
+        # fumetti nell'Hub, come registro nella Diagnostica.
+        self.modello = ModelloConversazione(self)
+        self.conversazione = Conversazione(self.modello)
         self.cruscotto = CruscottoTelemetria()
 
         self.minimal = MinimalView()
+        self.hub = HubView(self.modello)
+        # La control room di PHASE0: da PHASE1 e' la vista "Diagnostica".
         self.fullscreen = FullscreenView(self.conversazione, self.cruscotto)
         self._dialogo: DialogoConferma | None = None
 
@@ -145,6 +165,13 @@ class Applicazione(QObject):
         self.worker_telemetria.moveToThread(self.thread_telemetria)
         self.thread_telemetria.started.connect(self.worker_telemetria.avvia)
 
+        # --- PHASE1: thread del meteo ---------------------------------------
+        self.worker_meteo = WorkerMeteo(config=config)
+        self.thread_meteo = QThread()
+        self.thread_meteo.setObjectName("metis-meteo")
+        self.worker_meteo.moveToThread(self.thread_meteo)
+        self.thread_meteo.started.connect(self.worker_meteo.avvia)
+
         self.lag = MisuratoreLag()
         self.segnali = Segnali()
 
@@ -155,14 +182,15 @@ class Applicazione(QObject):
             tray = QSystemTrayIcon.isSystemTrayAvailable()
         self.tray: IconaTray | None = IconaTray(self) if tray else None
         self._avvisato_tray = False
-        self._vista_attiva = "fullscreen" if fullscreen else "minimal"
+        self._vista_attiva = "hub" if fullscreen else "minimal"
         if self.tray is not None:
             self.qt.setQuitOnLastWindowClosed(False)
-            for vista in (self.minimal, self.fullscreen):
+            for vista in (self.minimal, self.hub, self.fullscreen):
                 vista.installEventFilter(self)
 
         self._collega()
         self._scorciatoie()
+        self._applica_preferenze(all_avvio=True)
 
     # -- cablaggio dei segnali --------------------------------------------
 
@@ -180,6 +208,7 @@ class Applicazione(QObject):
         n.dice.connect(self._dice)
         n.turno.connect(self._turno)
         n.livello.connect(self._livello)
+        n.voce.connect(self._voce)
         n.contatori.connect(self._contatori)
         # M5 — va solo alla control room: nella vista minimal non c'e' posto
         # per un budget di token, e chi usa Metis in minimal non lo sta
@@ -187,24 +216,35 @@ class Applicazione(QObject):
         n.contesto.connect(self.fullscreen.imposta_contesto)
         self.worker_telemetria.dati.connect(self._risorse)
         self.worker_telemetria.errore.connect(self._errore)
+        self.worker_meteo.dati.connect(self.hub.imposta_meteo)
 
         self.ponte.richiesta.connect(self._mostra_conferma)
         self.ponte.chiusa.connect(self._chiudi_conferma)
 
         # Questi arrivano dal thread principale: sono i pulsanti.
-        for vista in (self.minimal, self.fullscreen):
+        for vista in (self.minimal, self.hub, self.fullscreen):
             vista.chiede_ptt.connect(self._ptt)
             vista.chiede_kill.connect(self._kill)
-        self.minimal.chiede_fullscreen.connect(self.mostra_fullscreen)
+        self.minimal.chiede_fullscreen.connect(self.mostra_hub)
         self.fullscreen.chiede_minimal.connect(self.mostra_minimal)
+        self.fullscreen.chiede_hub.connect(self.mostra_hub)
+        self.hub.chiede_minimal.connect(self.mostra_minimal)
+        self.hub.chiede_diagnostica.connect(self.mostra_fullscreen)
+        self.hub.chiede_testo.connect(self._testo)
+        self.hub.chiede_pulisci.connect(self._pulisci)
+        self.hub.chiede_muto.connect(self._muto)
+        self.hub.chiede_impostazioni.connect(self._impostazioni)
 
-        self.segnali.kill_cambiato.connect(self.minimal.imposta_kill)
-        self.segnali.kill_cambiato.connect(self.fullscreen.imposta_kill)
+        for vista in (self.minimal, self.hub, self.fullscreen):
+            self.segnali.kill_cambiato.connect(vista.imposta_kill)
+        self.segnali.pausa_cambiata.connect(self.hub.imposta_pausa)
+        self.segnali.pausa_cambiata.connect(self.minimal.imposta_pausa)
         self.lag.freeze.connect(self._freeze)
 
         if self.tray is not None:
             t = self.tray
             t.chiede_minimal.connect(self.mostra_minimal)
+            t.chiede_hub.connect(self.mostra_hub)
             t.chiede_fullscreen.connect(self.mostra_fullscreen)
             t.chiede_kill.connect(self._kill)
             t.chiede_pausa.connect(self._pausa)
@@ -225,6 +265,7 @@ class Applicazione(QObject):
     @Slot(str, str, str)
     def _stato(self, da: str, evento: str, a: str) -> None:
         self.minimal.imposta_stato(a)
+        self.hub.imposta_stato(a)
         self.fullscreen.imposta_stato(a)
         if self.tray is not None:
             self.tray.imposta_stato(a)
@@ -237,12 +278,19 @@ class Applicazione(QObject):
 
     @Slot(str)
     def _dice(self, testo: str) -> None:
-        self.conversazione.metis(testo)
         self.fullscreen.imposta_corrente(testo)
+        # PHASE1 — "Verifico." si dice mentre si cerca, e basta: nel fumetto
+        # sembrava l'inizio della risposta ("Verifico. Per addestrare...").
+        # Lo stato lo dice gia' la pillola, "sta cercando in rete".
+        if testo in FILLERS:
+            return
+        self.conversazione.metis(testo)
 
     @Slot(dict)
     def _turno(self, m: dict) -> None:
         self.cruscotto.aggiorna_turno(m)
+        # Le frasi di questo turno sono un fumetto solo: da qui si chiude.
+        self.modello.chiudi_turno()
         if m.get("strumento"):
             self.conversazione.sistema(f"strumento: {m['strumento']}")
 
@@ -250,10 +298,20 @@ class Applicazione(QObject):
     def _livello(self, rms: float, picco: float) -> None:
         self.minimal.vu.campiona(rms, picco)
         self.fullscreen.vu.campiona(rms, picco)
+        self.hub.nucleo.campiona_microfono(rms)
+        self.minimal.nucleo.campiona_microfono(rms)
+
+    @Slot(float)
+    def _voce(self, db: float) -> None:
+        # PHASE1 — l'onda del nucleo in PARLATO segue la voce, dal player.
+        self.hub.nucleo.campiona_voce(db)
+        self.minimal.nucleo.campiona_voce(db)
 
     @Slot(dict)
     def _risorse(self, d: dict) -> None:
         self.cruscotto.aggiorna_risorse(d)
+        self.hub.sistema.aggiorna(d)
+        self.hub.sessione.aggiorna_risorse(d)
 
     @Slot(str)
     def _errore(self, testo: str) -> None:
@@ -291,10 +349,12 @@ class Applicazione(QObject):
             self.fullscreen.audit.collega(sis.audit)
         if sis is not None and sis.router is not None:
             self.fullscreen.collega_comandi(sis.libreria)
+        self.hub.imposta_pronto()
 
     @Slot(dict)
     def _contatori(self, d: dict) -> None:
         self.segnali.kill_cambiato.emit(bool(d.get("kill_switch")))
+        self.hub.sessione.aggiorna_contatori(d)
 
     @Slot()
     def _kill(self) -> None:
@@ -310,10 +370,80 @@ class Applicazione(QObject):
         self.conversazione.sistema("Ascolto in pausa." if in_pausa
                                    else "Ascolto ripreso.")
 
+    # -- PHASE1: i comandi dell'Hub ---------------------------------------
+
+    @Slot(str)
+    def _testo(self, testo: str) -> None:
+        """Il fumetto dell'utente compare solo se il turno e' partito, e solo
+        allora il campo si svuota: un messaggio rifiutato resta dov'e'."""
+        if self.nucleo.testo(testo):
+            self.modello.utente(testo, scritto=True)
+            self.minimal.imposta_ultima(testo)
+            self.hub.testo_accettato()
+        elif self.nucleo.sistema is None:
+            self.modello.sistema("Metis si sta ancora avviando: il messaggio è rimasto nel campo.")
+        else:
+            self.modello.sistema("Metis sta lavorando: il messaggio è rimasto nel campo.")
+
+    @Slot()
+    def _pulisci(self) -> None:
+        if self.nucleo.azzera():
+            self.modello.azzera()
+            self.modello.sistema("Conversazione cancellata: Metis riparte da zero.")
+        else:
+            self.modello.sistema("Non posso pulire adesso: c'è un turno in corso.")
+
+    @Slot(bool)
+    def _muto(self, attivo: bool) -> None:
+        self.nucleo.muto(attivo)
+        self.modello.sistema("Voce disattivata: le risposte restano scritte." if attivo
+                             else "Voce riattivata.")
+
+    # -- PHASE1: impostazioni ---------------------------------------------
+
+    @Slot()
+    def _impostazioni(self) -> None:
+        dialogo = impostazioni.DialogoImpostazioni(self.preferenze, parent=self.hub)
+        if dialogo.exec():
+            self.salva_preferenze(dialogo.preferenze())
+
+    def salva_preferenze(self, pref: impostazioni.Preferenze) -> None:
+        """Separata dal dialogo: i test la chiamano senza aprire niente."""
+        try:
+            citta_cambiata = impostazioni.salva(pref, self.config)
+        except OSError as exc:
+            self.log.warning("impostazioni non salvate", errore=str(exc))
+            self.modello.sistema("Non riesco a salvare le impostazioni: il file non si scrive.")
+            return
+        self.preferenze = pref
+        self._applica_preferenze()
+        if citta_cambiata:
+            # La geocodifica la fa il worker, sul suo thread: vedi
+            # `metis/gui/impostazioni.py`.
+            self.worker_meteo.ricarica()
+
+    def _applica_preferenze(self, all_avvio: bool = False) -> None:
+        """Le animazioni valgono subito; il muto solo all'avvio, perche' e'
+        una preferenza di partenza e non deve spegnere la voce a meta'
+        conversazione."""
+        attive = not self.preferenze.riduci_animazioni
+        self.hub.nucleo.imposta_animazioni(attive)
+        self.minimal.nucleo.imposta_animazioni(attive)
+        if all_avvio and self.preferenze.muto_avvio:
+            self.hub.b_voce.setChecked(True)
+
+    def vista_iniziale(self, fullscreen: bool, diagnostica: bool) -> tuple[bool, bool]:
+        """La riga di comando vince; senza, decidono le impostazioni."""
+        if fullscreen or diagnostica:
+            return fullscreen, diagnostica
+        v = self.preferenze.vista_avvio
+        return v == "hub", v == "diagnostica"
+
     @Slot(str, str, dict, float)
     def _mostra_conferma(self, strumento: str, tier: str, argomenti: dict,
                          timeout_s: float) -> None:
-        genitore = self.fullscreen if self.fullscreen.isVisible() else self.minimal
+        genitore = next((v for v in (self.hub, self.fullscreen) if v.isVisible()),
+                        self.minimal)
         self._dialogo = DialogoConferma(strumento, tier, argomenti, timeout_s,
                                         parent=genitore)
         self._dialogo.deciso.connect(self.ponte.rispondi)
@@ -333,29 +463,42 @@ class Applicazione(QObject):
 
     # -- viste -------------------------------------------------------------
 
+    def _viste(self) -> dict:
+        return {"minimal": self.minimal, "hub": self.hub, "fullscreen": self.fullscreen}
+
+    def _mostra(self, nome: str) -> None:
+        """Una vista alla volta. Le altre si nascondono, non si distruggono:
+        e' il principio di M3, e con tre viste vale ancora di piu'."""
+        self._vista_attiva = nome
+        for altro, vista in self._viste().items():
+            if altro != nome:
+                vista.hide()
+        vista = self._viste()[nome]
+        vista.show()
+        vista.raise_()
+
     @Slot()
     def mostra_minimal(self) -> None:
-        self._vista_attiva = "minimal"
-        self.fullscreen.hide()
-        self.minimal.show()
-        self.minimal.raise_()
+        self._mostra("minimal")
+
+    @Slot()
+    def mostra_hub(self) -> None:
+        self._mostra("hub")
 
     @Slot()
     def mostra_fullscreen(self) -> None:
-        self._vista_attiva = "fullscreen"
-        self.minimal.hide()
-        self.fullscreen.show()
-        self.fullscreen.raise_()
+        """La Diagnostica: il nome resta quello di M3, usato da tray e test."""
+        self._mostra("fullscreen")
 
     @Slot()
     def riporta(self) -> None:
         """Clic sull'icona: torna l'ultima vista usata, in primo piano."""
-        vista = self.fullscreen if self._vista_attiva == "fullscreen" else self.minimal
+        vista = self._viste()[self._vista_attiva]
         if vista.isVisible() and not vista.isMinimized():
             vista.raise_()
             vista.activateWindow()
             return
-        self.mostra_fullscreen() if vista is self.fullscreen else self.mostra_minimal()
+        self._mostra(self._vista_attiva)
         vista.showNormal()
         vista.activateWindow()
 
@@ -378,17 +521,29 @@ class Applicazione(QObject):
 
     # -- ciclo di vita -----------------------------------------------------
 
-    def esegui(self, fullscreen: bool = False) -> int:
-        self.mostra_fullscreen() if fullscreen else self.mostra_minimal()
+    def esegui(self, fullscreen: bool = False, diagnostica: bool = False) -> int:
+        if diagnostica:
+            self.mostra_fullscreen()
+        elif fullscreen:
+            self.mostra_hub()
+        else:
+            self.mostra_minimal()
         self.lag.avvia()
         self.thread_nucleo.start()
         self.thread_telemetria.start()
+        self.thread_meteo.start()
         self.hotkeys.start()
         if self.tray is not None:
             self.tray.mostra()
         self.qt.aboutToQuit.connect(self.chiudi)
         codice = self.qt.exec()
         print("\n  " + self.lag.riassunto())
+        # PHASE1 — quanto e' durato l'uso, nel log: i blocchi si registravano,
+        # la durata no, e NFR-8 chiede "0 blocchi in 30 minuti".
+        s = self.lag.stats("esercizio")
+        self.log.info("sessione interfaccia",
+                      esercizio_s=round(s.get("campioni", 0) * self.lag.intervallo_ms / 1000),
+                      **{k: v for k, v in s.items() if k != "campioni"})
         return codice
 
     def chiudi(self) -> None:
@@ -401,21 +556,35 @@ class Applicazione(QObject):
         self.hotkeys.stop()
         self.minimal.salva_posizione()
         self.worker_telemetria.ferma()
+        self.worker_meteo.ferma()
         self.nucleo.ferma()
         # Il ciclo audio esce entro ~250 ms; si concede il doppio prima di
         # smettere di aspettarlo. Un'applicazione che non si chiude e' un
         # difetto quanto una che si blocca.
         self.thread_nucleo.quit()
-        self.thread_nucleo.wait(3000)
+        if not self.thread_nucleo.wait(3000):
+            # PHASE1 — chiuso durante l'avvio: il caricamento dei modelli non
+            # si interrompe a meta'. Finito quello il nucleo esce da solo (vedi
+            # `Nucleo.ferma`); non aspettarlo vorrebbe dire distruggere un
+            # thread vivo, cioe' `abort()`.
+            self.log.info("chiusura durante l'avvio: si aspetta il nucleo")
+            self.thread_nucleo.wait(60_000)
         self.thread_telemetria.quit()
         self.thread_telemetria.wait(2000)
+        # Il meteo puo' essere dentro una richiesta: il timeout e' 4 s, e
+        # l'attesa lo copre. Succede solo chiudendo in quel mezzo secondo
+        # ogni quarto d'ora.
+        self.thread_meteo.quit()
+        self.thread_meteo.wait(4500)
         self.nucleo.chiudi()
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Metis — interfaccia grafica")
     ap.add_argument("--fullscreen", action="store_true",
-                    help="parte dalla control room invece che dall'overlay")
+                    help="parte dall'Hub invece che dall'overlay")
+    ap.add_argument("--diagnostica", action="store_true",
+                    help="parte dalla vista Diagnostica (la control room di PHASE0)")
     ap.add_argument("--no-wakeword", dest="wakeword", action="store_false")
     ap.add_argument("--no-tools", dest="tools", action="store_false")
     ap.add_argument("--whisper", default="small")
@@ -431,7 +600,8 @@ def main() -> int:
         # lavorare, non guardandola.
         QTimer.singleShot(int(args.minutes * 60_000), app.qt.quit)
 
-    return app.esegui(fullscreen=args.fullscreen)
+    fullscreen, diagnostica = app.vista_iniziale(args.fullscreen, args.diagnostica)
+    return app.esegui(fullscreen=fullscreen, diagnostica=diagnostica)
 
 
 if __name__ == "__main__":

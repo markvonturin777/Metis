@@ -348,7 +348,8 @@ def costruisci_sistema(opz: Opzioni, log,
         b = m.breakdown()
         log.info("turno", totale_ms=round(b["totale"]), stt_ms=round(b["stt"]),
                  ttft_ms=round(b["ttft"]), tts_ms=round(b["tts"]), tokens=m.tokens,
-                 tok_s=round(m.tok_per_s, 1))   # M7: NFR-3 si legge da qui
+                 tok_s=round(m.tok_per_s, 1),   # M7: NFR-3 si legge da qui
+                 origine=m.extra.get("origine", "voce"))   # PHASE1: vedi verifica_nfr
         if on_turno is not None:
             on_turno(m)
         clear_turn()
@@ -800,7 +801,9 @@ class CicloAudio:
 
             self._apri = AudioCapture
 
-        self._ferma = False
+        # PHASE1 — niente `self._ferma = False` qui: lo mette il costruttore.
+        # Azzerarlo all'ingresso perdeva una `ferma()` arrivata fra la
+        # costruzione e l'avvio del ciclo, e il ciclo non si fermava piu'.
         t0 = time.perf_counter()
         self._ultimo_tick = t0
         try:

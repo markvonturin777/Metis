@@ -26,6 +26,12 @@ i testi lunghi o su piu' righe vanno in un riquadro che scorre, per intero.
 
 Il conto alla rovescia non e' decorazione: dice che l'attesa finisce, e
 finisce con un rifiuto.
+
+PHASE1 — NUOVO ASPETTO, STESSE PROPRIETA'
+Il colore e' quello di ATTESA_CONFERMA, lo stesso del nucleo che pulsa
+dietro il dialogo: cornice, intestazione, pulsante "Approva". Nessuna delle
+tre scelte qui sopra e' cambiata, e `test_gui_conferma.py` non e' stato
+toccato.
 """
 
 from __future__ import annotations
@@ -33,6 +39,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
+    QFrame,
     QDialog,
     QFormLayout,
     QHBoxLayout,
@@ -43,6 +50,7 @@ from PySide6.QtWidgets import (
 )
 
 from metis.core.palette import esadecimale
+from metis.gui import tema
 
 # Oltre questa lunghezza, o con un a capo dentro, il valore va in un riquadro
 # che scorre invece che in un'etichetta. NON e' un taglio: si vede tutto.
@@ -68,27 +76,43 @@ class DialogoConferma(QDialog):
         self._risposto = False
 
         colore = esadecimale("ATTESA_CONFERMA")
+        self.setObjectName("dialogoConferma")
+        self.setStyleSheet(f"#dialogoConferma {{ background: {tema.PANNELLO};"
+                           f" border: 2px solid {colore}; }}")
         radice = QVBoxLayout(self)
+        radice.setContentsMargins(20, 18, 20, 16)
+        radice.setSpacing(10)
 
         # "NON si annulla" solo quando e' vero. Da M6 la conferma si chiede
         # anche per un promemoria T1, che si cancella con una frase: dirgli
         # "non si annulla" insegnerebbe a non credere all'avviso quando conta.
         avviso = ("questa azione NON si annulla" if tier == "T3"
                   else "controlla che sia quello che intendevi")
+        intestazione = QHBoxLayout()
+        intestazione.setSpacing(10)
+        icona = QLabel()
+        icona.setPixmap(tema.pixmap_icona("shield-alert", colore, 22, self.devicePixelRatioF()))
+        intestazione.addWidget(icona)
         testa = QLabel(f"{tier} — {avviso}")
-        f = QFont()
-        f.setBold(True)
-        f.setPointSize(f.pointSize() + 1)
-        testa.setFont(f)
+        testa.setFont(tema.font(tema.FONT_TESTO, 15, QFont.Weight.Bold))
         testa.setStyleSheet(f"color: {colore};")
-        radice.addWidget(testa)
+        intestazione.addWidget(testa, 1)
+        radice.addLayout(intestazione)
 
         nome = QLabel(strumento)
-        nome.setStyleSheet("font-family: Consolas, monospace; font-size: 15px;")
+        nome.setFont(tema.font(tema.FONT_NUMERI, 15))
+        nome.setStyleSheet(f"color: {tema.TESTO};")
         radice.addWidget(nome)
+
+        linea = QFrame()
+        linea.setFixedHeight(1)
+        linea.setStyleSheet(f"background: {tema.BORDO};")
+        radice.addWidget(linea)
 
         modulo = QFormLayout()
         modulo.setLabelAlignment(Qt.AlignRight | Qt.AlignTop)
+        modulo.setHorizontalSpacing(14)
+        modulo.setVerticalSpacing(8)
         self.riquadri: list[QPlainTextEdit] = []
         for campo, valore in argomenti.items():
             if campo == "tool":
@@ -103,11 +127,14 @@ class DialogoConferma(QDialog):
                 v = QLabel(testo)
                 v.setWordWrap(True)
                 v.setTextInteractionFlags(Qt.TextSelectableByMouse)
-            modulo.addRow(f"{campo}:", v)
+                v.setStyleSheet(f"color: {tema.TESTO};")
+            etichetta = QLabel(f"{campo}:")
+            etichetta.setStyleSheet(f"color: {tema.TESTO_TENUE};")
+            modulo.addRow(etichetta, v)
         radice.addLayout(modulo)
 
         self._conto = QLabel()
-        self._conto.setStyleSheet("color: #94a3b8;")
+        self._conto.setStyleSheet(f"color: {tema.TESTO_SECONDARIO}; font-size: 12px;")
         radice.addWidget(self._conto)
 
         pulsanti = QHBoxLayout()
@@ -119,10 +146,14 @@ class DialogoConferma(QDialog):
             # Nessun pulsante predefinito: senza questo, Invio approverebbe.
             b.setAutoDefault(False)
             b.setDefault(False)
+        # Testo scuro sul fucsia: il bianco si leggeva a fatica.
         self.approva.setStyleSheet(
-            f"QPushButton {{ color: white; background: {colore}; "
-            "padding: 6px 18px; border-radius: 4px; }}")
-        self.nega.setStyleSheet("QPushButton { padding: 6px 18px; }")
+            f"QPushButton {{ color: {tema.SFONDO}; background: {colore};"
+            f" border: 1px solid {colore}; padding: 7px 20px; font-weight: bold; }}"
+            f"QPushButton:focus {{ border-color: {tema.TESTO}; }}")
+        self.nega.setStyleSheet(
+            "QPushButton { padding: 7px 20px; }"
+            f"QPushButton:focus {{ border-color: {tema.ACCENTO}; }}")
 
         self.nega.clicked.connect(lambda: self._decidi(False))
         self.approva.clicked.connect(lambda: self._decidi(True))

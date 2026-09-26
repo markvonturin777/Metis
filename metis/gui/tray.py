@@ -34,9 +34,10 @@ from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 
 from metis.core.palette import esadecimale, significato
+from metis.gui import tema
 
 LATO = 64                     # Windows riduce a 16/24/32: si disegna grande
-ROSSO_KILL = "#ef4444"
+ROSSO_KILL = tema.ERRORE
 
 
 def disegna(stato: str, kill: bool = False, pausa: bool = False,
@@ -62,7 +63,7 @@ def disegna(stato: str, kill: bool = False, pausa: bool = False,
 
     if pausa:
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor("#ffffff"))
+        p.setBrush(QColor(tema.BIANCO))
         w, h = lato * 0.12, lato * 0.40
         y = (lato - h) / 2
         p.drawRect(QRectF(lato / 2 - w * 1.5, y, w, h))
@@ -86,7 +87,8 @@ class IconaTray(QObject):
     """Il menu della specifica M7 §4.2, in quest'ordine."""
 
     chiede_minimal = Signal()
-    chiede_fullscreen = Signal()
+    chiede_hub = Signal()
+    chiede_fullscreen = Signal()          # la Diagnostica
     chiede_kill = Signal()
     chiede_pausa = Signal()
     chiede_uscita = Signal()
@@ -106,7 +108,9 @@ class IconaTray(QObject):
 
         self.voce_minimal = self.menu.addAction("Mostra Minimal")
         self.voce_minimal.triggered.connect(self.chiede_minimal)
-        self.voce_fullscreen = self.menu.addAction("Mostra Fullscreen")
+        self.voce_hub = self.menu.addAction("Mostra Hub")
+        self.voce_hub.triggered.connect(self.chiede_hub)
+        self.voce_fullscreen = self.menu.addAction("Mostra Diagnostica")
         self.voce_fullscreen.triggered.connect(self.chiede_fullscreen)
         self.menu.addSeparator()
 

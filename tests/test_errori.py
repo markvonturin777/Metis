@@ -340,6 +340,28 @@ def test_microfono_scollegato_mentre_gira_e_ricollegato():
     assert c.perdite == 1
 
 
+def test_all_avvio_la_gui_non_dice_che_il_microfono_e_tornato():
+    """PHASE1 — il ciclo segnala anche il primo blocco. Fino a qui ogni avvio
+    della GUI si apriva con "Il microfono e' di nuovo disponibile." di un
+    microfono che non era mai mancato."""
+    from metis.core.avvio import Opzioni
+    from metis.gui.workers.nucleo import Nucleo
+    from metis.tools import notify
+
+    notify.usa_backend(lambda n, c: None)
+    try:
+        n = Nucleo(Opzioni(tools=False, wakeword=False))
+        righe = []
+        n.errore.connect(righe.append)
+        n._microfono(True)                         # il primo blocco
+        assert righe == []
+        n._microfono(False)                        # scollegato
+        n._microfono(True)                         # ricollegato
+        assert len(righe) == 2 and righe[1] == "Il microfono e' di nuovo disponibile."
+    finally:
+        notify.usa_backend(None)
+
+
 # --- la voce di riserva ------------------------------------------------------------------
 
 class VoceRotta:

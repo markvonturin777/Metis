@@ -209,3 +209,104 @@ def test_i_comandi_salvati_valgono_subito(tmp_path):
     lib.aggiungi({"id": "caffe", "frasi": ["fai il caffe"],
                   "azioni": [{"tool": "get_telemetry"}]})
     assert r.fast_path("fai il caffe") is not None
+
+
+# --- PHASE1: il router del modello -------------------------------------------
+
+class ClientFinto:
+    """Il modello finto: registra cosa gli arriva, risponde con `azioni`."""
+
+    def __init__(self, azioni):
+        self.azioni = azioni
+        self.messaggi = []
+
+    def chat(self, **kw):
+        import json
+
+        self.messaggi.append(kw["messages"])
+        return {"message": {"content": json.dumps({"azioni": self.azioni})}}
+
+
+def _tool_router(azioni):
+    from metis.llm.toolcall import ToolRouter
+
+    r = ToolRouter(REG)
+    r.client = ClientFinto(azioni)
+    return r
+
+
+NESSUNO = [{"tool": "nessuno_strumento"}]
+APRI_VSCODE = [{"tool": "open_application", "app": "vscode"}]
+
+
+def test_la_frase_dell_utente_arriva_al_modello_una_volta():
+    """Da M5 la cronologia contiene gia' la frase di adesso, e il router la
+    riaggiungeva: "Sai aiutarmi nella programmazione?" letta due volte apriva
+    VS Code 5 volte su 5 con il modello vero. Una volta sola, 0 su 5."""
+    frase = "Sai aiutarmi nella programmazione?"
+    storia = [{"role": "system", "content": "persona"},
+              {"role": "assistant", "content": "Buon pomeriggio. Sono operativo."},
+              {"role": "user", "content": frase}]
+    r = _tool_router(NESSUNO)
+    r.decidi(frase, storia)
+    spediti = r.client.messaggi[0]
+    assert [m["content"] for m in spediti if m["role"] == "user"] == [frase]
+    assert spediti[-1] == {"role": "user", "content": frase}     # in coda, per ultima
+    assert spediti[-2]["content"] == "Buon pomeriggio. Sono operativo."
+
+
+def test_la_stessa_frase_detta_prima_resta_nella_cronologia():
+    """Si toglie solo la frase di ADESSO: "apri chrome" detto due turni fa e'
+    cronologia vera."""
+    from metis.llm.toolcall import precedenti
+
+    storia = [{"role": "user", "content": "apri chrome"},
+              {"role": "assistant", "content": "Ho aperto Chrome."}]
+    assert precedenti(storia, "apri chrome") == storia
+
+
+def test_la_cronologia_tiene_gli_ultimi_quattro_scambi():
+    from metis.llm.toolcall import precedenti
+
+    storia = [{"role": r, "content": str(i)} for i, r in
+              enumerate(["user", "assistant"] * 4 + ["user"])]
+    tenuti = precedenti(storia, "8")
+    assert [m["content"] for m in tenuti] == ["4", "5", "6", "7"]
+
+
+@pytest.mark.parametrize("frase", [
+    "Sai aiutarmi nella programmazione?",
+    "ma se io volessi farlo in locale da me?",
+    "chrome",
+])
+def test_senza_un_verbo_di_apertura_non_si_apre_niente(frase):
+    """Visto in esercizio, e riprodotto con il modello vero anche con la
+    cronologia corretta: dopo "Ho aperto Visual Studio Code" il modello
+    ripete l'azione. La regola del prompt non basta, quindi sta nel codice."""
+    d = _tool_router(APRI_VSCODE).decidi(frase)
+    assert d.calls == () and d.errore == "open_application senza verbo"
+
+
+@pytest.mark.parametrize("frase", [
+    "apri vs code", "Aprimi VS Code per favore", "mi apri il browser?", "riapri github",
+    "avvia visual studio code", "lancia chrome", "fai partire chrome",
+    "Metis, puoi aprire l'editor?",
+])
+def test_con_il_verbo_si_apre(frase):
+    d = _tool_router(APRI_VSCODE).decidi(frase)
+    assert d.calls == ({"tool": "open_application", "app": "vscode"},)
+    assert d.errore is None
+
+
+def test_il_controllo_toglie_solo_l_apertura():
+    azioni = [{"tool": "open_application", "app": "chrome"}, {"tool": "get_telemetry"}]
+    d = _tool_router(azioni).decidi("come sta la macchina con chrome?")
+    assert d.calls == ({"tool": "get_telemetry"},)
+
+
+def test_i_comandi_rapidi_non_chiedono_il_verbo(router):
+    """"Inizia a lavorare" apre VS Code e GitHub Desktop: e' una frase scelta
+    dall'utente, non un'interpretazione del modello."""
+    d = router.decidi("inizia a lavorare")
+    assert d.origine == "fast_path"
+    assert [c["tool"] for c in d.calls] == ["open_application", "open_application"]

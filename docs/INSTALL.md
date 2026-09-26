@@ -66,6 +66,8 @@ Tutto in `config\`. I file del repository contengono **solo valori di esempio o 
 | `email.local.toml` | I tuoi indirizzi veri. **Ignorato da git**, da creare a mano (§4.1) |
 | `home_assistant.toml` | Dispositivi controllabili, con i loro limiti |
 | `settings.toml` | Posizione della finestra. Locale, ignorato da git |
+| `gui.toml` | Interfaccia: nel repository è **vuoto** (nessuna città) |
+| `gui.local.toml` | Città del meteo e preferenze dell'Hub. **Ignorato da git**, lo scrivono le Impostazioni (§4.5) |
 
 ### 4.1 Posta
 
@@ -116,6 +118,26 @@ si leggono in Home Assistant → Impostazioni → Dispositivi ed entità. Un dis
 | :-- | :-- |
 | `METIS_HOME` | Cartella con `config\` e `data\`. Serve solo al bundle installato altrove (§6) |
 
+### 4.5 Meteo e impostazioni dell'Hub
+
+Il pannello del meteo usa **Open-Meteo**: nessun account, nessuna chiave. Dal PC escono solo
+le coordinate, ogni 15 minuti, e una volta il nome della città per trovarle. La città si
+sceglie dalle **Impostazioni** (⚙ in alto a destra nell'Hub), insieme a "riduci animazioni",
+vista all'avvio e voce spenta all'avvio. Finisce in `config\gui.local.toml`:
+
+```toml
+[meteo]
+citta = "Milano"
+
+[interfaccia]
+riduci_animazioni = false
+vista_avvio = "minimal"      # minimal | hub | diagnostica
+muto_avvio = false
+```
+
+Senza rete il pannello mostra l'ultimo dato con la sua ora, fino a tre ore; poi lo dice.
+L'ultima lettura e le coordinate trovate stanno in `data\meteo.json`.
+
 ---
 
 ## 5. Avvio
@@ -125,10 +147,18 @@ senza console. `Metis.bat --console` tiene aperta la finestra con i log, per qua
 non parte; le altre opzioni (`--fullscreen`, `--no-tools`, …) passano all'applicazione.
 
 ```powershell
-.venv\Scripts\python.exe -m metis.gui.app                # overlay minimal
-.venv\Scripts\python.exe -m metis.gui.app --fullscreen   # control room
+.venv\Scripts\python.exe -m metis.gui.app                # la vista delle impostazioni (Minimal)
+.venv\Scripts\python.exe -m metis.gui.app --fullscreen   # Hub
+.venv\Scripts\python.exe -m metis.gui.app --diagnostica  # Diagnostica (la control room di PHASE0)
 .venv\Scripts\python.exe -m metis.core.app               # solo console, senza GUI
 ```
+
+**Le tre viste.** La **Minimal** sta in un angolo, sempre in primo piano. L'**Hub** è la vista
+di tutti i giorni: il nucleo al centro dice lo stato con il colore e con il movimento, a
+destra la conversazione, dove si può anche **scrivere** (stesse regole e stesse conferme
+della voce); "muto" toglie la voce, e le risposte restano scritte. La **Diagnostica** serve a
+capire perché Metis ha fatto qualcosa: audit, contesto del prompt, latenze, comandi rapidi.
+Con la finestra nascosta o in tray le animazioni si fermano.
 
 | Scorciatoia | Effetto |
 | :-- | :-- |
@@ -137,7 +167,7 @@ non parte; le altre opzioni (`--fullscreen`, `--no-tools`, …) passano all'appl
 
 **L'icona nella tray** ha il colore dello stato (lo stesso dell'overlay), un anello rosso
 quando il kill switch è attivo e due barre bianche quando l'ascolto è in pausa. Dal menu:
-mostrare le due viste, kill switch, **Pausa ascolto** (il microfono non arriva a nessuno;
+mostrare le tre viste, kill switch, **Pausa ascolto** (il microfono non arriva a nessuno;
 il push-to-talk interrompe ancora Metis ma non riapre l'ascolto) ed **Esci**.
 
 Con la tray presente, **chiudere la finestra non chiude Metis**: si esce da *Esci*, che è
@@ -196,6 +226,8 @@ Per un'installazione fuori dal repository: copiare `dist\Metis\` insieme a `conf
 .venv\Scripts\python.exe -m pytest -q                          # suite completa
 .venv\Scripts\python.exe -m ruff check .                       # lint
 .venv\Scripts\python.exe tests\nfr\verifica_nfr.py             # i 10 NFR dai dati raccolti
+.venv\Scripts\python.exe tests\nfr\verifica_nfr.py --dal 2026-09-26T10:00
+                                                               # solo da quell'istante: una prova sola
 .venv\Scripts\python.exe tests\soak\run_soak.py --ore 72       # soak (tre giorni)
 .venv\Scripts\python.exe tests\soak\run_soak.py --ore 0.25 --intervallo-min 1 --scala 0.005
                                                                # soak di prova, ~15 minuti

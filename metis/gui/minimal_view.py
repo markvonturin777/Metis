@@ -3,8 +3,15 @@
 COSA CI STA E COSA NO
 Ci sta quello che si guarda **di sfuggita**: lo stato, il livello del
 microfono, l'ultima frase, e il fatto che le capacita' siano sospese. Non
-ci sta niente che richieda di fermarsi a leggere — per quello c'e' la
-control room, a un clic di distanza.
+ci sta niente che richieda di fermarsi a leggere — per quello c'e' l'Hub, a
+un clic di distanza.
+
+PHASE1 — IL NUCLEO IN MINIATURA
+Al posto del pallino, lo stesso nucleo dell'Hub a 64 px: stessi colori,
+stessi movimenti, cosi' chi passa da una vista all'altra legge lo stato
+nello stesso modo. A 20 fotogrammi al secondo e non 30: in un angolo dello
+schermo, tutto il giorno, la differenza non si vede e la CPU si'. Come
+nell'Hub, con l'overlay nascosto il nucleo non si muove.
 
 FRAMELESS VUOL DIRE GESTIRE IL TRASCINAMENTO A MANO
 Togliendo la cornice si perde anche la barra del titolo, quindi lo
@@ -27,10 +34,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from metis.core.palette import esadecimale
+from metis.gui import tema
+from metis.gui.componenti import PulsanteIcona
+from metis.gui.widgets.nucleo import Nucleo
 from metis.gui.widgets.stato import IndicatoreStato, VuMeter
 
 IMPOSTAZIONI = Path("config/settings.toml")
+LATO_NUCLEO = 64
+FPS_NUCLEO = 20
 
 
 class MinimalView(QWidget):
@@ -47,56 +58,70 @@ class MinimalView(QWidget):
             | Qt.Tool                  # niente icona nella barra delle applicazioni
         )
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setFixedWidth(340)
+        self.setFixedWidth(360)
         self._trascina_da: QPoint | None = None
 
         cornice = QWidget(self)
         cornice.setObjectName("cornice")
+        fondo = tema.con_alfa(tema.PANNELLO, 0.94)
         cornice.setStyleSheet(
-            "#cornice { background: rgba(15, 23, 42, 235); border-radius: 10px;"
-            " border: 1px solid #1e293b; }")
+            f"#cornice {{ background: rgba({fondo.red()}, {fondo.green()}, {fondo.blue()},"
+            f" {fondo.alpha()}); border-radius: {tema.RAGGIO}px;"
+            f" border: 1px solid {tema.BORDO}; }}")
         esterno = QVBoxLayout(self)
         esterno.setContentsMargins(0, 0, 0, 0)
         esterno.addWidget(cornice)
 
-        lay = QVBoxLayout(cornice)
-        lay.setContentsMargins(12, 10, 12, 10)
-        lay.setSpacing(7)
+        lay = QHBoxLayout(cornice)
+        lay.setContentsMargins(10, 10, 12, 10)
+        lay.setSpacing(10)
 
+        self.nucleo = Nucleo(lato=LATO_NUCLEO, fps=FPS_NUCLEO)
+        self.nucleo.setFixedSize(LATO_NUCLEO, LATO_NUCLEO)
+        lay.addWidget(self.nucleo, 0, Qt.AlignTop)
+
+        destra = QVBoxLayout()
+        destra.setSpacing(6)
         riga = QHBoxLayout()
+        riga.setSpacing(6)
         self.indicatore = IndicatoreStato()
+        # Il pallino lo sostituisce il nucleo: resta l'etichetta, colorata.
+        self.indicatore.pallino.hide()
         riga.addWidget(self.indicatore, 1)
         self.kill = QLabel("SOSPESO")
-        self.kill.setStyleSheet(
-            f"color: {esadecimale('ERRORE')}; font-size: 10px; font-weight: bold;")
+        self.kill.setFont(tema.font(tema.FONT_TITOLI, 10))
+        self.kill.setStyleSheet(f"color: {tema.ERRORE};")
         self.kill.setVisible(False)
         riga.addWidget(self.kill)
-        espandi = QPushButton("▣")
-        espandi.setFixedSize(22, 22)
-        espandi.setToolTip("Control room")
+        espandi = PulsanteIcona("maximize-2", "Apri l'Hub", lato=26, lato_icona=14)
         espandi.clicked.connect(self.chiede_fullscreen.emit)
         riga.addWidget(espandi)
-        lay.addLayout(riga)
+        destra.addLayout(riga)
 
         self.vu = VuMeter()
-        lay.addWidget(self.vu)
+        destra.addWidget(self.vu)
 
         self.ultima = QLabel("—")
-        self.ultima.setStyleSheet("color: #94a3b8; font-size: 12px;")
+        self.ultima.setStyleSheet(f"color: {tema.TESTO_SECONDARIO}; font-size: 12px;")
         self.ultima.setWordWrap(False)
-        lay.addWidget(self.ultima)
+        destra.addWidget(self.ultima)
 
         pulsanti = QHBoxLayout()
-        self.ptt = QPushButton("Parla  (Ctrl+Alt+M)")
+        pulsanti.setSpacing(6)
+        self.ptt = QPushButton("Parla  ·  Ctrl+Alt+M")
         self.ptt.clicked.connect(self.chiede_ptt.emit)
-        self.ptt.setStyleSheet(_stile_pulsante("#1e293b"))
+        self.ptt.setStyleSheet("QPushButton { padding: 5px 10px; font-size: 12px; }")
         pulsanti.addWidget(self.ptt, 1)
         stop = QPushButton("Stop")
         stop.setToolTip("Zittisce e sospende T2/T3")
         stop.clicked.connect(self.chiede_kill.emit)
-        stop.setStyleSheet(_stile_pulsante("#7f1d1d"))
+        stop.setStyleSheet(
+            f"QPushButton {{ background: {tema.ERRORE_FONDO}; color: {tema.ERRORE};"
+            f" border-color: {tema.ERRORE_FONDO}; padding: 5px 12px; font-size: 12px; }}"
+            f"QPushButton:hover {{ border-color: {tema.ERRORE}; }}")
         pulsanti.addWidget(stop)
-        lay.addLayout(pulsanti)
+        destra.addLayout(pulsanti)
+        lay.addLayout(destra, 1)
 
         self._carica_posizione()
 
@@ -105,6 +130,7 @@ class MinimalView(QWidget):
     @Slot(str)
     def imposta_stato(self, stato: str) -> None:
         self.indicatore.imposta(stato)
+        self.nucleo.imposta_stato(stato)
 
     @Slot(str)
     def imposta_ultima(self, testo: str) -> None:
@@ -116,6 +142,11 @@ class MinimalView(QWidget):
     @Slot(bool)
     def imposta_kill(self, sospeso: bool) -> None:
         self.kill.setVisible(sospeso)
+        self.nucleo.imposta_kill(sospeso)
+
+    @Slot(bool)
+    def imposta_pausa(self, attiva: bool) -> None:
+        self.nucleo.imposta_pausa(attiva)
 
     # -- trascinamento -----------------------------------------------------
 
@@ -157,9 +188,3 @@ class MinimalView(QWidget):
             IMPOSTAZIONI.write_text("\n".join(righe) + "\n", encoding="utf-8")
         except Exception:                     # noqa: BLE001
             pass
-
-
-def _stile_pulsante(sfondo: str) -> str:
-    return (f"QPushButton {{ background: {sfondo}; color: #e2e8f0; border: none;"
-            " border-radius: 5px; padding: 6px; font-size: 12px; }"
-            f"QPushButton:hover {{ background: #334155; }}")

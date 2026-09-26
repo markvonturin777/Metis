@@ -11,22 +11,28 @@ L'AUDIT LOG STA IN BASSO PERCHE' E' LO STRUMENTO DI M4
 Durante l'automazione la domanda sara' sempre "perche' non l'ha fatto?", e
 la risposta e' li'. Occupa tutta la larghezza perche' i motivi dei rifiuti
 sono frasi, non sigle.
+
+PHASE1 — E' LA VISTA "DIAGNOSTICA"
+La vista di tutti i giorni e' diventata l'Hub; questa resta per capire
+perche' Metis ha fatto qualcosa (D-UI 4). Il contenuto e' quello di PHASE0;
+l'aspetto viene da `tema.py`, come il resto.
 """
 
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal, Slot
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
-    QPushButton,
     QSplitter,
     QVBoxLayout,
     QWidget,
 )
 
-from metis.core.palette import esadecimale
+from metis.gui import tema
+from metis.gui.componenti import Pillola, PulsanteIcona
 from metis.gui.testo import elastica, per_etichetta
 from metis.gui.widgets.audit import VistaAudit
 from metis.gui.widgets.comandi import PannelloComandi
@@ -35,29 +41,17 @@ from metis.gui.widgets.conversazione import Conversazione
 from metis.gui.widgets.stato import IndicatoreStato, VuMeter
 from metis.gui.widgets.telemetria import Telemetria
 
-FOGLIO = """
-QWidget { background: #0f172a; color: #e2e8f0; }
-QLabel { color: #cbd5e1; }
-QTableWidget { background: #0b1220; gridline-color: #1e293b;
-               selection-background-color: #1e3a5f; font-size: 12px; }
-QHeaderView::section { background: #1e293b; color: #94a3b8; border: none;
-                       padding: 4px; font-size: 11px; }
-QComboBox { background: #1e293b; border: 1px solid #334155; padding: 2px 6px; }
-QSplitter::handle { background: #1e293b; }
-"""
-
-
 class FullscreenView(QWidget):
     chiede_minimal = Signal()
+    chiede_hub = Signal()
     chiede_ptt = Signal()
     chiede_kill = Signal()
 
     def __init__(self, conversazione: Conversazione, telemetria: Telemetria,
                  audit=None, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Metis — control room")
+        self.setWindowTitle("Metis — diagnostica")
         self.resize(1180, 720)
-        self.setStyleSheet(FOGLIO)
 
         # Gli STESSI oggetti della vista minimal: e' cosi' che il passaggio
         # non perde stato.
@@ -65,9 +59,9 @@ class FullscreenView(QWidget):
         self.telemetria = telemetria
 
         radice = QVBoxLayout(self)
-        radice.setContentsMargins(10, 8, 10, 8)
-        radice.setSpacing(8)
-        radice.addLayout(self._barra_superiore())
+        radice.setContentsMargins(0, 0, 0, 10)
+        radice.setSpacing(10)
+        radice.addWidget(self._barra_superiore())
 
         centro = QSplitter(Qt.Horizontal)
         centro.addWidget(self._colonna_conversazione())
@@ -83,44 +77,54 @@ class FullscreenView(QWidget):
         verticale.addWidget(self.audit)
         verticale.setStretchFactor(0, 3)
         verticale.setStretchFactor(1, 1)
-        radice.addWidget(verticale, 1)
+        interno = QHBoxLayout()
+        interno.setContentsMargins(12, 0, 12, 0)
+        interno.addWidget(verticale)
+        radice.addLayout(interno, 1)
 
     # -- pezzi -------------------------------------------------------------
 
-    def _barra_superiore(self) -> QHBoxLayout:
-        riga = QHBoxLayout()
-        titolo = QLabel("METIS")
-        titolo.setStyleSheet("font-size: 16px; font-weight: bold;"
-                             " letter-spacing: 3px; color: #e2e8f0;")
+    def _barra_superiore(self) -> QFrame:
+        """La stessa intestazione dell'Hub, con "Diagnostica" accanto al nome."""
+        barra = QFrame()
+        barra.setObjectName("intestazioneDiagnostica")
+        barra.setFixedHeight(58)
+        barra.setStyleSheet(f"#intestazioneDiagnostica {{ background: {tema.SFONDO_ALTO};"
+                            f" border: none; border-bottom: 1px solid {tema.BORDO}; }}")
+        riga = QHBoxLayout(barra)
+        riga.setContentsMargins(20, 0, 14, 0)
+        riga.setSpacing(12)
+
+        titolo = QLabel("M.E.T.I.S")
+        titolo.setFont(tema.font(tema.FONT_TITOLI, 18, QFont.Weight.Bold))
+        titolo.setStyleSheet(f"color: {tema.ACCENTO};")
         riga.addWidget(titolo)
-        riga.addSpacing(16)
+        riga.addWidget(Pillola("Diagnostica", tema.TESTO_TENUE, px=11))
+        riga.addSpacing(10)
 
         self.indicatore = IndicatoreStato()
         riga.addWidget(self.indicatore)
 
         self.kill = QLabel("CAPACITA' SOSPESE")
-        self.kill.setStyleSheet(
-            f"color: {esadecimale('ERRORE')}; font-weight: bold; font-size: 12px;")
+        self.kill.setFont(tema.font(tema.FONT_TITOLI, 11))
+        self.kill.setStyleSheet(f"color: {tema.ERRORE};")
         self.kill.setVisible(False)
         riga.addWidget(self.kill)
         riga.addStretch(1)
 
         self.avvio = QLabel("")
-        self.avvio.setStyleSheet("color: #64748b; font-size: 11px;")
+        self.avvio.setStyleSheet(f"color: {tema.TESTO_SECONDARIO}; font-size: 11px;")
         riga.addWidget(self.avvio)
 
-        ptt = QPushButton("Parla")
-        ptt.clicked.connect(self.chiede_ptt.emit)
-        stop = QPushButton("Stop")
-        stop.clicked.connect(self.chiede_kill.emit)
-        mini = QPushButton("Minimal")
-        mini.clicked.connect(self.chiede_minimal.emit)
-        for b in (ptt, stop, mini):
-            b.setStyleSheet("QPushButton { background: #1e293b; border: none;"
-                            " padding: 5px 14px; border-radius: 4px; }"
-                            "QPushButton:hover { background: #334155; }")
+        for icona, suggerimento, segnale in (
+                ("mic", "Parla (Ctrl+Alt+M)", self.chiede_ptt),
+                ("shield", "Kill switch: sospende le azioni sul PC", self.chiede_kill),
+                ("layout-dashboard", "Torna all'Hub", self.chiede_hub),
+                ("minimize-2", "Vista compatta", self.chiede_minimal)):
+            b = PulsanteIcona(icona, suggerimento, lato=36)
+            b.clicked.connect(segnale)
             riga.addWidget(b)
-        return riga
+        return barra
 
     def _colonna_conversazione(self) -> QWidget:
         box = QWidget()
@@ -144,8 +148,8 @@ class FullscreenView(QWidget):
         self.corrente = elastica(QLabel("—"))
         self.corrente.setAlignment(Qt.AlignTop)
         self.corrente.setStyleSheet(
-            "background: #0b1220; border: 1px solid #1e293b; border-radius: 6px;"
-            " padding: 10px; font-size: 13px;")
+            f"background: {tema.PANNELLO}; border: 1px solid {tema.BORDO};"
+            f" border-radius: {tema.RAGGIO_PICCOLO}px; padding: 10px; font-size: 13px;")
         lay.addWidget(self.corrente, 1)
 
         lay.addWidget(_titolo("CONTESTO"))
@@ -188,6 +192,7 @@ class FullscreenView(QWidget):
 
 def _titolo(testo: str) -> QLabel:
     lab = QLabel(testo)
-    lab.setStyleSheet("color: #64748b; font-size: 11px; letter-spacing: 1px;")
+    lab.setFont(tema.font(tema.FONT_TITOLI, 11))
+    lab.setStyleSheet(f"color: {tema.ACCENTO}; letter-spacing: 1px;")
     lab.setFrameShape(QFrame.NoFrame)
     return lab

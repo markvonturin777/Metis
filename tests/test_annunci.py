@@ -15,6 +15,7 @@ from metis.audio.capture import Block
 from metis.core.orchestrator import Azioni, Deps, Orchestrator
 from metis.core.risposte import descrivi, domanda_conferma
 from metis.core.state_machine import STT_MUTED, Event, State
+from metis.llm.client import CancelToken
 from metis.llm.toolcall import Decisione
 
 
@@ -151,7 +152,7 @@ def test_la_data_si_pronuncia_prima_della_conferma():
     o.sm.fire(Event.PTT)
     o.sm.fire(Event.SPEECH_START)
     o.sm.fire(Event.SPEECH_END)
-    o._esegui_strumento(_Turno(), decisione)
+    o._esegui_strumento(_Turno(), decisione, CancelToken())
     domanda = next(t for t in detti if "Confermo?" in t)
     assert "giovedì 4 giugno 2099" in domanda and "17:00" in domanda
     assert detti.index(domanda) < detti.index("Fatto.")

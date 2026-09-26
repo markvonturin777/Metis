@@ -53,7 +53,9 @@ for radice in importlib.util.find_spec("nvidia").submodule_search_locations:
 _uia = Path(importlib.util.find_spec("uiautomation").origin).parent / "bin"
 binaries += [(str(d), "uiautomation/bin") for d in _uia.glob("*.dll")]
 
-datas = []
+# PHASE1 — font e icone dell'Hub. `metis/gui/tema.py` li cerca accanto a se',
+# in `metis/gui/risorse`: la stessa posizione dentro `_internal`.
+datas = [("metis/gui/risorse", "metis/gui/risorse")]
 for pacchetto in ("silero_vad", "faster_whisper", "piper", "trafilatura", "justext",
                   "openwakeword", "courlan", "htmldate", "dateparser", "tld"):
     datas += collect_data_files(pacchetto)

@@ -68,8 +68,14 @@ def _fmt(v, dec=0, unita=""):
 
 
 def nfr_turni(eventi: list[dict]) -> list[Esito]:
-    """NFR-1, 2, 3 dagli eventi "turno" del log d'uso."""
-    turni = [e for e in eventi if e.get("event") == "turno"]
+    """NFR-1, 2, 3 dagli eventi "turno" del log d'uso.
+
+    Solo i turni PARLATI: NFR-1 va dalla fine del parlato al primo audio, e
+    un messaggio scritto nell'Hub (PHASE1) non ha parlato. Contarlo
+    abbasserebbe la latenza con un turno che la latenza non ce l'ha.
+    """
+    turni = [e for e in eventi if e.get("event") == "turno"
+             and e.get("origine", "voce") == "voce"]
     tot = [e["totale_ms"] for e in turni if e.get("totale_ms")]
     ttft = [e["ttft_ms"] for e in turni if e.get("ttft_ms")]
     toks = [e["tok_s"] for e in turni if e.get("tok_s")]
@@ -132,13 +138,17 @@ def nfr8(eventi: list[dict]) -> Esito:
     """
     con_fase = [e for e in eventi if e.get("event") == "freeze interfaccia" and "fase" in e]
     in_uso = [e for e in con_fase if e["fase"] == "esercizio" and e.get("ms", 0) > 100]
-    if not con_fase:
+    # PHASE1: quanto e' durato l'uso. L'applicazione lo scrive all'uscita.
+    sessioni = [e for e in eventi if e.get("event") == "sessione interfaccia"]
+    minuti = sum(e.get("esercizio_s", 0) for e in sessioni) / 60
+    durata = f", {minuti:.0f} min di esercizio in {len(sessioni)} sessioni" if sessioni else ""
+    if not con_fase and not sessioni:
         return Esito(8, "Reattivita' GUI", "nessun freeze > 100 ms", "—",
                      "nessun evento con fase: usare la GUI da M7 in poi", "insufficiente")
     peggiore = max((e["ms"] for e in in_uso), default=None)
     return Esito(8, "Reattivita' GUI", "nessun freeze > 100 ms",
                  f"{len(in_uso)} freeze in esercizio" +
-                 (f", peggiore {peggiore} ms" if peggiore else ""),
+                 (f", peggiore {peggiore} ms" if peggiore else "") + durata,
                  f"{len(con_fase)} eventi con fase in {LOG}",
                  "verde" if not in_uso else "rosso")
 
@@ -176,8 +186,13 @@ def ultimo_soak(cartella: Path = SOAK) -> Path | None:
     return prove[-1] if prove else None
 
 
-def verifica(log: Path = LOG, db: Path = AUDIT, soak: Path | None = None) -> list[Esito]:
+def verifica(log: Path = LOG, db: Path = AUDIT, soak: Path | None = None,
+             dal: str | None = None) -> list[Esito]:
+    """`dal`: solo gli eventi da quell'istante (ISO, "2026-09-26T10:00"). Serve
+    a certificare una prova sola, senza le sessioni di prima nel log."""
     eventi = leggi_jsonl(log)
+    if dal:
+        eventi = [e for e in eventi if str(e.get("timestamp", "")) >= dal]
     esiti = nfr_turni(eventi) + nfr_soak(soak) + [nfr8(eventi), nfr9(db)] + MANUALI
     return sorted(esiti, key=lambda e: e.nfr)
 
@@ -197,9 +212,10 @@ def main() -> int:
     ap.add_argument("--soak", type=Path, default=None,
                     help="cartella del soak (default: l'ultima in data/soak)")
     ap.add_argument("--md", type=Path, help="scrive anche la tabella su file")
+    ap.add_argument("--dal", help="solo gli eventi da questo istante, es. 2026-09-26T10:00")
     args = ap.parse_args()
 
-    esiti = verifica(args.log, args.audit, args.soak or ultimo_soak())
+    esiti = verifica(args.log, args.audit, args.soak or ultimo_soak(), dal=args.dal)
     testo = tabella(esiti)
     sys.stdout.reconfigure(encoding="utf-8")
     print(testo)

@@ -30,21 +30,18 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from metis.gui import tema
 from metis.gui.testo import elastica, per_etichetta, url_breve
 from metis.llm.grounding import BUDGET, CONTESTO_MAX
 
 # Un colore per voce del budget. Gli stessi nomi delle chiavi di
 # `grounding.BUDGET`: se qualcuno ne aggiunge una, qui compare grigia invece
 # di sparire.
-COLORI = {
-    "system": "#64748b",      # la persona: fissa, non si tocca
-    "slot": "#a78bfa",        # il contesto corrente
-    "riassunto": "#38bdf8",   # la memoria condensata
-    "turni": "#22c55e",       # la finestra scorrevole
-    "web": "#f59e0b",         # le fonti: l'unica voce non fidata
-}
-GRIGIO = "#334155"
-ROSSO = "#ef4444"
+COLORI = tema.VOCI_CONTESTO
+GRIGIO = tema.TRACCIA
+ROSSO = tema.ERRORE
+_RIQUADRO = (f"background: {tema.PANNELLO}; border: 1px solid {tema.BORDO};"
+             f" border-radius: {tema.RAGGIO_PICCOLO}px; padding: 8px; font-size: 11px;")
 
 # Oltre questa frazione la barra diventa rossa: e' la soglia oltre la quale
 # il riassunto scattera' al prossimo passaggio in DORMIENTE.
@@ -65,7 +62,7 @@ class PannelloContesto(QWidget):
         radice.setSpacing(6)
 
         self.totale = QLabel("—")
-        self.totale.setStyleSheet("color: #94a3b8; font-size: 11px;")
+        self.totale.setStyleSheet(f"color: {tema.TESTO_SECONDARIO}; font-size: 11px;")
         radice.addWidget(self.totale)
 
         # La barra a segmenti: un QWidget per voce, larghezza proporzionale.
@@ -93,16 +90,12 @@ class PannelloContesto(QWidget):
         # finestra oltre lo schermo.
         self.slot = elastica(QLabel("—"))
         self.slot.setAlignment(Qt.AlignTop)
-        self.slot.setStyleSheet(
-            "background: #0b1220; border: 1px solid #1e293b; border-radius: 6px;"
-            " padding: 8px; font-size: 11px; color: #cbd5e1;")
+        self.slot.setStyleSheet(f"{_RIQUADRO} color: {tema.TESTO};")
         radice.addWidget(self.slot)
 
         self.fonti = elastica(QLabel("—"))
         self.fonti.setAlignment(Qt.AlignTop)
-        self.fonti.setStyleSheet(
-            "background: #0b1220; border: 1px solid #1e293b; border-radius: 6px;"
-            " padding: 8px; font-size: 11px; color: #fbbf24;")
+        self.fonti.setStyleSheet(f"{_RIQUADRO} color: {tema.ATTENZIONE};")
         radice.addWidget(self.fonti)
         radice.addStretch(1)
 
@@ -165,6 +158,6 @@ class PannelloContesto(QWidget):
 
 def titolo() -> QLabel:
     lab = QLabel("CONTESTO")
-    lab.setStyleSheet("color: #64748b; font-size: 11px; letter-spacing: 1px;")
+    lab.setStyleSheet(f"color: {tema.TESTO_TENUE}; font-size: 11px; letter-spacing: 1px;")
     lab.setFrameShape(QFrame.NoFrame)
     return lab

@@ -19,6 +19,15 @@ Un router che trasforma in azioni anche "che ore sono" e' peggio di uno
 lento: la regola del progetto e' che nel dubbio si risponde a parole,
 perche' parlare non fa danni e agire sì. Le ultime righe della tabella
 sono frasi che NON devono produrre niente.
+
+CON LA CRONOLOGIA (PHASE1)
+La prima tabella passa al router la frase e basta. In esercizio il router
+riceve anche gli ultimi scambi, e li' c'erano due difetti che da qui non si
+potevano vedere: la frase arrivava due volte ("Sai aiutarmi nella
+programmazione?" apriva VS Code), e dopo un'azione il modello tendeva a
+ripeterla. La seconda tabella rifa' la conversazione del 2026-09-25 con la
+cronologia costruita come la costruisce l'orchestratore: frase di adesso
+compresa.
 """
 
 from __future__ import annotations
@@ -75,7 +84,82 @@ CASI = [
     ("come stai oggi", None, None),
     ("cosa ne pensi di questo progetto", None, None),
     ("spiegami come funziona il wake word", None, None),
+
+    # PHASE1 — "come si fa" e' una spiegazione, non una ricerca. Il prompt lo
+    # diceva gia', e il modello mandava lo stesso al web "come faccio un
+    # chatbot AI": la risposta si reggeva sul blog di chi vende chatbot.
+    ("come si fa una carbonara", None, None),
+    ("come posso imparare a programmare in python", None, None),
+    ("come faccio a fare un sito web", None, None),
+    ("che differenza c e tra ram e vram", None, None),
+    # E l'altra meta': cio' che cambia nel tempo va ancora cercato.
+    ("quanto vale oggi il bitcoin", ["web_search"], None),
+    ("ultime notizie su openai", ["web_search"], None),
+    ("chi ha vinto ieri la partita della juve", ["web_search"], None),
+    ("qual e l ultima versione di python", ["web_search"], None),
 ]
+
+
+def _u(t: str) -> dict:
+    return {"role": "user", "content": t}
+
+
+def _a(t: str) -> dict:
+    return {"role": "assistant", "content": t}
+
+
+SALUTO = [{"role": "system", "content": "persona"}, _a("Buon pomeriggio. Sono operativo.")]
+DOPO_VSCODE = SALUTO + [_u("Sai aiutarmi nella programmazione?"),
+                        _a("Ho aperto Visual Studio Code.")]
+DOPO_CHATBOT = DOPO_VSCODE + [
+    _u("Come faccio un chatbot AI?"),
+    _a("Per creare un chatbot AI si parte dallo scopo, poi si sceglie una piattaforma "
+       "e si collegano le fonti di conoscenza.")]
+DOPO_LOCALE = DOPO_CHATBOT + [
+    _u("ma se io volessi farlo in locale da me?"),
+    _a("In locale si puo' usare un modello aperto con Ollama e un'interfaccia sopra.")]
+DOPO_CHROME = SALUTO + [_u("apri chrome"), _a("Ho aperto Chrome.")]
+SLOT_CHROME = ("[CONTESTO CORRENTE]\nFinestra di riferimento: Nuova scheda - Google Chrome\n"
+               "Ultima app aperta: chrome")
+SLOT_FONTE = ("[CONTESTO CORRENTE]\nUltimo argomento cercato: prezzo del bitcoin\n"
+              "Ultima fonte: https://it.investing.com/crypto/bitcoin")
+
+# (cronologia prima della frase, frase, slot, atteso, controllo). La frase
+# si aggiunge in coda alla cronologia, come fa l'orchestratore.
+CASI_CONVERSAZIONE = [
+    # La conversazione del 2026-09-25: nessuna di queste e' un'azione.
+    (SALUTO, "Sai aiutarmi nella programmazione?", "", None, None),
+    (DOPO_VSCODE, "Come faccio un chatbot AI?", "", None, None),
+    (DOPO_CHATBOT, "ma se io volessi farlo in locale da me?", "", None, None),
+    (DOPO_LOCALE, "ma se volessi farlo in locale da me e volessi addestrarlo?", "", None,
+     None),
+    (DOPO_LOCALE, "Va bene, grazie. Fammi un riassunto della conversazione.", "", None,
+     None),
+    # E queste si': la cronologia non deve spegnere le richieste vere.
+    (DOPO_VSCODE, "aprimi anche chrome", "", ["open_application"],
+     lambda c: c[0]["app"] == "chrome"),
+    (DOPO_CHROME, "spostala sull altro schermo", SLOT_CHROME, ["move_window_to_monitor"],
+     lambda c: "chrome" in c[0]["window"].lower()),
+    (SALUTO, "aprimi il primo risultato", SLOT_FONTE, ["open_url"],
+     lambda c: "investing" in c[0]["url"]),
+    (DOPO_CHATBOT, "che tempo fa domani a Milano", "", ["web_search"], None),
+]
+
+
+def valuta(router, frase, atteso, controllo, giri, storia=None, slot=""):
+    esiti = []
+    for _ in range(giri):
+        t0 = time.perf_counter()
+        d = router.decidi(frase, storia, slot) if storia is not None else router.decidi(frase)
+        ms = (time.perf_counter() - t0) * 1000
+        nomi = [c.get("tool") for c in d.calls]
+        if atteso is None:
+            giusto = not d.e_strumento
+        else:
+            giusto = nomi == atteso and (controllo is None
+                                         or bool(controllo(list(d.calls))))
+        esiti.append((giusto, nomi, ms, d.origine))
+    return esiti
 
 
 def main() -> int:
@@ -102,22 +186,14 @@ def main() -> int:
     latenze_llm = []
     righe_sbagliate = []
 
-    for frase, atteso, controllo in CASI:
-        esiti = []
-        for _ in range(args.giri):
-            t0 = time.perf_counter()
-            d = router.decidi(frase)
-            ms = (time.perf_counter() - t0) * 1000
-            if d.origine == "llm":
-                latenze_llm.append(ms)
-
-            nomi = [c.get("tool") for c in d.calls]
-            if atteso is None:
-                giusto = not d.e_strumento
-            else:
-                giusto = nomi == atteso and (controllo is None
-                                             or bool(controllo(list(d.calls))))
-            esiti.append((giusto, nomi, ms, d.origine))
+    casi = [(f, a, c, None, "") for f, a, c in CASI]
+    casi += [(f, a, c, storia + [_u(f)], slot) for storia, f, slot, a, c in CASI_CONVERSAZIONE]
+    larghezza = max(larghezza, max(len(f) for f, *_ in casi))
+    for n, (frase, atteso, controllo, storia, slot) in enumerate(casi):
+        if n == len(CASI):
+            print("\n  -- con la cronologia --")
+        esiti = valuta(router, frase, atteso, controllo, args.giri, storia, slot)
+        latenze_llm += [e[2] for e in esiti if e[3] == "llm"]
 
         riusciti = sum(e[0] for e in esiti)
         ok_totali += riusciti
