@@ -73,6 +73,11 @@ def descrivi(result: Result) -> str:
         dominio = v.get("url", "").split("/")[2] if "//" in v.get("url", "") else ""
         return f"Ho aperto {dominio}." if dominio else "Ho aperto la pagina."
 
+    if result.tool == "riproduci_youtube":
+        # PHASE2 — il titolo NO: e' testo della pagina, e la frase detta
+        # finisce in memoria. Si ripete la ricerca, che e' dell'utente.
+        return f"Ho aperto su YouTube il primo video per {v.get('query', 'la ricerca')}."
+
     if result.tool == "get_telemetry":
         pezzi = []
         if "vram_usata_gb" in v:
@@ -139,6 +144,21 @@ def descrivi(result: Result) -> str:
 
     if result.tool == "scroll":
         return "Scorro."
+
+    # -- PHASE2: i numeri ---------------------------------------------------
+    #
+    # Mai il nome dell'elemento: e' testo della pagina, e questa frase finisce
+    # nella memoria della conversazione. Il numero l'ha detto l'utente.
+
+    if result.tool == "mostra_numeri":
+        n = v.get("numeri", 0)
+        return "Ecco un numero." if n == 1 else f"Ecco {n} numeri."
+
+    if result.tool == "clicca_numero":
+        return f"Cliccato il {v.get('numero', '')}."
+
+    if result.tool == "nascondi_numeri":
+        return "Numeri tolti." if v.get("nascosti") else "Non c'erano numeri."
 
     if result.tool == "drag":
         return "Trascinato."
@@ -266,6 +286,17 @@ def domanda_conferma(call: dict) -> str:
         return f"Email a {call.get('to', '')}, in partenza {data()}. Confermo?"
     if tool == "send_email":
         return f"Email a {call.get('to', '')}. Confermo l'invio?"
+    if tool == "clicca_numero":
+        # Il nome si pronuncia QUI, e solo qui: e' cio' a cui si sta dicendo
+        # di si'. Questa frase va alla voce e non entra in memoria (vedi
+        # `Orchestrator._chiedi_a_voce`).
+        from metis.tools import numeri
+
+        n = call.get("numero", 0)
+        nome = (numeri.nome_di(n) or "").strip()
+        if len(nome) > 60:
+            nome = nome[:60].rsplit(" ", 1)[0] + "..."
+        return f"Il {n} e' {nome}. Confermo?" if nome else f"Clicco il {n}?"
     if tool == "set_home_device":
         verbo = "Accendo" if call.get("azione") == "accendi" else "Spengo"
         try:

@@ -1,6 +1,6 @@
 # PHASE2 — Navigazione ("mostra i numeri")
 
-> **Durata stimata:** 13 giorni · **Ramo:** `svil/phase2` · **Tag:** `p2-navigazione`
+> **Durata stimata:** 15 giorni (13 + 2 per l'evidenziazione, aggiunta il 2026-09-26) · **Ramo:** `svil/phase2` · **Tag:** `p2-navigazione`
 > **Parte da:** l'analisi di fattibilità del 2026-09-25 (in conversazione) e dalla sessione in cui
 > "apri Chrome e aprimi YouTube su una canzone rilassante" ha aperto solo Chrome.
 > **Riferimento normativo:** [Specifica V1.0](../PHASE0/Metis_V1.0_Specifica_Ufficiale.md), §8
@@ -15,6 +15,9 @@ Due richieste dell'utente, in ordine di difficoltà:
 1. **"Apri Chrome e mettimi su YouTube un video rilassante"** — oggi apre solo Chrome.
 2. **"Sono su Facebook: clicca su quel link di quella news"** — oggi si può cliccare un elemento
    solo se lo si chiama per nome, e solo se Metis riesce a collegarsi alla pagina.
+3. **(Aggiunta del 2026-09-26) "Fammi vedere cosa stai per cliccare"** — quando Metis ha trovato
+   l'elemento, lo evidenzia a schermo con un effetto alla eye tracker: una bolla luminosa che si
+   stringe sul punto del clic. Prima di cliccare, e per tutta la durata di una conferma.
 
 Il rischio dominante è di **sicurezza**, non di tecnica. Su Facebook ogni clic agisce sull'account
 vero, e una pagina è testo scritto da sconosciuti. Da M5 vale una regola: **nessuna azione T2 o T3
@@ -63,6 +66,8 @@ YouTube…" contiene "apri chrome", e il resto della richiesta non è mai arriva
 | **D-NAV 3** | I numeri solo in Chrome o in ogni finestra? | **In ogni finestra**, se D-NAV 1 sceglie UIA (viene gratis). Solo Chrome se si passa all'estensione | Con UIA la sorgente è la stessa per il web e per le applicazioni |
 | **D-NAV 4** | YouTube: aprire la ricerca (A) o far partire un video (B)? | **Entrambi**, A per primo | A è quasi gratuito e toglie subito il difetto; B è ciò che è stato chiesto |
 | **D-NAV 5** | Su cosa compaiono i numeri? | **Link, pulsanti, schede e caselle di spunta visibili, al massimo 99** | Oltre i 99 i numeri coprono la pagina e smettono di servire; con "scorri giù" si passa alla parte successiva |
+| **D-NAV 6** | Che forma ha l'evidenziazione? | ✅ **Confermata dall'utente il 2026-09-26: bolla circolare sul punto del clic, più un contorno tenue dell'elemento.** (Scartate: solo il contorno arrotondato; solo la bolla) | La bolla dice *dove* andrà il clic (il centro della parte visibile), come l'eye tracker; il contorno dice *cosa* è stato trovato. Un link lungo 400 px dentro un cerchio solo coprirebbe mezza pagina. Le catture del giorno 12 servono a rifinire colori e tempi, non a riaprire la forma |
+| **D-NAV 7** | Il clic aspetta l'evidenziazione? | ✅ **Confermata dall'utente il 2026-09-26: almeno 250 ms di bolla prima del clic**, in parallelo con la rilettura **e con le pause del clic** (misurato: 230 → 275 ms, non i 30–50 stimati qui: vedi il tracking, §3 #14). Valore in `config/navigazione.toml` | Un'evidenziazione che compare dopo il clic è un effetto, non un'informazione. Con la rilettura (~200 ms) già in corso, "clicca il N" resta sotto i 500 ms |
 
 ---
 
@@ -137,6 +142,44 @@ candidati e oggi si limita a elencarli a voce. In PHASE2 l'ambiguità diventa nu
 
 ---
 
+### 4. L'evidenziazione (aggiunta del 2026-09-26)
+
+```
+"clicca il 7"                                  "clicca Contatti"
+   │  la finestra davanti, rilettura              │  risolto per nome (UIA)
+   │  ├─ bolla: compare larga, si stringe         │  ├─ bolla sull'elemento trovato
+   │  │   sul centro dell'elemento (~250 ms)      │  │
+   │  └─ l'elemento c'è ancora? guardia?          │  └─ guardia
+   │  clic ── un'onda breve dal punto del clic    │  clic ── onda
+   │  la bolla sfuma (300 ms)                     │  sfuma
+   │                                              │
+"clicca il 3" (è "Condividi")                  "la pagina è cambiata"
+   │  bolla FUCSIA, ferma, finché la conferma     │  un lampo rosso dove l'elemento ERA,
+   │  è aperta: "Il 3 è Condividi. Confermo?"     │  poi sfuma: si vede cosa si è mosso
+   └─ sì → bolla ciano, clic   no → sfuma
+```
+
+**Dove serve davvero.** Nella conferma. Oggi il dialogo dice "Il 3 è Condividi" e l'utente deve
+cercare il 3 fra trenta etichette; con la bolla ferma sull'elemento, si vede a cosa si sta dicendo
+sì. È anche la risposta onesta al dubbio "ha capito quello che intendevo?" dei clic per nome: il
+nome l'ha scelto il modello, l'elemento l'ha scelto UIA, la bolla mostra il risultato.
+
+**Cosa non cambia.** È la stessa finestra trasparente dei numeri: non prende il fuoco e i clic la
+attraversano (già verificati su Windows vero). La bolla si disegna sul rettangolo **riletto un
+attimo prima del clic**, non su quello del ricordo: se l'elemento si è mosso, il clic non parte e
+la bolla non va su niente. Il nome dell'elemento non passa di qui: l'overlay riceve rettangoli.
+
+**Colori dalla palette esistente.** Ciano del tema per "sto per cliccare", fucsia di
+`ATTESA_CONFERMA` per "aspetto te", rosso dell'errore per "non clicco". Nessun colore nuovo.
+
+**Con "riduci animazioni"** (Impostazioni dell'Hub, PHASE1) la bolla è ferma: compare, resta
+250 ms, sparisce. Niente onda, niente timer.
+
+**Un comando in più, facoltativo: "dov'è il 7?"** — solo la bolla, niente clic (`indica_numero`,
+T0). Utile quando le etichette sono fitte. Si fa se avanza tempo al giorno 12.
+
+---
+
 ## Scelte tecniche
 
 ### La finestra dei numeri non deve mai prendere il fuoco
@@ -161,6 +204,21 @@ nodi. Si legge solo ciò che è **visibile nel riquadro**, filtrando per tipo di
 sorgente (`FindAll` con condizione), mai l'albero intero. E la lettura gira su un thread suo, fuori
 dalla GUI (NFR-8) e fuori dal thread audio.
 
+### L'animazione della bolla e NFR-8
+
+La bolla vive al massimo un secondo, e solo in quel secondo gira un timer (~60 fps, come il nucleo
+di PHASE1 ma molto più piccolo): si ridisegna **solo il riquadro della bolla** (`update(QRect)`),
+non l'overlay intero, e a animazione finita il timer si ferma. Il raggio e l'opacità sono funzioni
+pure del tempo (`bolla(t) -> raggio, alfa`), verificabili senza finestre. La misura è quella del
+giorno 7 di PHASE1: p95 del disegno sotto i 4 ms, zero ridisegni a riposo.
+
+### Chi accende la bolla durante la conferma
+
+La conferma passa dal broker (stadio 6), che non conosce la GUI. La bolla la accende la GUI stessa
+quando apre il dialogo di un `clicca_numero`: chiede a `tools/numeri.py` il **rettangolo** del
+numero (non il nome), e la spegne alla chiusura del dialogo, per qualunque esito, timeout compreso.
+Il broker resta com'è.
+
 ### Il nome dell'elemento serve solo al broker
 
 Per D-NAV 2 il broker deve sapere se "Pubblica" è il nome dell'elemento 7. Lo legge dall'elenco
@@ -184,6 +242,8 @@ parole in un file di configurazione: niente somiglianze, niente interpretazione.
 | 8 | Clic sensibili con conferma | `config/navigazione.toml`, guardia nel broker |
 | 9 | Ambiguità per nome → numeri sui soli candidati | `metis/tools/input_sintetico.py` |
 | 10 | Specifica §9 aggiornata, `docs/INSTALL.md` | documenti |
+| 11 | Evidenziazione: bolla, contorno, onda; stili "clic", "attesa", "rifiuto" | `metis/gui/numeri.py` (overlay condiviso), `metis/gui/evidenza.py` (geometria e tempi, puri) |
+| 12 | Evidenziazione nei flussi: prima del clic, durante la conferma, sul rifiuto | `metis/tools/numeri.py`, `metis/tools/input_sintetico.py`, `metis/gui/app.py` |
 
 ---
 
@@ -243,7 +303,23 @@ parole in un file di configurazione: niente somiglianze, niente interpretazione.
 3. Audit: ogni clic registra numero, nome letto e l'esito della conferma. **NFR-9 si estende:**
    zero clic sensibili senza conferma, verificato con una query come per le T3.
 
-### Giorni 11–12 — Prove vere
+### Giorni 11–12 — Evidenziazione (aggiunta del 2026-09-26)
+
+1. `gui/evidenza.py`: la bolla come funzione pura del tempo (raggio, opacità, onda), la cornice
+   del contorno, il riquadro da ridisegnare. Test sui valori, a 100/125/150%.
+2. L'overlay dei numeri diventa l'overlay di Metis: numeri **e** bolla, stesse garanzie (fuoco,
+   clic che passano). Se i numeri non ci sono (clic per nome), si posiziona sulla finestra davanti.
+3. `Presentatore` impara `evidenzia(rect, stile)` e `spegni_evidenza()`. `clicca_numero` e
+   `click_element`: bolla dopo la rilettura, attesa minima (D-NAV 7) **prima** dell'ultima
+   guardia, poi il clic e l'onda. Rifiuto "pagina cambiata": lampo rosso sulla posizione vecchia.
+4. Conferma: la GUI accende la bolla fucsia all'apertura del dialogo di `clicca_numero` e la
+   spegne alla chiusura. Test: sì, no, timeout di 20 s, kill switch a dialogo aperto.
+5. Misure: disegno p95 durante l'animazione, zero ridisegni a riposo, "clicca il N" ancora sotto
+   i 500 ms con l'attesa. Catture di ogni stile (`benchmarks/gui_screenshot.py --evidenza`),
+   da rivedere come le catture del nucleo in PHASE1: la forma è decisa (D-NAV 6), si rifiniscono
+   colori, spessori e tempi.
+
+### Giorni 13–14 — Prove vere
 
 1. Facebook, YouTube, un quotidiano online, Esplora risorse, VS Code: "mostra i numeri", "clicca il
    N", "scorri giù", "nascondi". Si misurano il tempo per mostrare i numeri, il tempo del clic e
@@ -252,7 +328,7 @@ parole in un file di configurazione: niente somiglianze, niente interpretazione.
 3. Il giro di injection di M5 ripetuto con una pagina costruita apposta: etichette ostili, pulsanti
    invisibili, testo bianco su bianco. 0 azioni non volute.
 
-### Giorno 13 — Chiusura
+### Giorno 15 — Chiusura
 
 Specifica §9 (strumenti nuovi) e §8 (clic sensibili) aggiornate, `docs/INSTALL.md` (come si usa, e
 cosa serve a Chrome secondo D-NAV 1), bundle rigenerato e riprovato, tag.
@@ -270,6 +346,11 @@ cosa serve a Chrome secondo D-NAV 1), bundle rigenerato e riprovato, tag.
 - [ ] **Il testo della pagina non entra mai nel prompt**: verificato dal test con le etichette ostili
 - [ ] **0 clic sensibili senza conferma** (query sull'audit, come NFR-9)
 - [ ] La finestra dei numeri non prende mai il fuoco
+- [ ] Prima di ogni clic (per numero e per nome) la bolla è visibile sul punto del clic per almeno
+      il tempo di D-NAV 7, sul rettangolo riletto; durante ogni conferma di un clic resta sull'elemento
+- [ ] Con la bolla, "clicca il N" resta sotto i 500 ms; disegno p95 < 4 ms durante l'animazione,
+      zero ridisegni a riposo; con "riduci animazioni" nessun timer
+- [ ] Catture dell'evidenziazione riviste dall'utente (forma già decisa, D-NAV 6)
 - [ ] NFR-8 resta verde con i numeri a schermo
 - [ ] Specifica, `docs/INSTALL.md`, bundle aggiornati
 - [ ] `git tag p2-navigazione`
@@ -301,6 +382,10 @@ cosa serve a Chrome secondo D-NAV 1), bundle rigenerato e riprovato, tag.
 | Etichette ostili nella pagina | Injection | Il testo non entra mai nel prompt; test dedicato |
 | Chrome non avvia il video da solo | "Ho aperto il video" ma non parte | Dichiarato come limite; si misura, non si promette |
 | Il router cambia comportamento per la regola di YouTube | Regressioni sugli strumenti di M4–M6 | Tutti i banchi del router rilanciati insieme |
+| La bolla rallenta il clic | "Clicca il N" oltre i 500 ms | Attesa in parallelo con la rilettura; minimo configurabile; misurato |
+| La bolla indica un punto e il clic va altrove | L'utente si fida di un'informazione sbagliata | La bolla si disegna sul rettangolo riletto, lo stesso da cui si calcola il clic; un test confronta i due punti |
+| La bolla resta accesa dopo una conferma scaduta o un kill switch | Un'evidenziazione che non corrisponde più a niente | Spenta alla chiusura del dialogo per ogni esito; test su timeout e kill switch |
+| L'animazione pesa sulla GUI | NFR-8 | Ridisegno del solo riquadro, timer fermo a riposo, misura come in PHASE1 |
 
 ---
 
@@ -311,7 +396,8 @@ Alla fine di PHASE2 Metis sa:
 - aprire YouTube su una ricerca o su un video, da una frase sola;
 - mettere i numeri su ciò che si può cliccare, in Chrome e (se D-NAV 1 va verso UIA) in ogni
   finestra, e cliccare quello detto a voce;
-- chiedere conferma prima dei clic che pubblicano, inviano o comprano.
+- chiedere conferma prima dei clic che pubblicano, inviano o comprano;
+- mostrare, prima di ogni clic e durante ogni conferma, dove sta per cliccare.
 
 Il testo delle pagine continua a non entrare nel modello quando si agisce: la regola di M5 esce da
 questa fase più forte, non più debole.

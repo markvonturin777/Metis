@@ -159,6 +159,7 @@ def _argomenti_minimi(nome: str) -> dict:
         "type_text": {"tool": "type_text", "text": "x"},
         "press_hotkey": {"tool": "press_hotkey", "keys": ["a"]},
         "click_element": {"tool": "click_element", "elemento": "x"},
+        "clicca_numero": {"tool": "clicca_numero", "numero": 1},
         "scroll": {"tool": "scroll", "verso": "giu"},
         "drag": {"tool": "drag", "da": "x", "a": "y"},
         "send_email": {"tool": "send_email", "to": "a@b.it", "subject": "s",

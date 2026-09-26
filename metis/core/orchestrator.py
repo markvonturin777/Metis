@@ -115,7 +115,9 @@ class Azioni:
     # un False che nessuno ha deciso.
     esegui: Callable[[dict, bool], object]     # (tool call, untrusted) -> Result
     descrivi: Callable[[list, object], str]    # Result[] -> frase da dire
-    richiede_conferma: Callable[[str], bool]   # nome strumento -> bool
+    # PHASE2 — riceve la tool call intera, non il nome: se un clic chieda
+    # conferma dipende da QUALE elemento si clicca (D-NAV 2).
+    richiede_conferma: Callable[[dict], bool]  # tool call -> bool
     # Chiamata ogni volta che Metis si mette in ascolto. Serve a fissare
     # "questa finestra" nell'istante in cui l'utente comincia a parlare,
     # invece che uno o due secondi dopo, quando il fuoco e' gia' cambiato —
@@ -786,7 +788,7 @@ class Orchestrator:
             if tok.cancelled:
                 break
             nome = call.get("tool", "?")
-            conferma = a.richiede_conferma(nome)
+            conferma = a.richiede_conferma(call)
             if conferma:
                 self.sm.fire(Event.NEEDS_CONFIRM)     # -> ATTESA_CONFERMA
                 self._chiedi_a_voce(call)
@@ -825,6 +827,14 @@ class Orchestrator:
                                    for c in decisione.calls[:len(risultati)])
         m.extra["azioni"] = len(risultati)
         m.extra["esito"] = getattr(ultimo.outcome, "value", str(ultimo.outcome))
+        # PHASE2 — righe per l'Hub, mai per il modello: il titolo di un video
+        # e' testo di una pagina. Va nelle metriche del turno, che leggono
+        # solo la GUI e il log; la memoria riceve `frase`, qui sotto.
+        valori = [getattr(r, "value", None) for r in risultati if r.ok]
+        per_hub = [v["per_hub"] for v in valori
+                   if isinstance(v, dict) and v.get("per_hub")]
+        if per_hub:
+            m.extra["per_hub"] = per_hub
         if untrusted:
             m.extra["untrusted"] = True
         self.mem.aggiungi("assistant", frase)

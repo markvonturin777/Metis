@@ -97,6 +97,32 @@ CASI = [
     ("ultime notizie su openai", ["web_search"], None),
     ("chi ha vinto ieri la partita della juve", ["web_search"], None),
     ("qual e l ultima versione di python", ["web_search"], None),
+
+    # PHASE2 — YouTube. La prima e' la frase che ha aperto solo Chrome: il
+    # comando rapido "apri chrome" non la ingoia piu', e l'apertura di
+    # Chrome a parte la toglie `senza_browser_superfluo`.
+    ("apri chrome e mettimi su youtube un video rilassante", ["riproduci_youtube"],
+     lambda c: "rilass" in c[0]["query"].lower() and "youtube" not in c[0]["query"].lower()),
+    ("apri chrome e aprimi youtube su una canzone rilassante", ["riproduci_youtube"],
+     lambda c: "rilass" in c[0]["query"].lower()),
+    ("mettimi un po di musica jazz su youtube", ["riproduci_youtube"],
+     lambda c: "jazz" in c[0]["query"].lower()),
+    ("fammi sentire bohemian rhapsody", ["riproduci_youtube"],
+     lambda c: "bohemian" in c[0]["query"].lower()),
+    ("cerca su youtube ricette di pasta", ["open_url"],
+     lambda c: "youtube.com/results?search_query=" in c[0]["url"] and "pasta" in c[0]["url"]),
+    ("apri youtube", ["open_url"],
+     lambda c: "youtube.com" in c[0]["url"] and "search_query" not in c[0]["url"]),
+    ("cosa ne pensi di youtube", None, None),
+    ("che musica mi consigli per rilassarmi", None, None),
+
+    # PHASE2 — i numeri. "clicca il 7" e' un percorso rapido; le altre sono
+    # formulazioni libere per il router. Un numero non detto non si clicca.
+    ("clicca il 7", ["clicca_numero"], lambda c: c[0]["numero"] == 7),
+    ("fammi vedere cosa posso cliccare", ["mostra_numeri"], None),
+    ("metti i numeri sulla pagina", ["mostra_numeri"], None),
+    ("togli quei numeri", ["nascondi_numeri"], None),
+    ("metti un po di musica jazz", ["riproduci_youtube"], None),
 ]
 
 

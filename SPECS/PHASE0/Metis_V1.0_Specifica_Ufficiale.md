@@ -424,6 +424,7 @@ Questa separazione dà il feedback immediato di Vosk e l'accuratezza di Whisper 
 | Aspetto | Decisione |
 | :-- | :-- |
 | **Motore** | **Piper** `it_IT-paola-medium`, ONNX, su **CPU** |
+| **Velocità (PHASE3)** | **1,3** in `config/tts.toml` → `[voce] velocita`, per Piper e per Kokoro di riserva. Scelta dell'utente il 2026-09-26, dopo aver ascoltato anche Kokoro `if_sara` e `im_nicola` (scartate). Per Piper il numero non è un moltiplicatore della durata: 1,3 accorcia il parlato del 15%, come un lettore a 1,18× |
 | **Perché** | Latenza di sintesi **102 ms** contro gli **858 ms** di Kokoro, misurati su 10 frasi. Con Kokoro la latenza end-to-end sarebbe stata ~1700 ms, cioè al limite del p95 su **ogni** turno, senza margine per la GUI di M3 |
 | **Alternativa** | **Kokoro** `if_sara` — già implementato, si attiva da `config/tts.toml`. Da riconsiderare solo se la qualità dovesse contare più della latenza |
 | **Piano C** | XTTSv2 — qualità superiore, ma torna a consumare VRAM |
@@ -527,6 +528,14 @@ flowchart TB
 | **T2** | Iniezione di input nell'OS | Denylist finestre + denylist combinazioni | No, ma log dettagliato |
 | **T3** | Effetto esterno o irreversibile | Sempre confermata | **Sì, sempre** |
 
+> **PHASE2.** La conferma può essere chiesta anche sotto T3, mai tolta a un T3: `ToolSpec.conferma`
+> è un booleano (M6, la data di un promemoria) o una funzione della chiamata (PHASE2: il clic su un
+> elemento il cui nome contiene una parola di `config/navigazione.toml` → `[sensibili]`). Nel dubbio
+> — chiamata assente, funzione che fallisce — la conferma si chiede. Sulle parole `[vietate]`
+> (pagamenti, accessi) il clic non parte mai, confermato o no. NFR-9 si estende: zero clic
+> sensibili senza conferma, verificato rileggendo dall'audit il nome cliccato
+> (`numeri.clic_sensibili_non_confermati`).
+
 ### 8.4 Le guardie concrete
 
 **Su `subprocess`:**
@@ -563,6 +572,7 @@ Contromisure obbligatorie:
 1. Il contenuto web viene iniettato nel prompt dentro delimitatori espliciti, marcato come dato esterno.
 2. Il system prompt contiene la direttiva perentoria di ignorare qualunque istruzione contenuta nelle fonti.
 3. **Nessuna chiamata a strumento T2 o T3 può originare da un turno che contiene contenuto web appena recuperato.** Il broker applica questa regola indipendentemente da ciò che chiede il modello.
+4. **(PHASE2) Quando si agisce su una pagina, il suo testo non entra nel modello.** `mostra_numeri` restituisce al modello un conteggio; i nomi degli elementi restano in `metis/tools/numeri.py` e li leggono solo il controllo al momento del clic, le guardie e chi conferma. Il numero lo sceglie l'utente guardando lo schermo. Per la stessa ragione il rifiuto per ambiguità di `click_element` non elenca più i candidati: ci mette sopra i numeri. `riproduci_youtube` porta dal web un solo id di 11 caratteri, e il titolo va all'Hub, non alla memoria.
 
 ---
 
@@ -582,6 +592,8 @@ Il registro è la superficie d'azione completa di Metis. **Ciò che non è elenc
 | `list_monitors` | `() -> list[MonitorInfo]` | Posizione, risoluzione, scaling |
 | `list_reminders` | `() -> list[Reminder]` | Dal jobstore |
 | `get_home_state` | `(entity_id: str) -> State` | Home Assistant, lettura |
+| `mostra_numeri` | `() -> {numeri: int}` | PHASE2. Numeri sugli elementi cliccabili visibili della finestra di riferimento (UIA, al massimo 99). Al modello torna **solo il conteggio**. Solo con la GUI; mai nelle finestre della denylist T2 |
+| `nascondi_numeri` | `() -> None` | PHASE2. Spariscono anche dopo 60 s, dopo ogni clic e a ogni `scroll` |
 
 ### 9.2 T1 — Reversibile
 
@@ -594,12 +606,14 @@ Il registro è la superficie d'azione completa di Metis. **Ciò che non è elenc
 | `minimize` / `maximize` / `restore` / `focus_window` | `(window: str) -> None` | — |
 | `set_volume` | `(level: int)` `0–100` | — |
 | `schedule_reminder` | `(when: datetime, text: str) -> int` | Notifica desktop, reversibile |
+| `riproduci_youtube` | `(query: str) -> None` | PHASE2. Il primo video della ricerca (pagina dei risultati di YouTube, poi ddgs). Dal web esce solo un id `[A-Za-z0-9_-]{11}`, l'indirizzo si ricostruisce; il titolo va all'Hub. Dal modello passa solo con un verbo di riproduzione |
 
 ### 9.3 T2 — Input sintetico
 
 | Strumento | Firma | Guardia |
 | :-- | :-- | :-- |
-| `click_element` | `(elemento: str, tipo: TipoElemento) -> None` | Risolto via UIA o Playwright. **Coordinate grezze vietate.** |
+| `click_element` | `(elemento: str, tipo: TipoElemento) -> None` | Risolto via UIA, **anche nel browser** da PHASE2 (CDP non si apre sul profilo dell'utente da Chrome 136). Ambiguità → numeri sui soli candidati. Mai su un elemento sensibile o vietato: il sensibile riceve il numero 1 e passa da `clicca_numero`. **Coordinate grezze vietate.** |
+| `clicca_numero` | `(numero: 1–99) -> None` | PHASE2. Denylist finestre (sul primo piano e sulla finestra numerata), parole vietate; **conferma** se il nome è sensibile. Al clic l'elemento deve esserci ancora, con lo stesso nome, entro 6 px: altrimenti rifiuto. Dal modello passa solo un numero **detto** nella frase. Prima del clic, per numero e per nome, una **bolla** sul punto del clic per almeno `[evidenza] attesa_ms` (250), sul rettangolo riletto; kill switch e guardia della finestra si rivalutano dopo l'attesa, un istante prima di premere |
 | `type_text` | `(text: str) -> None` | Denylist finestre |
 | `press_hotkey` | `(keys: list[Key]) -> None` | Denylist finestre + denylist combinazioni |
 | `scroll` | `(verso: "su"\|"giu", quantita: 1-10) -> None` | Denylist finestre |
@@ -619,7 +633,7 @@ Il registro è la superficie d'azione completa di Metis. **Ciò che non è elenc
 
 L'assenza è il meccanismo di sicurezza. Non serve altro.
 
-### 9.6 Due cose che il modello non può nominare, e perché
+### 9.6 Due cose che il modello non può nominare, e perché (più una che può solo ripetere)
 
 **Gli handle di finestra.** Le prime stesure di questa specifica davano agli
 strumenti sulle finestre un `window_id: int` preso da `list_windows`. È il
@@ -641,6 +655,14 @@ risolutore guardando l'albero di UI Automation o il DOM della pagina. Se non
 lo trova, si rifiuta — ed è un esito corretto, non un fallimento.
 `test_nessuno_schema_accetta_delle_coordinate` lo verifica a ogni esecuzione
 della suite.
+
+**Gli indici dei numeri (PHASE2).** `clicca_numero` ha un intero, ed è la stessa trappola
+degli handle: un 7 inventato è un 7 valido, e clicca qualcosa che l'utente non ha scelto.
+Per questo il numero, quando arriva dal modello, passa solo se compare nella frase detta
+(`toolcall.chiesta`, in cifre o in parole); "clicca il 7" di solito non arriva nemmeno al
+modello, perché lo riconosce il percorso rapido (`core/frasi_chiuse.py`). L'indice vale
+solo mentre i numeri sono a schermo, e al momento del clic si ricontrolla che l'elemento
+sia ancora lui.
 
 ---
 

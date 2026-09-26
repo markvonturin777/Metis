@@ -59,7 +59,7 @@ Tutto in `config\`. I file del repository contengono **solo valori di esempio o 
 | File | Cosa decide |
 | :-- | :-- |
 | `stt.toml` | Modello Whisper, device (`cuda`), lingua, vocabolario di dominio |
-| `tts.toml` | Motore (Piper) e voce |
+| `tts.toml` | Motore (Piper), voce e **velocità di lettura** (`[voce] velocita`, oggi 1,3: vedi i commenti nel file) |
 | `wakeword.toml` | Wake word: **spenta in V1.0** (decisione D1). Si attiva con il push-to-talk |
 | `apps.toml` | Allowlist delle applicazioni che Metis può aprire |
 | `email.toml` | Destinatari ammessi: nel repository è **vuoto** di proposito |
@@ -68,6 +68,7 @@ Tutto in `config\`. I file del repository contengono **solo valori di esempio o 
 | `settings.toml` | Posizione della finestra. Locale, ignorato da git |
 | `gui.toml` | Interfaccia: nel repository è **vuoto** (nessuna città) |
 | `gui.local.toml` | Città del meteo e preferenze dell'Hub. **Ignorato da git**, lo scrivono le Impostazioni (§4.5) |
+| `navigazione.toml` | Clic per numero (PHASE2): parole che chiedono conferma, parole su cui non si clicca mai (§5.1) |
 
 ### 4.1 Posta
 
@@ -177,6 +178,50 @@ l'unico percorso che ferma thread e scheduler e rilascia il microfono.
 venga collegato invece di chiudersi; se la GPU finisce la memoria sposta Whisper sul
 processore. Quando l'avvio riesce saluta a voce, una volta.
 
+### 5.1 Navigare: YouTube e i numeri (PHASE2)
+
+**YouTube.** "Mettimi su YouTube un video rilassante", "fammi sentire Bohemian Rhapsody",
+"apri Chrome e mettimi su YouTube…": Metis apre in Chrome il primo video della ricerca.
+"Cerca su YouTube ricette di pasta" apre la pagina dei risultati. Il video lo sceglie YouTube,
+non Metis; se parte da solo dipende dalla politica di Chrome sull'audio automatico. Il titolo
+compare nell'Hub come riga di sistema.
+
+**I numeri.** Con la finestra che interessa davanti (un sito in Chrome, VS Code, un'altra
+applicazione), a voce:
+
+| Frase | Effetto |
+| :-- | :-- |
+| "Mostra i numeri" | Un numero su ogni link, pulsante, scheda e casella visibile (al massimo 99) |
+| "Clicca il 7" (anche "clicca sul sette") | Clic sull'elemento 7. Se nel frattempo la pagina si è mossa, **non clicca** e lo dice |
+| "Scorri giù" / "scorri su" | Scorre; i numeri spariscono, e si richiedono |
+| "Nascondi i numeri" | Li toglie. Spariscono anche da soli dopo 60 s e dopo ogni clic |
+
+I clic su elementi che **pubblicano, inviano, seguono, eliminano** ("Condividi", "Mi piace",
+"Pubblica", …) chiedono conferma come le azioni T3: dialogo e domanda a voce ("Il 7 è
+'Condividi'. Confermo?"). Su **pagamenti e accessi** ("Acquista", "Paga", "Accedi", …) Metis
+non clicca mai. Le parole stanno in `config\navigazione.toml`, in italiano e in inglese.
+
+**La bolla.** Prima di ogni clic, per numero o per nome, una bolla si stringe sul punto dove il
+clic sta per andare, e resta almeno un quarto di secondo (`[evidenza] attesa_ms` in
+`config\navigazione.toml`); al clic parte un'onda. Durante una conferma la bolla è fucsia e resta
+sull'elemento finché non si risponde. Se la pagina si è mossa, un lampo rosso mostra dove
+l'elemento era. Con "riduci animazioni" (Impostazioni) la bolla è ferma.
+
+Anche "clicca su Contatti" (per nome) continua a funzionare; se i candidati sono più d'uno,
+Metis mette i numeri solo su quelli. Un elemento sensibile trovato per nome riceve il numero 1
+e si clicca con "clicca il 1", che passa dalla conferma.
+
+Cosa sapere:
+- I numeri si vedono solo con l'interfaccia grafica, e mai in Esplora risorse, nel terminale e
+  nelle altre finestre in cui Metis non scrive (§8.4 della specifica).
+- Il testo della pagina non arriva mai al modello: i nomi degli elementi li legge solo Metis,
+  per riconoscerli al momento del clic e per le conferme.
+- Chrome non richiede niente di particolare: i numeri si leggono con UI Automation, come nelle
+  altre applicazioni. La prima volta su una finestra appena aperta servono fino a ~1 s,
+  poi ~0,1 s.
+- "Clicca il 7" **scritto** nell'Hub viene rifiutato come ogni altra azione T2 mentre Metis è
+  in primo piano: si usa la voce, con la finestra giusta davanti.
+
 ---
 
 ## 6. Avvio automatico
@@ -248,6 +293,8 @@ La verifica NFR non spunta niente senza dati sufficienti: NFR-1 vuole 100 intera
 | Nessuna notifica desktop | Impostazioni → Sistema → Notifiche (su questa macchina erano spente: `ToastEnabled=0`) |
 | Risposte lente (secondi) | `ollama ps`: il modello deve essere al 100% GPU e con contesto 8192 |
 | Un'azione è stata negata | Vista audit nella control room, oppure `data\audit.db` |
+| "Mostra i numeri" non mostra niente | La finestra è ridotta a icona o coperta? È una di quelle vietate (Esplora risorse, terminale)? |
+| "La pagina è cambiata" a ogni clic | Il contenuto si muove da solo (un feed): "mostra i numeri" e il numero subito dopo |
 | Tutto il resto | `data\logs\metis.jsonl`: una riga JSON per evento, con lo stato e il turno |
 
 ---

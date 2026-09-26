@@ -191,8 +191,63 @@ def test_comando_costruito_a_mano():
     r = Router(REG, comandi=[Comando("magia", ("prova magica",),
                                      ({"tool": "get_telemetry"},))],
                usa_llm=False)
-    c = r.fast_path("fai la prova magica adesso")
+    c = r.fast_path("ok prova magica adesso")
     assert c is not None and c.azioni == ({"tool": "get_telemetry"},)
+    # Fino a PHASE1 scattava anche questa: "fai la" non e' cortesia.
+    assert r.fast_path("fai la prova magica adesso") is None
+
+
+# --- PHASE2: il contenimento ammette solo cortesie ------------------------------
+#
+# "Apri chrome e mettimi su YouTube un video rilassante" apriva solo Chrome:
+# conteneva "apri chrome", e il resto non arrivava mai al router.
+
+CORNICI = ("{}", "per favore {}", "{} per favore", "Metis, {}", "{}, grazie",
+           "ok Metis {} grazie mille", "mi {}?", "puoi {} per favore?")
+
+
+def _frasi_configurate():
+    return [(c.id, f) for c in comandi_veri() for f in c.frasi]
+
+
+@pytest.mark.parametrize("ident,frase", _frasi_configurate())
+def test_ogni_frase_configurata_scatta_con_e_senza_cortesie(router, ident, frase):
+    for cornice in CORNICI:
+        detto = cornice.format(frase)
+        c = router.fast_path(detto)
+        assert c is not None and c.id == ident, detto
+
+
+@pytest.mark.parametrize("detto", [
+    "apri chrome e mettimi su youtube un video rilassante",
+    "apri chrome e aprimi youtube su una canzone rilassante",
+    "apri chrome su youtube",
+    "apri vs code e poi crea un file nuovo",
+    "apri vs code e mettilo sull'altro schermo",
+    "apri github e poi spostalo a destra",
+    "apri il browser e cerca le notizie",
+    "non aprire chrome",
+    "inizia a lavorare fra dieci minuti",
+    "telemetria della scheda video di ieri",
+])
+def test_le_richieste_composte_vanno_al_router(router, detto):
+    assert router.fast_path(detto) is None, detto
+
+
+def test_il_contenimento_e_per_parole_intere():
+    r = Router(REG, comandi=[Comando("x", ("apri vs code",),
+                                     ({"tool": "open_application", "app": "vscode"},))],
+               usa_llm=False)
+    assert r.fast_path("riapri vs codex") is None
+    assert r.fast_path("apri vs code") is not None
+
+
+def test_le_cortesie_sono_gia_normalizzate():
+    """Si confrontano con il detto normalizzato: una maiuscola o un accento
+    nell'elenco sarebbe una parola che non combacia mai."""
+    from metis.core.router import CORTESIE
+
+    assert all(normalizza(p) == p and " " not in p for p in CORTESIE)
 
 
 # --- ricarica a caldo --------------------------------------------------------
@@ -310,3 +365,22 @@ def test_i_comandi_rapidi_non_chiedono_il_verbo(router):
     d = router.decidi("inizia a lavorare")
     assert d.origine == "fast_path"
     assert [c["tool"] for c in d.calls] == ["open_application", "open_application"]
+
+
+@pytest.mark.parametrize("scritto", ["Finestra di riferimento", "questa finestra", "Questa",
+                                     "la finestra corrente"])
+def test_il_nome_del_concetto_nel_campo_window_vale_vuoto(scritto):
+    """PHASE2: il modello scriveva "Finestra di riferimento" invece di
+    lasciare vuoto, e "sposta questa finestra a destra" non trovava niente."""
+    from metis.llm.toolcall import senza_deittici
+
+    a = {"tool": "move_window_to_monitor", "window": scritto, "monitor": "destra"}
+    assert senza_deittici([a]) == [{**a, "window": ""}]
+
+
+def test_un_titolo_vero_o_quella_finestra_restano():
+    from metis.llm.toolcall import senza_deittici
+
+    for w in ("Chrome", "quella finestra", "Visual Studio Code"):
+        a = {"tool": "maximize_window", "window": w}
+        assert senza_deittici([a]) == [a]

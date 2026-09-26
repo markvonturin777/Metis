@@ -25,6 +25,16 @@ Con i comandi componibili dell'utente le frasi configurate si sovrappongono:
 farebbe vincere quella piu' corta, cioe' la meno specifica, e la seconda non
 si attiverebbe mai. Si ordina per lunghezza decrescente una volta sola, alla
 ricarica, non a ogni frase.
+
+PHASE2 — IL CONTENIMENTO AMMETTE SOLO CORTESIE
+"Apri chrome e mettimi su YouTube un video rilassante" contiene "apri
+chrome": il comando rapido scattava, Chrome si apriva e il resto della
+richiesta non arrivava mai al router. Il contenimento resta, perche' il
+parlato aggiunge davvero "per favore", "Metis", "grazie"; ma le parole in piu'
+devono essere tutte di quel tipo (`CORTESIE`). Una parola in piu' di altro
+genere vuol dire che la frase chiede qualcos'altro, e interpretarla e' il
+lavoro del router, non di un confronto fra stringhe. Il confronto e' anche
+per parole intere: "apri vs code" non sta dentro "riapri vs codex".
 """
 
 from __future__ import annotations
@@ -32,11 +42,32 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 
+from metis.core import frasi_chiuse
 from metis.llm.toolcall import Decisione, ToolRouter
 from metis.memory.commands import Comando, Libreria, normalizza
 from metis.tools.registry import Registry
 
-__all__ = ["Comando", "Router", "normalizza"]
+__all__ = ["CORTESIE", "Comando", "Router", "normalizza"]
+
+# Le parole che possono stare attorno a una frase configurata senza cambiarne
+# il senso. Gia' normalizzate: minuscole, senza accenti. Un elenco chiuso e
+# corto: ogni parola aggiunta qui e' una frase in piu' che il router non vede.
+CORTESIE = frozenset({
+    "per", "favore", "perfavore", "cortesia", "cortesemente", "gentilmente",
+    "grazie", "mille", "prego", "metis", "puoi", "potresti", "mi", "ok",
+    "okay", "ehi", "hey", "ciao", "senti", "dai", "allora", "adesso", "ora",
+    "subito", "su", "e", "bene", "perfetto", "si",
+})
+
+
+def _contiene(detto: tuple[str, ...], frase: tuple[str, ...]) -> bool:
+    """`frase` compare in `detto` per parole intere, e il resto e' cortesia."""
+    n = len(frase)
+    for i in range(len(detto) - n + 1):
+        if detto[i:i + n] == frase and all(
+                p in CORTESIE for p in detto[:i] + detto[i + n:]):
+            return True
+    return False
 
 
 @dataclass(frozen=True)
@@ -45,6 +76,7 @@ class _Voce:
 
     frase: str                     # gia' normalizzata
     comando: Comando
+    parole: tuple[str, ...] = ()   # la frase divisa, una volta sola
 
 
 class Router:
@@ -84,7 +116,7 @@ class Router:
         # vecchio per sempre. Leggendolo prima, al massimo si ricostruisce
         # una volta di troppo.
         visto = self.libreria.ricariche if self.libreria is not None else -1
-        voci = [_Voce(f, c) for c in self.comandi for f in
+        voci = [_Voce(f, c, tuple(f.split())) for c in self.comandi for f in
                 (c.normalizzate or tuple(normalizza(x) for x in c.frasi))]
         # Piu' lunga prima: vedi la nota in testa al modulo.
         voci.sort(key=lambda v: len(v.frase), reverse=True)
@@ -110,14 +142,16 @@ class Router:
         Il contenimento serve perche' il parlato aggiunge cortesie: "per
         favore apri vs code" contiene "apri vs code". Il verso e' solo
         questo: la frase configurata dentro il detto, mai il contrario —
-        altrimenti "apri" da solo aprirebbe qualcosa.
+        altrimenti "apri" da solo aprirebbe qualcosa. E attorno solo
+        cortesie: vedi PHASE2 in testa al modulo.
         """
         self._forse_aggiorna()
         detto = normalizza(testo)
         if not detto:
             return None
+        parole = tuple(detto.split())
         for v in self._voci:
-            if detto == v.frase or v.frase in detto:
+            if detto == v.frase or _contiene(parole, v.parole):
                 return v.comando
         return None
 
@@ -132,6 +166,13 @@ class Router:
             return Decisione(tuple(dict(a) for a in c.azioni), "fast_path",
                              (time.perf_counter() - t0) * 1000,
                              risposta=c.risposta)
+
+        # PHASE2 — le frasi chiuse con un parametro, dopo i comandi
+        # dell'utente: una frase che l'utente si e' configurato vince.
+        chiamate = frasi_chiuse.riconosci(normalizza(testo))
+        if chiamate is not None:
+            self.fast_hit += 1
+            return Decisione(chiamate, "fast_path", (time.perf_counter() - t0) * 1000)
 
         if not self.usa_llm or self.tool_router is None:
             return Decisione((), "chat", (time.perf_counter() - t0) * 1000)

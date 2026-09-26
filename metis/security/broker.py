@@ -56,10 +56,9 @@ from metis.security.killswitch import KILL_SWITCH, KillSwitch
 from metis.security.policies import (
     CONFERMA_TIMEOUT_S,
     Context,
-    richiede_conferma,
     valuta_tier,
 )
-from metis.tools.registry import Registry, Rifiuto, ToolSpec
+from metis.tools.registry import Registry, Rifiuto, ToolSpec, serve_conferma
 
 
 @dataclass(frozen=True)
@@ -164,9 +163,10 @@ class Broker:
 
         # --- 6. conferma ----------------------------------------------------
         # Il tier la impone; `spec.conferma` puo' aggiungerla sotto T3 (M6,
-        # la data di un promemoria) ma mai toglierla: e' un `or`.
+        # la data di un promemoria; PHASE2, un clic su un elemento sensibile)
+        # ma mai toglierla: e' un `or`, dentro `serve_conferma`.
         confirmed: bool | None = None
-        if richiede_conferma(spec.tier) or spec.conferma:
+        if serve_conferma(spec, call):
             confirmed = self._conferma(spec, call, ctx)
             if not confirmed:
                 return self._chiudi(nome, spec.tier, args, ctx, Outcome.DENIED,
@@ -205,8 +205,13 @@ class Broker:
                                 "esecuzione",
                                 f"{type(exc).__name__}: {exc}", t0, confirmed, None)
 
+        # PHASE2 — un handler puo' lasciare una nota per il registro: il nome
+        # dell'elemento cliccato, letto da Metis. Serve alla verifica "zero
+        # clic sensibili senza conferma", che rilegge proprio quel nome.
+        nota = valore.get("audit") if isinstance(valore, dict) else None
+        dettaglio = f"eseguito · {str(nota)[:200]}" if nota else "eseguito"
         return self._chiudi(nome, spec.tier, args, ctx, Outcome.OK, "esecuzione",
-                            "eseguito", t0, confirmed, valore)
+                            dettaglio, t0, confirmed, valore)
 
     # -- pezzi -------------------------------------------------------------
 

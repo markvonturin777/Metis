@@ -59,6 +59,12 @@ class Cavia(QWidget):
         esca.clicked.connect(lambda: print("ESCA", flush=True))
         lay.addWidget(esca)
 
+        # PHASE2: un pulsante con un nome sensibile, per la conferma dei clic.
+        pubblica = QPushButton("Pubblica")
+        pubblica.setAccessibleName("Pubblica")
+        pubblica.clicked.connect(lambda: print("PUBBLICA", flush=True))
+        lay.addWidget(pubblica)
+
         lay.addStretch(1)
         self.campo.setFocus()
 

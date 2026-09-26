@@ -13,6 +13,20 @@
 # Kokoro resta in `metis/tts/kokoro_engine.py` come alternativa: se un domani
 # la qualita' dovesse contare piu' della latenza, il motore e' gia' scritto.
 
+[voce]
+# PHASE3 (2026-09-26): Paola piu' veloce, scelta dell'utente dopo aver ascoltato
+# anche Kokoro. Vale per Piper e per Kokoro (la riserva). Ammessi 0.5-2.0: fuori,
+# Metis non parte e dice perche'.
+#
+# ATTENZIONE: per Piper il numero NON e' un moltiplicatore della durata. Diventa
+# `length_scale` = 1/velocita', e il modello non lo applica in proporzione.
+# Misurato su 5 frasi di Metis (data/tts_compare/velocita/):
+#   1.2 -> parlato  9% piu' corto  (come un lettore a 1,10x)
+#   1.3 -> parlato 15% piu' corto  (come un lettore a 1,18x)   <- scelto: "1,2x"
+#   1.4 -> parlato 21% piu' corto  (come un lettore a 1,26x)
+#   1.5 -> parlato 25% piu' corto  (come un lettore a 1,33x)
+velocita = 1.3
+
 [engine]
 backend = "piper"          # "piper" | "kokoro"
 device  = "cpu"            # libera 0,4 GB di VRAM, §3.2 della specifica

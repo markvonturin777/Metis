@@ -55,6 +55,15 @@ TIPI = {
 }
 
 
+class Ambiguo(Rifiuto):
+    """Piu' candidati alla pari. Porta i candidati con se': chi rifiuta puo'
+    metterci sopra i numeri invece di elencarli (PHASE2)."""
+
+    def __init__(self, messaggio: str, candidati: list):
+        super().__init__(messaggio)
+        self.candidati = candidati
+
+
 @dataclass(frozen=True)
 class Elemento:
     nome: str
@@ -140,6 +149,13 @@ def scegli(trovati: list[Elemento], nome: str) -> Elemento:
     pulsanti "Apri" in due pannelli diversi — non si sceglie: non c'e' modo
     di sapere quale intendesse l'utente, e il costo dell'errore e' un clic
     su una cosa sbagliata.
+
+    PHASE2 — IL RIFIUTO NON NOMINA PIU' I CANDIDATI
+    Fino a M4 li elencava ("ci sono 2 elementi: 'Elimina tutto', ..."), e la
+    frase finiva nella memoria della conversazione. Su una pagina web quei
+    nomi sono testo di sconosciuti, cioe' il canale che la regola di M5
+    chiude. Ora il rifiuto e' un `Ambiguo` con i candidati dentro: chi lo
+    riceve ci mette sopra i numeri.
     """
     if not trovati:
         raise Rifiuto(f"non trovo nessun elemento che si chiami '{nome}'")
@@ -151,9 +167,8 @@ def scegli(trovati: list[Elemento], nome: str) -> Elemento:
     if len(gruppo) == 1:
         return gruppo[0]
 
-    etichette = ", ".join(f'"{e.nome[:40]}"' for e in gruppo[:4])
-    raise Rifiuto(f"ci sono {len(gruppo)} elementi che corrispondono a "
-                  f"'{nome}': {etichette}. Dimmi quale")
+    raise Ambiguo(f"ci sono {len(gruppo)} elementi che corrispondono a '{nome}'",
+                  list(gruppo))
 
 
 def trova(hwnd: int, nome: str, tipo: str = "qualsiasi") -> Elemento:

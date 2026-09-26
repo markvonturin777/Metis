@@ -69,7 +69,11 @@ class ToolSpec:
     # promemoria alla settimana sbagliata e' il modo piu' semplice di rendere
     # la funzione inaffidabile. Il campo puo' solo AGGIUNGERE una conferma:
     # non esiste un modo di toglierla a un T3.
-    conferma: bool = False
+    #
+    # PHASE2 — puo' anche essere una funzione della chiamata: `clicca_numero`
+    # chiede conferma solo se l'elemento con quel numero ha un nome sensibile
+    # (D-NAV 2). Resta un `or` con il tier: vedi `serve_conferma`.
+    conferma: bool | Callable[[BaseModel], bool] = False
     # M6 — cosa mostrare a chi conferma, al posto degli argomenti grezzi.
     # "quando: 2026-09-24T17:00" e' un dato; "domani, giovedi' 24 settembre,
     # alle 17:00" e' qualcosa a cui si puo' dire di no sapendo perche'.
@@ -86,7 +90,7 @@ class Registry:
 
     def strumento(self, tier: Tier, schema: type[BaseModel],
                   guards: tuple[Guard, ...] = (), implemented: bool = True,
-                  conferma: bool = False,
+                  conferma: bool | Callable[[BaseModel], bool] = False,
                   presenta: Callable[[BaseModel], dict[str, str]] | None = None):
         """Decoratore. Il nome viene dal Literal dello schema, non a mano."""
 
@@ -195,11 +199,27 @@ def presentazione(spec: ToolSpec, call: BaseModel) -> dict[str, str]:
     return {k: str(v) for k, v in call.model_dump().items() if k != "tool"}
 
 
-def serve_conferma(spec: ToolSpec) -> bool:
-    """Il tier la impone (T3), oppure lo strumento la chiede comunque."""
+def serve_conferma(spec: ToolSpec, call: BaseModel | None = None) -> bool:
+    """Il tier la impone (T3), oppure lo strumento la chiede comunque.
+
+    Se lo strumento decide in base alla chiamata (PHASE2) e la chiamata non
+    c'e', o la sua funzione esplode, la risposta e' SI': nel dubbio si chiede.
+    Una conferma in piu' costa una domanda; una in meno, un clic su
+    "Pubblica".
+    """
     from metis.security.policies import richiede_conferma
 
-    return richiede_conferma(spec.tier) or spec.conferma
+    if richiede_conferma(spec.tier):
+        return True
+    c = getattr(spec, "conferma", False)
+    if callable(c):
+        if call is None:
+            return True
+        try:
+            return bool(c(call))
+        except Exception:                          # noqa: BLE001
+            return True
+    return bool(c)
 
 
 # Registro dell'applicazione. Si popola importando i moduli degli strumenti:
@@ -219,5 +239,6 @@ def carica_tutti() -> Registry:
     from metis.tools import esterni  # noqa: F401
     from metis.tools import web  # noqa: F401
     from metis.tools import home_assistant, scheduler  # noqa: F401
+    from metis.tools import numeri, youtube  # noqa: F401
 
     return REGISTRY

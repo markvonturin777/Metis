@@ -122,6 +122,14 @@ class AuditLog:
             cols = [d[0] for d in self._conn.execute("SELECT * FROM audit LIMIT 0").description]
         return [dict(zip(cols, r)) for r in rows]
 
+    def eseguiti(self, tool: str) -> list[dict]:
+        """Le righe riuscite di uno strumento: per le verifiche come NFR-9."""
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT * FROM audit WHERE tool=? AND outcome='ok' ORDER BY id", (tool,))
+            cols = [d[0] for d in cur.description]
+            return [dict(zip(cols, r)) for r in cur.fetchall()]
+
     def unconfirmed_t3(self) -> int:
         """NFR-9: azioni T3 eseguite senza conferma. Deve essere sempre 0."""
         with self._lock:

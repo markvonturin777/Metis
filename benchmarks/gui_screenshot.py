@@ -5,6 +5,7 @@
     python benchmarks/gui_screenshot.py --larghezza 1280 --altezza 720
     python benchmarks/gui_screenshot.py --nucleo           # il nucleo in ogni stato, un foglio
     python benchmarks/gui_screenshot.py --viste            # Minimal, Diagnostica, T3, impostazioni
+    python benchmarks/gui_screenshot.py --evidenza         # PHASE2: la bolla, ogni stile
 
 Il criterio estetico dell'Hub lo chiude l'utente guardando queste immagini:
 per un'interfaccia non esiste un test che dica "e' bella". Esiste pero' un
@@ -112,6 +113,60 @@ def foglio_nucleo(app: QApplication, hub: HubView, cartella: Path) -> Path:
     return percorso
 
 
+def foglio_evidenza(cartella: Path) -> Path:
+    """PHASE2, giorni 11-12: la bolla fotogramma per fotogramma, su una pagina
+    chiara e su una scura. La forma e' decisa (D-NAV 6); qui si rivedono
+    colori, spessori e tempi."""
+    from PySide6.QtCore import QRectF
+
+    from metis.gui import evidenza
+    from metis.gui.evidenza import Stile
+    from metis.gui.numeri import OverlayNumeri, _Bolla
+
+    casi = [
+        ("clic: entra (0 ms)", Stile.CLIC, 0, None, True),
+        ("clic: si stringe (110 ms)", Stile.CLIC, 110, None, True),
+        ("clic: ferma (250 ms)", Stile.CLIC, 250, None, True),
+        ("clic: l'onda (+120 ms)", Stile.CLIC, 370, 250, True),
+        ("clic: sfuma (+300 ms)", Stile.CLIC, 550, 250, True),
+        ("conferma: respira", Stile.ATTESA, 600, None, True),
+        ("conferma: respira", Stile.ATTESA, 950, None, True),
+        ("rifiuto: lampo (100 ms)", Stile.RIFIUTO, 100, None, True),
+        ("rifiuto: sfuma (350 ms)", Stile.RIFIUTO, 350, None, True),
+        ("riduci animazioni", Stile.CLIC, 50, None, False),
+    ]
+    lato_w, lato_h, colonne = 300, 170, 5
+    righe_per_sfondo = (len(casi) + colonne - 1) // colonne
+    foglio = QPixmap(colonne * lato_w, 2 * righe_per_sfondo * lato_h)
+    foglio.fill(QColor(tema.SFONDO))
+    p = QPainter(foglio)
+    p.setRenderHint(QPainter.Antialiasing)
+    for s_idx, (fondo, testo) in enumerate(((Qt.GlobalColor.white, Qt.GlobalColor.darkGray),
+                                            (QColor(tema.SFONDO), QColor(tema.TESTO_SECONDARIO)))):
+        for k, (titolo, stile, t, t_clic, animato) in enumerate(casi):
+            x = (k % colonne) * lato_w
+            y = (s_idx * righe_per_sfondo + k // colonne) * lato_h
+            p.fillRect(x, y, lato_w, lato_h, fondo)
+            p.setPen(testo)
+            p.setFont(tema.font(tema.FONT_TESTO, 13))
+            # Una riga di "pagina": un link fra due righe di testo.
+            p.drawText(x + 20, y + 52, "Notizie di oggi dal mondo e dall'Italia")
+            p.drawText(x + 20, y + 118, "Commenti dei lettori (12)   Condividi")
+            p.setPen(QColor(tema.ACCENTO_SCURO))
+            p.drawText(x + 20, y + 85, "Leggi l'articolo sul terremoto")
+            rect = (x + 18.0, y + 70.0, x + 230.0, y + 92.0)
+            f = evidenza.fotogramma(stile, t, evidenza.raggio_per(rect), t_clic, None, animato)
+            OverlayNumeri._disegna_bolla(p, _Bolla(stile, rect, 0.0, t_clic), f)
+            p.setPen(testo)
+            p.setFont(tema.font(tema.FONT_TESTO, 11))
+            p.drawText(QRectF(x, y + lato_h - 26, lato_w, 20), Qt.AlignmentFlag.AlignCenter,
+                       titolo)
+    p.end()
+    percorso = cartella / "evidenza_bolla.png"
+    foglio.save(str(percorso))
+    return percorso
+
+
 def catture_viste(app: QApplication, modello, cartella: Path) -> list[Path]:
     """Le viste di PHASE0 restilizzate (giorni 11-12), con gli stessi dati finti."""
     from metis.gui.fullscreen_view import FullscreenView
@@ -187,11 +242,15 @@ def main() -> int:
     ap.add_argument("--cartella", type=Path, default=CARTELLA)
     ap.add_argument("--nucleo", action="store_true", help="solo il foglio degli stati del nucleo")
     ap.add_argument("--viste", action="store_true", help="Minimal, Diagnostica, dialogo T3")
+    ap.add_argument("--evidenza", action="store_true", help="PHASE2: la bolla, ogni stile")
     args = ap.parse_args()
 
     app = QApplication(sys.argv)
     print("font:", tema.applica(app))
     args.cartella.mkdir(parents=True, exist_ok=True)
+    if args.evidenza:
+        print(foglio_evidenza(args.cartella))
+        return 0
 
     hub = HubView(conversazione_finta())
     hub.resize(args.larghezza, args.altezza)

@@ -27,12 +27,17 @@ def create_engine(backend: str | None = None):
         return PiperEngine(
             voice=p.get("voice", "it_IT-paola-medium"),
             voices_dir=Path(p.get("voices_dir", "data/piper")),
+            velocita=cfg.get("voce", {}).get("velocita", 1.0),
         )
     if backend == "kokoro":
         from metis.tts.kokoro_engine import KokoroEngine
 
         k = cfg.get("kokoro", {})
-        return KokoroEngine(voice=k.get("voice", "if_sara"), lang_code=k.get("lang_code", "i"))
+        from metis.tts.piper_engine import valida_velocita
+
+        # La stessa velocita' di Piper: e' la riserva, e non deve cambiare ritmo.
+        return KokoroEngine(voice=k.get("voice", "if_sara"), lang_code=k.get("lang_code", "i"),
+                            speed=valida_velocita(cfg.get("voce", {}).get("velocita", 1.0)))
     raise ValueError(f"backend TTS sconosciuto: {backend}")
 
 

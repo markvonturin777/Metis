@@ -150,6 +150,17 @@ class Applicazione(QObject):
         self.fullscreen = FullscreenView(self.conversazione, self.cruscotto)
         self._dialogo: DialogoConferma | None = None
 
+        # PHASE2 — i numeri sugli elementi cliccabili. L'overlay vive su questo
+        # thread; gli strumenti, sul thread del turno, gli parlano dal ponte.
+        from metis.gui.numeri import OverlayNumeri
+        from metis.gui.numeri import Ponte as PonteNumeri
+        from metis.tools import numeri as strumenti_numeri
+
+        self.numeri = OverlayNumeri(scadenza_s=strumenti_numeri.SCADENZA_S)
+        self._bolla_in_attesa = False
+        self.ponte_numeri = PonteNumeri(self.numeri)
+        strumenti_numeri.imposta_presentatore(self.ponte_numeri)
+
         # --- thread del nucleo --------------------------------------------
         self.ponte = PonteConferma()
         self.nucleo = Nucleo(opzioni, self.ponte)
@@ -293,6 +304,8 @@ class Applicazione(QObject):
         self.modello.chiudi_turno()
         if m.get("strumento"):
             self.conversazione.sistema(f"strumento: {m['strumento']}")
+        for riga in m.get("per_hub") or ():
+            self.conversazione.sistema(riga)
 
     @Slot(float, float)
     def _livello(self, rms: float, picco: float) -> None:
@@ -429,6 +442,7 @@ class Applicazione(QObject):
         attive = not self.preferenze.riduci_animazioni
         self.hub.nucleo.imposta_animazioni(attive)
         self.minimal.nucleo.imposta_animazioni(attive)
+        self.numeri.imposta_animazioni(attive)          # PHASE2: la bolla
         if all_avvio and self.preferenze.muto_avvio:
             self.hub.b_voce.setChecked(True)
 
@@ -444,6 +458,10 @@ class Applicazione(QObject):
                          timeout_s: float) -> None:
         genitore = next((v for v in (self.hub, self.fullscreen) if v.isVisible()),
                         self.minimal)
+        # PHASE2, giorni 11-12: per un clic sensibile la bolla fucsia sta
+        # sull'elemento finche' il dialogo e' aperto: si vede a cosa si dice
+        # si'. Dal modulo dei numeri arriva un rettangolo, mai il nome.
+        self._evidenzia_in_attesa(strumento, argomenti)
         self._dialogo = DialogoConferma(strumento, tier, argomenti, timeout_s,
                                         parent=genitore)
         self._dialogo.deciso.connect(self.ponte.rispondi)
@@ -453,9 +471,26 @@ class Applicazione(QObject):
 
     @Slot()
     def _chiudi_conferma(self) -> None:
+        # `chiusa` arriva per ogni esito: si', no, tempo scaduto, chiusura.
+        if self._bolla_in_attesa:
+            self.numeri.spegni_evidenza()
+            self._bolla_in_attesa = False
         if self._dialogo is not None:
             self._dialogo.close()
             self._dialogo = None
+
+    def _evidenzia_in_attesa(self, strumento: str, argomenti: dict) -> None:
+        if strumento != "clicca_numero":
+            return
+        from metis.tools import numeri as strumenti_numeri
+
+        try:
+            dove = strumenti_numeri.rect_e_cornice(int(argomenti.get("numero", 0)))
+        except (TypeError, ValueError):
+            dove = None
+        if dove is not None:
+            self.numeri.evidenzia(dove[0], dove[1], "attesa")
+            self._bolla_in_attesa = True
 
     @Slot()
     def _nucleo_finito(self) -> None:
@@ -552,6 +587,10 @@ class Applicazione(QObject):
         # ancora vivo.
         if self.tray is not None:
             self.tray.nascondi()
+        from metis.tools import numeri as strumenti_numeri
+
+        strumenti_numeri.imposta_presentatore(None)
+        self.numeri.nascondi()
         self.lag.ferma()
         self.hotkeys.stop()
         self.minimal.salva_posizione()

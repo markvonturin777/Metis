@@ -220,7 +220,8 @@ class Nucleo(QObject):
                 "stt_ms": b["stt"], "ttft_ms": b["ttft"], "tts_ms": b["tts"],
                 "tokens": m.tokens, "tok_per_s": m.tok_per_s,
                 "testo": m.transcript, "risposta": m.reply,
-                "strumento": m.extra.get("tool")}
+                "strumento": m.extra.get("tool"),
+                "per_hub": list(m.extra.get("per_hub") or ())}
 
     # -- chiamabili dal thread della GUI (vedi la nota in testa) -----------
 

@@ -1,0 +1,47 @@
+# PHASE2 — i clic per numero. Parole cercate nel NOME dell'elemento cliccato,
+# letto da Metis sulla pagina (mai dal modello, che non lo vede).
+#
+# Il confronto e' per parole intere, senza maiuscole ne' accenti: "Mi piace"
+# prende "Metti Mi piace a questo video", non "Mi piacerebbe". In italiano e
+# in inglese, perche' Facebook e YouTube cambiano lingua.
+#
+# [sensibili] -> il clic chiede conferma, come una T3: dialogo e domanda a voce
+#                ("Il 7 e' 'Condividi'. Confermo?"). Senza risposta, non parte.
+# [vietate]   -> il clic non parte mai, confermato o no: pagamenti e accessi
+#                sono fuori ambito (piano di PHASE2, "Fuori ambito").
+#
+# Non ci sono le azioni reversibili (salva, archivia): una conferma a ogni
+# salvataggio insegna a confermare senza leggere.
+#
+# Togliere una parola da qui toglie una conferma: e' una scelta da fare
+# sapendo che il prossimo clic su quel pulsante partira' senza chiedere.
+
+[evidenza]
+# Giorni 11-12, D-NAV 7 (confermata dall'utente il 2026-09-26): prima di ogni
+# clic la bolla resta visibile almeno questo tempo, sul punto del clic. Corre
+# in parallelo con la rilettura della pagina: il costo vero e' di poche decine
+# di millisecondi. 0 = nessuna attesa (la bolla si vede lo stesso). Massimo 2000.
+attesa_ms = 250
+
+[sensibili]
+parole = [
+  # pubblicare, reagire, seguire
+  "pubblica", "condividi", "invia", "commenta", "rispondi", "mi piace",
+  "reagisci", "segui", "iscriviti", "aggiungi agli amici", "accetta",
+  "conferma", "elimina", "cancella", "rimuovi", "blocca", "segnala",
+  "esci", "disconnetti",
+  "post", "publish", "share", "send", "comment", "reply", "like", "react",
+  "follow", "subscribe", "add friend", "accept", "confirm", "delete",
+  "remove", "block", "report", "log out", "sign out",
+]
+
+[vietate]
+parole = [
+  # pagamenti e acquisti
+  "paga", "pagamento", "acquista", "compra", "procedi all acquisto",
+  "procedi al pagamento", "effettua l ordine", "aggiungi al carrello",
+  "pay", "payment", "buy", "purchase", "checkout", "place order",
+  "add to cart",
+  # accessi
+  "accedi", "login", "log in", "sign in",
+]

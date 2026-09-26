@@ -81,6 +81,15 @@ TEMPERATURA = 0.15
 # puo' solo togliere un'azione, mai aggiungerla.
 VERBO_APERTURA = re.compile(r"\b(?:ri)?(?:apr|avvi|lanci|esegu|open|start)\w*|\bpartire\b")
 
+# PHASE2 — lo stesso controllo per `riproduci_youtube`. "Che musica mi
+# consigli per rilassarmi?" faceva partire un video 2 volte su 3, con la
+# regola gia' nel prompt. Metti, mettimi, riproduci, suona, apri/aprimi
+# ("aprimi YouTube su ..."), avvia, lancia, play, e "fammi/fai sentire,
+# vedere, ascoltare, partire".
+VERBO_RIPRODUZIONE = re.compile(
+    r"\b(?:metti|riproduc|suon|(?:ri)?apr|avvi|lanci|play)\w*"
+    r"|\bfa(?:mmi|i|te|cci)? (?:sentire|vedere|ascoltare|partire)\b")
+
 PROMPT = """Sei il router di Metis, un assistente vocale su questo PC.
 Ricevi cio' che l'utente ha detto e scegli UNA cosa da fare.
 
@@ -104,6 +113,9 @@ Regole:
 - Le applicazioni: "vscode" = Visual Studio Code, l'editor di codice;
   "github_desktop" = GitHub Desktop, il client di git; "chrome" = il
   browser.
+- "fammi sentire", "riproduci" una canzone, della musica, un video =
+  "riproduci_youtube", con in "query" cosa cercare. Un consiglio su musica
+  o video ("che canzone mi consigli?") = "nessuno_strumento".
 - Se la richiesta corrisponde chiaramente a uno strumento, usalo.
 - Usa "web_search" SOLO quando la risposta dipende da qualcosa che cambia
   nel tempo o che nessuno puo' sapere a memoria: notizie, prezzi,
@@ -324,8 +336,17 @@ class ToolRouter:
                 if isinstance(a, NessunoStrumento):
                     break
                 azioni.append(a.model_dump())
-            tenute = [a for a in azioni if chiesta(a, testo)]
-            nota = None if len(tenute) == len(azioni) else "open_application senza verbo"
+            chieste = [a for a in azioni if chiesta(a, testo)]
+            tenute = senza_browser_superfluo(senza_deittici(chieste))
+            note = []
+            if len(chieste) < len(azioni):
+                note.append(" e ".join(sorted({f"{a.get('tool')} non chiesto"
+                                              if a.get("tool") == "clicca_numero"
+                                              else f"{a.get('tool')} senza verbo"
+                                              for a in azioni if a not in chieste})))
+            if len(tenute) < len(chieste):
+                note.append("chrome superfluo")
+            nota = "; ".join(note) or None
             return Decisione(tuple(tenute), "llm", _ms(t0), riparazioni, nota)
 
         # Due tentativi falliti: si risponde a parole. Deny-by-default anche
@@ -351,14 +372,78 @@ def precedenti(storia: list[dict] | None, testo: str) -> list[dict]:
     return scambi[-4:]
 
 
+# Gli strumenti che passano solo se la frase contiene il loro verbo.
+VERBI_RICHIESTI = {"open_application": VERBO_APERTURA,
+                   "riproduci_youtube": VERBO_RIPRODUZIONE}
+
+
 def chiesta(azione: dict, testo: str) -> bool:
-    """L'azione e' stata chiesta dalla frase? Per ora conta solo per
-    `open_application` (vedi la nota in testa)."""
-    if azione.get("tool") != "open_application":
+    """L'azione e' stata chiesta dalla frase? Conta per gli strumenti di
+    `VERBI_RICHIESTI` (vedi la nota in testa), e per `clicca_numero`."""
+    if azione.get("tool") == "clicca_numero":
+        # PHASE2 — il numero deve essere stato DETTO. E' la stessa ragione per
+        # cui le finestre non hanno un handle (specifica §9.6): un indice
+        # inventato e' un intero valido, e qui e' un clic vero su qualcosa
+        # che l'utente non ha scelto.
+        from metis.core.numeri_parlati import numeri_in
+        from metis.core.router import normalizza
+
+        return azione.get("numero") in numeri_in(normalizza(testo))
+    verbo = VERBI_RICHIESTI.get(azione.get("tool"))
+    if verbo is None:
         return True
     from metis.core.router import normalizza
 
-    return VERBO_APERTURA.search(normalizza(testo)) is not None
+    return verbo.search(normalizza(testo)) is not None
+
+
+# PHASE2 — "window" vuoto vuol dire "la finestra di riferimento" (vedi
+# `schemas._SuFinestra`). Con tre strumenti in piu' nel prompt il modello ha
+# cominciato a scriverci il nome del concetto invece di lasciarlo vuoto:
+# "Finestra di riferimento" (l'etichetta della riga del contesto), "questa
+# finestra". Nessuna finestra ha quel titolo, e "sposta questa finestra a
+# destra" falliva 3 volte su 3. Il senso e' univoco, quindi si normalizza qui.
+# "Quella finestra" no: secondo il prompt si riferisce a un'altra, nominata
+# nel contesto, e va risolta dal modello.
+FINESTRA_DI_ADESSO = frozenset({
+    "questa", "questa finestra", "finestra di riferimento",
+    "la finestra di riferimento", "finestra corrente", "la finestra corrente",
+    "finestra attuale", "la finestra attuale", "finestra in primo piano",
+    "la finestra in primo piano",
+})
+
+
+def senza_deittici(azioni: list[dict]) -> list[dict]:
+    from metis.core.router import normalizza
+
+    return [{**a, "window": ""} if isinstance(a.get("window"), str)
+            and normalizza(a["window"]) in FINESTRA_DI_ADESSO else a for a in azioni]
+
+
+# Gli strumenti che aprono Chrome da soli, su un indirizzo.
+APRONO_IL_BROWSER = frozenset({"open_url", "riproduci_youtube"})
+
+
+def senza_browser_superfluo(azioni: list[dict]) -> list[dict]:
+    """"Apri chrome e mettimi su YouTube ..." e' un'azione, non due (PHASE2).
+
+    Il modello scrive spesso [open_application chrome, riproduci_youtube]:
+    la prima apre una finestra vuota, la seconda una scheda con il video, e
+    l'utente si ritrova due finestre. Se il piano apre gia' un indirizzo,
+    l'apertura di Chrome si toglie. Come `chiesta`, puo' solo togliere.
+    """
+    if not any(a.get("tool") in APRONO_IL_BROWSER for a in azioni):
+        return azioni
+    return [a for a in azioni if not _chrome_a_parte(a)]
+
+
+def _chrome_a_parte(a: dict) -> bool:
+    """Aprire Chrome o portarlo davanti: lo fa gia' chi apre l'indirizzo."""
+    if a.get("tool") == "open_application":
+        return a.get("app") == "chrome"
+    if a.get("tool") == "focus_window":
+        return "chrome" in (a.get("window") or "").lower()
+    return False
 
 
 def _ms(t0: float) -> float:

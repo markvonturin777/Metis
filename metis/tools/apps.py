@@ -59,14 +59,23 @@ def _open_application(call: OpenApplication) -> dict:
             "percorso": str(voce.percorso)}
 
 
-@REGISTRY.strumento(Tier.T1, OpenUrl)
-def _open_url(call: OpenUrl) -> dict:
-    """Apre un indirizzo web in Chrome."""
+def apri_nel_browser(url: str) -> int:
+    """Il browser dell'allowlist su un indirizzo. Per `open_url` e per chi,
+    come `riproduci_youtube`, l'indirizzo lo costruisce da se'.
+
+    L'indirizzo deve gia' essere stato verificato da chi chiama: comincia per
+    http:// o https:// e non contiene spazi, quindi non puo' essere letto da
+    Chrome come un flag, e non puo' nominare un file locale.
+    """
     voce = ALLOWLIST_APP.get(BROWSER)
     if voce is None or not voce.percorso.exists():
         raise Rifiuto("non ho un browser nell'allowlist: "
                       "aggiungi la voce chrome in config/apps.toml")
-    # L'URL e' gia' passato dal `pattern` dello schema, quindi comincia per
-    # http:// o https:// e non contiene spazi: non puo' essere letto da
-    # Chrome come un flag, e non puo' nominare un file locale.
-    return {"url": call.url, "pid": _avvia(voce, (call.url,))}
+    return _avvia(voce, (url,))
+
+
+@REGISTRY.strumento(Tier.T1, OpenUrl)
+def _open_url(call: OpenUrl) -> dict:
+    """Apre un indirizzo web in Chrome."""
+    # Verificato dal `pattern` dello schema: vedi `apri_nel_browser`.
+    return {"url": call.url, "pid": apri_nel_browser(call.url)}

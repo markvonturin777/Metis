@@ -15,12 +15,24 @@ broker, rivalutando le guardie `immediato` un istante prima di chiamare gli
 handler — e non decide cosa sia lecito. Fa gesti.
 
 COME SI DECIDE DOVE CLICCARE
-Non si decide: si cerca. Il modello dice il nome dell'elemento, e due
-risolutori diversi provano a trovarlo davvero.
+Non si decide: si cerca. Il modello dice il nome dell'elemento, e il
+risolutore prova a trovarlo davvero.
 
-    finestra in primo piano e' Chrome  ->  Playwright sulla scheda attiva
-    qualunque altra applicazione       ->  UI Automation sull'albero
-    nessuno dei due lo trova           ->  rifiuto esplicito
+    qualunque finestra, Chrome compreso  ->  UI Automation (`cliccabili.py`)
+    nessun candidato                     ->  rifiuto esplicito
+    piu' candidati alla pari             ->  i numeri sui soli candidati
+
+PHASE2 — UNA SORGENTE SOLA
+Fino a M4 Chrome passava da Playwright su CDP. Da Chrome 136 la porta di
+debug non si apre sul profilo dell'utente (spike del 2026-09-26), quindi quel
+percorso sulla sessione vera non c'era piu'. UI Automation legge anche le
+pagine, e con `FindAll` senza limite di profondita' trova in VS Code 78
+elementi dove il visitatore di M4 ne trovava 7. `browser.py` resta per i
+banchi che aprono un Chrome loro.
+
+E l'ambiguita' non si risolve piu' elencando i nomi a voce: su una pagina web
+sono testo di sconosciuti, e la frase finirebbe in memoria. Si mettono i
+numeri sui candidati, e l'utente dice "clicca il 2".
 
 Il terzo caso e' un esito corretto, non un fallimento. Il piano lo dice in
 una riga e vale la pena ripeterla: meglio "non riesco a individuare quel
@@ -48,7 +60,6 @@ from metis.tools import sendinput
 from metis.tools.registry import REGISTRY, Rifiuto
 from metis.tools.uia import Elemento
 
-PROCESSI_BROWSER = frozenset({"chrome.exe", "msedge.exe"})
 
 
 def _davanti():
@@ -73,15 +84,55 @@ def _davanti():
     return i
 
 
-def _risolvi_elemento(nome: str, tipo: str = "qualsiasi") -> tuple[Elemento, str]:
+def _risolvi_elemento(nome: str, tipo: str = "qualsiasi",
+                      numeri_se_ambiguo: bool = True) -> tuple[Elemento, str]:
+    from metis.tools import cliccabili, uia
+
     i = _davanti()
-    if i.processo.lower() in PROCESSI_BROWSER:
-        from metis.tools import browser
+    try:
+        return uia.scegli(cliccabili.candidati(i.hwnd, nome, tipo), nome), "uia"
+    except uia.Ambiguo as a:
+        if numeri_se_ambiguo:
+            _numeri_sui_candidati(i, a.candidati)
+        raise Rifiuto(f"{a}: sia piu' preciso") from None
 
-        return browser.trova(nome, tipo), "playwright"
-    from metis.tools import uia
 
-    return uia.trova(i.hwnd, nome, tipo), "uia"
+def _numeri_sui_candidati(i, candidati: list[Elemento]) -> None:
+    """Solleva sempre: con i numeri a schermo, oppure senza se non si puo'."""
+    from metis.tools import cliccabili, numeri
+
+    try:
+        n = numeri.numera(i.hwnd, cliccabili.ordina(candidati)[:cliccabili.MAX_NUMERI],
+                          cliccabili.cornice_visibile(i.rect))
+    except Rifiuto:
+        return                  # niente interfaccia: il chiamante rifiuta a parole
+    raise Rifiuto(f"ce ne sono {n}: le ho messo i numeri, mi dica quale")
+
+
+def _mai_sensibile(i, e: Elemento) -> None:
+    """Per nome non si clicca niente che pubblichi, invii o paghi (D-NAV 2).
+
+    La conferma dei clic sensibili ha un percorso solo, `clicca_numero`, ed e'
+    quello che controlla la verifica sull'audit. Qui, invece di duplicarla, si
+    mette il numero sull'elemento e si rimanda li'. I pagamenti non partono
+    da nessuna delle due vie.
+    """
+    from metis.tools import cliccabili, numeri
+
+    parola = numeri.vietata(e.nome)
+    if parola:
+        raise Rifiuto(f"su quel pulsante non clicco ('{parola}'): pagamenti e accessi "
+                      "restano a lei")
+    parola = numeri.sensibile(e.nome)
+    if parola is None:
+        return
+    try:
+        numeri.numera(i.hwnd, [e], cliccabili.cornice_visibile(i.rect))
+    except Rifiuto:
+        raise Rifiuto(f"quel pulsante ('{parola}') chiede conferma, e senza "
+                      "l'interfaccia non posso chiedergliela") from None
+    raise Rifiuto(f"quel pulsante ('{parola}') chiede conferma: le ho messo il "
+                  "numero 1, dica 'clicca il 1'")
 
 
 # --- tastiera ----------------------------------------------------------------
@@ -112,11 +163,36 @@ def _press_hotkey(call: PressHotkey) -> dict:
 @REGISTRY.strumento(Tier.T2, ClickElement, guards=(guardia_finestra(),))
 def _click_element(call: ClickElement) -> dict:
     """Clicca un elemento individuato per nome, mai per coordinate."""
+    from metis.tools import cliccabili, numeri
+
     elemento, via = _risolvi_elemento(call.elemento, call.tipo)
+    i = _davanti()
+    _mai_sensibile(i, elemento)
+
+    # Giorni 11-12: la bolla su cio' che il risolutore ha trovato. Il nome lo
+    # ha scelto il modello, l'elemento UIA: la bolla mostra il risultato
+    # prima che il clic parta (D-NAV 7).
+    comparsa = numeri.evidenzia(cliccabili.cornice_visibile(i.rect), elemento.rect, "clic")
     x, y = elemento.centro
-    sendinput.clic(x, y, doppio=call.doppio)
+    if comparsa is not None:
+        # Le pause del clic scorrono mentre la bolla si vede; poi il kill
+        # switch e la guardia, che il broker ha valutato prima dell'attesa.
+        sendinput.avvicina(x, y)
+        numeri.aspetta_bolla(comparsa)
+        motivo = numeri._motivo_ultimo_istante(call)
+        if motivo is None and _davanti().hwnd != i.hwnd:
+            motivo = "in primo piano e' cambiata finestra: non clicco"
+        if motivo is not None:
+            numeri.spegni_evidenza()
+            raise Rifiuto(motivo)
+
+    sendinput.clic(x, y, doppio=call.doppio, avvicinato=comparsa is not None)
+    numeri.segnala_clic()
     return {"elemento": elemento.nome, "tipo": elemento.tipo, "via": via,
-            "punto": [x, y], "doppio": call.doppio}
+            "punto": [x, y], "doppio": call.doppio,
+            # PHASE2: il nome letto va nell'audit, per la verifica dei clic
+            # sensibili (`numeri.clic_sensibili_non_confermati`).
+            "audit": f"{elemento.nome[:120]}"}
 
 
 @REGISTRY.strumento(Tier.T2, ScrollWindow, guards=(guardia_finestra(),))
@@ -128,7 +204,11 @@ def _scroll(call: ScrollWindow) -> dict:
     non a quella con il fuoco, e senza questo passo lo scorrimento finirebbe
     dove il mouse era rimasto.
     """
+    from metis.tools import numeri
+
     i = _davanti()
+    # PHASE2: la pagina si sposta, i numeri non corrispondono piu' a niente.
+    numeri.invalida()
     l, t, r, b = i.rect
     sendinput.muovi((l + r) // 2, (t + b) // 2)
     tacche = call.quantita if call.verso == "su" else -call.quantita
@@ -140,8 +220,14 @@ def _scroll(call: ScrollWindow) -> dict:
 @REGISTRY.strumento(Tier.T2, DragElement, guards=(guardia_finestra(),))
 def _drag(call: DragElement) -> dict:
     """Trascina un elemento su un altro. Entrambi individuati per nome."""
-    partenza, via = _risolvi_elemento(call.da)
-    arrivo, _ = _risolvi_elemento(call.a)
+    # Senza numeri: "clicca il 2" poi cliccherebbe, non trascinerebbe.
+    partenza, via = _risolvi_elemento(call.da, numeri_se_ambiguo=False)
+    arrivo, _ = _risolvi_elemento(call.a, numeri_se_ambiguo=False)
+    from metis.tools import numeri
+
+    for e in (partenza, arrivo):
+        if numeri.vietata(e.nome) or numeri.sensibile(e.nome):
+            raise Rifiuto("non trascino su un pulsante che pubblica, invia o paga")
     x1, y1 = partenza.centro
     x2, y2 = arrivo.centro
     sendinput.trascina(x1, y1, x2, y2)

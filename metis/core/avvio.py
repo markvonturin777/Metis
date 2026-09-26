@@ -171,12 +171,21 @@ def costruisci_azioni(opz: Opzioni, log, riporta: Callable[[str], None],
         SLOTS.osserva(call, r)
         return r
 
-    def conferma_serve(nome: str) -> bool:
+    def conferma_serve(call: dict) -> bool:
         # M6: non solo il tier. `schedule_reminder` e' T1 ma chiede conferma
         # della data: se l'orchestratore non lo sapesse, non passerebbe da
         # ATTESA_CONFERMA e la domanda non verrebbe pronunciata.
-        spec = reg.get(nome)
-        return spec is not None and serve_conferma(spec)
+        # PHASE2: e la chiamata intera, perche' `clicca_numero` la chiede solo
+        # per certi elementi. Una chiamata che non si valida non chiede
+        # niente: la rifiutera' il broker, allo stadio dello schema.
+        spec = reg.get(call.get("tool", ""))
+        if spec is None:
+            return False
+        try:
+            modello = spec.schema.model_validate(call)
+        except Exception:                          # noqa: BLE001
+            return False
+        return serve_conferma(spec, modello)
 
     def al_risveglio() -> None:
         """Due cose nello stesso istante: fissare "questa finestra" per gli

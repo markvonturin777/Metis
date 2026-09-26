@@ -135,7 +135,7 @@ def _azioni(decisione, eseguite):
     return Azioni(decidi=lambda t, s: decisione,
                   esegui=lambda c, u: eseguite.append(c) or _Ok(),
                   descrivi=lambda r, x: "Fatto.",
-                  richiede_conferma=lambda nome: nome == "schedule_reminder",
+                  richiede_conferma=lambda c: c.get("tool") == "schedule_reminder",
                   domanda_conferma=domanda_conferma)
 
 

@@ -197,7 +197,22 @@ def muovi(x: int, y: int) -> None:
                   | MOUSEEVENTF_VIRTUALDESK))
 
 
-def clic(x: int, y: int, doppio: bool = False) -> None:
+def avvicina(x: int, y: int) -> None:
+    """La prima meta' di `clic`: il puntatore sul bersaglio, e assestato.
+
+    PHASE2, giorni 11-12. Sono i 200 ms di pause spiegati in `clic`. Chi mostra
+    la bolla prima di cliccare (D-NAV 7) li fa scorrere MENTRE la bolla e' a
+    schermo, e poi chiama `clic(..., avvicinato=True)`, che preme soltanto.
+    Spostare il puntatore non preme niente: le guardie si rivalutano fra
+    questo passo e la pressione.
+    """
+    muovi(x, max(0, y - 1) if y > 0 else y + 1)
+    time.sleep(PAUSA_ASSESTAMENTO_S)
+    muovi(x, y)
+    time.sleep(PAUSA_CLIC_S)
+
+
+def clic(x: int, y: int, doppio: bool = False, avvicinato: bool = False) -> None:
     """Due spostamenti prima di premere, e il secondo non e' ridondante.
 
     MISURATO, NON SUPPOSTO. Con un solo spostamento, il primo clic dopo che
@@ -218,10 +233,13 @@ def clic(x: int, y: int, doppio: bool = False) -> None:
     funzionato e' un'azione doppia, e su "Invia" e' un'azione doppia che si
     vede.
     """
-    muovi(x, max(0, y - 1) if y > 0 else y + 1)
-    time.sleep(PAUSA_ASSESTAMENTO_S)
-    muovi(x, y)
-    time.sleep(PAUSA_CLIC_S)
+    if avvicinato:
+        # Gia' assestato da `avvicina`. Se nel frattempo il puntatore e' stato
+        # mosso, torna sul punto; se no, Windows assorbe lo spostamento.
+        muovi(x, y)
+        time.sleep(PAUSA_S)
+    else:
+        avvicina(x, y)
     for _ in range(2 if doppio else 1):
         _invia(_mouse(0, 0, MOUSEEVENTF_LEFTDOWN),
                _mouse(0, 0, MOUSEEVENTF_LEFTUP))

@@ -142,6 +142,11 @@ class Slots:
             elif tool == "open_url":
                 self.ultima_fonte_url = (v.get("url") or call.get("url") or "")[:MAX_URL]
 
+            elif tool == "riproduci_youtube":
+                # PHASE2: l'indirizzo e' ricostruito da un id verificato, e
+                # "riaprimi quel video" deve trovarlo. Il titolo no.
+                self.ultima_fonte_url = (v.get("url") or "")[:MAX_URL]
+
             elif tool == "web_search":
                 self.ultimo_argomento_cercato = (
                     v.get("query") or call.get("query") or "")[:MAX_ARGOMENTO]

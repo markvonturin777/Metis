@@ -199,6 +199,23 @@ class OpenUrl(_Strumento):
                      pattern=r"^https?://[A-Za-z0-9][A-Za-z0-9.\-]*\.[A-Za-z]{2,}(:\d{1,5})?(/[^\s]*)?$")
 
 
+class RiproduciYoutube(_Strumento):
+    """T1 — Apre su YouTube il primo video per una ricerca.
+
+    PHASE2 — PERCHE' UNO STRUMENTO E NON `web_search` + `open_url`
+    Da M5 un piano che mescola ricerca e azione esegue solo la ricerca: l'azione
+    sarebbe decisa da una pagina. Qui la scelta del video la fa il motore di
+    ricerca, e al modello non torna niente della pagina — ne' il titolo ne' il
+    link. L'unica cosa che il modello scrive e' cosa cercare; l'unica che lo
+    strumento sa aprire e' un video di YouTube, con l'indirizzo ricostruito da
+    un id di 11 caratteri.
+    """
+
+    tool: Literal["riproduci_youtube"]
+    query: str = Field(..., min_length=2, max_length=120,
+                       description="cosa cercare su YouTube, in parole")
+
+
 class MoveWindowToMonitor(_SuFinestra):
     """T1 — Sposta una finestra su un altro monitor."""
 
@@ -273,6 +290,31 @@ class ClickElement(_Strumento):
     elemento: str = Field(..., min_length=1, max_length=120)
     tipo: TipoElemento = "qualsiasi"
     doppio: bool = False
+
+
+class CliccaNumero(_Strumento):
+    """T2 — Clicca l'elemento con quel numero, fra quelli mostrati (PHASE2).
+
+    Non e' una coordinata e non e' un handle: e' un indice in un elenco che
+    esiste solo mentre i numeri sono a schermo, e che l'utente ha davanti.
+    Il modello non vede l'elenco (`mostra_numeri` restituisce un conteggio),
+    e un numero che l'utente non ha detto non passa: vedi `toolcall.chiesta`.
+    """
+
+    tool: Literal["clicca_numero"]
+    numero: int = Field(..., ge=1, le=99)
+
+
+class MostraNumeri(_Strumento):
+    """T0 — Mostra un numero su ogni elemento cliccabile della finestra."""
+
+    tool: Literal["mostra_numeri"]
+
+
+class NascondiNumeri(_Strumento):
+    """T0 — Toglie i numeri dallo schermo."""
+
+    tool: Literal["nascondi_numeri"]
 
 
 class ScrollWindow(_Strumento):
@@ -403,6 +445,7 @@ SCHEMI: tuple[type[_Strumento], ...] = (
     WebFetch,
     OpenApplication,
     OpenUrl,
+    RiproduciYoutube,
     MoveWindowToMonitor,
     ResizeWindow,
     MaximizeWindow,
@@ -414,6 +457,9 @@ SCHEMI: tuple[type[_Strumento], ...] = (
     ClickElement,
     ScrollWindow,
     DragElement,
+    MostraNumeri,
+    CliccaNumero,
+    NascondiNumeri,
     SendEmail,
     ScheduleReminder,
     ScheduleEmail,
