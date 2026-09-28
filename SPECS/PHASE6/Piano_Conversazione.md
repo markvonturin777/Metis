@@ -67,7 +67,7 @@ brillante a ogni colpo; e gli esempi fissi si ricopiano.
 
 - [ ] PHASE4 chiusa (`p4-frasi`): il pannello e la quota dei turni non capiti misurano anche questa fase
 - [ ] Ramo `svil/phase6` creato da `svil/phase4`
-- [ ] Decisioni D-CONV chiuse
+- [x] Decisioni D-CONV chiuse — **tutte come da raccomandazione**, confermate dall'utente il 2026-09-28; D-CONV 6: **"signore"**
 
 ---
 
@@ -88,6 +88,9 @@ brillante a ogni colpo; e gli esempi fissi si ricopiano.
 
 ## Decisioni (gate D-CONV)
 
+> ✅ **Chiuse il 2026-09-28**: l'utente conferma tutte le raccomandazioni, e sceglie l'appellativo di
+> D-CONV 6: Metis lo chiama **"signore"**.
+
 | # | Domanda | Raccomandazione | Perché |
 | :-- | :-- | :-- | :-- |
 | **D-CONV 1** | Cosa entra nella cronologia della **conversazione**? | Gli **scambi a parole** sì; gli esiti delle azioni **no**: al loro posto una riga nel blocco di contesto ("Ultime azioni: aperto Chrome, mostrati i numeri, cliccato il 58"). La cronologia del router resta com'è | La misura: con gli esiti in coda il modello li ricopia. Il router invece ne ha bisogno ("spostala" dopo "apri Chrome"), e i suoi banchi sono verdi |
@@ -95,7 +98,7 @@ brillante a ogni colpo; e gli esempi fissi si ricopiano.
 | **D-CONV 3** | La persona | **`metis_v2.txt`**, in stile Jarvis: chi è, come dà del lei (con i verbi, "la parola 'lei' solo quando la frase la richiede"), **cosa sa fare**, verità, ironia garbata facoltativa. `metis_v1` resta per confronto | La bozza del 2026-09-28 ha già dimezzato il tic e sa rispondere su cosa sa fare. Una versione nuova e non una modifica: le misure di v1 restano valide (è la regola scritta in `prompts/__init__.py`) |
 | **D-CONV 4** | Gli esempi di tono, che si ricopiano | **Un repertorio di ~15 esempi, 3 per turno, scelti a rotazione**; nessun esempio sui saluti | Con quattro esempi fissi la risposta al saluto era l'esempio, 4 volte su 4. A rotazione nessun esempio è abbastanza frequente da diventare una formula. Si misura (D-CONV 9, "copia") |
 | **D-CONV 5** | Il ripiego "Non ho capito cosa fare" | **Fuori dal prompt.** La protezione di PHASE2 passa nel codice: se la risposta **dichiara un'azione** ("ho aperto", "cliccato", "ecco N numeri", "fatto") e nel turno nessuno strumento è partito, si sostituisce con una domanda fissa | Nel prompt scatta a caso (misura 3); nel codice scatta solo quando serve. È la strada già presa per i verbi: il controllo deterministico dove il modello non è affidabile |
-| **D-CONV 6** | Appellativo per l'utente | **Da decidere con l'utente**: nessuno, oppure "signore" come in §8.4 della specifica ("Preferirei non mettere le mani lì dentro, signore") | È una scelta di persona, non una misura. Jarvis lo usa; con un'assistente al femminile la bozza ha a volte volto al femminile anche l'utente ("Lei sembra abbastanza sveglia"), e un appellativo esplicito lo evita |
+| **D-CONV 6** | Appellativo per l'utente | ✅ **"signore"** (utente, 2026-09-28), come in §8.4 della specifica ("Preferirei non mettere le mani lì dentro, signore"). Con misura: non a ogni frase | È una scelta di persona, non una misura. Jarvis lo usa; con un'assistente al femminile la bozza ha a volte volto al femminile anche l'utente ("Lei sembra abbastanza sveglia"), e un appellativo esplicito lo evita |
 | **D-CONV 7** | Opinioni e gusti | **In conversazione, nel personaggio**, mai sul web. Il router lo dice nel prompt; il banco del router ne riceve 6 | "Quale David ti piace di più" non ha una fonte: cercarlo produce "Informazione non presente nei sistemi", cioè il peggio dei due mondi |
 | **D-CONV 8** | "Cerca sul web" riferito a prima | **Frase chiusa**: "cercalo / cerca sul web / guarda in rete" senza argomento → `web_search` con la **domanda precedente** dell'utente | È un'anafora che il modello sbagliava ("Non ho accesso a Internet"). Deterministica, come "clicca il N" |
 | **D-CONV 9** | Come si misura | **Banco nuovo**, `benchmarks/prova_conversazione.py`, 3 giri: (a) la seduta del 2026-09-28 rigiocata turno per turno con la cronologia vera; (b) 20 frasi di conversazione. Misure automatiche: **ripete una risposta precedente** (0), **tic del lei** (≤ 1/20), **dà del tu** (0), **ripiego fuori posto** (0), **azioni dichiarate senza strumento** (0/12, la misura di PHASE2), **copia un esempio** (0), oltre 3 frasi (< 10%). Più **una revisione alla cieca dell'utente**: 20 risposte v1 e v2 mescolate, un voto da 1 a 5 | Il tono non lo decide un numero, lo decide chi ci parla; il resto sì. I banchi esistenti restano: persona, falsi rifiuti (0/20), router (165/165), anafora, injection, integrazioni |
