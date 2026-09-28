@@ -280,6 +280,89 @@ Tutto l'albero di Chrome su YouTube, senza filtri: 452 nodi in 69 ms.
 
 ---
 
+## 5bis. Emerso dalle prove dell'utente
+
+Cose che l'utente ha voluto fare durante le prove e che Metis non sa fare, e difetti trovati nella
+prima prova a voce (`CONVOS/Metis_20260926_1920.md`, confrontata con il log).
+
+**Esito della prima prova**: "mostra i numeri" su YouTube 672 ms la prima volta, poi 40–280 ms;
+"clicca il N" 269–315 ms, bolla compresa; ogni clic partito è andato dove doveva; il rifiuto
+"pagina cambiata" è scattato quando doveva.
+
+**Decisioni dell'utente (2026-09-26)**: correggere #2, #3, #5, #6; **#4 non si cambia**, per
+sicurezza (la guardia di M2 resta nel broker). #1 e #7 in attesa.
+
+**Correzioni fatte** (`tests/test_dopo_le_prove.py`, 49 test con le frasi trascritte davvero):
+- #2: una frase che sembra un comando e che nessuno capisce riceve una **domanda fissa** ("Non ho
+  capito il numero: me lo ripete?"), detta dall'orchestratore senza passare dalla conversazione
+  (`Decisione.chiarimento`, `frasi_chiuse.chiarimento`, `toolcall.CHIARIRE_SE_TOLTO`). Nella
+  persona: "non dici MAI di aver aperto, cliccato, mostrato…". Misura sul modello di conversazione,
+  4 richieste d'azione × 3 dopo una storia di esiti: **azioni dichiarate 6/12 prima, 0/12 dopo**
+- #3: le storpiature misurate nel percorso rapido (`m[ao]st…` + `…umer…`); numeri al femminile
+  ("ottantuna") e decine storpiate o tronche ("ottanto uno", "ottant'uno"); "sul 60" senza verbo è
+  un clic **solo con i numeri a schermo** e con una preposizione ("sei" da solo no); "mostra i
+  numeri", "clicca il", "scorri giù" nel vocabolario di dominio di Whisper
+- #5: "chiudi la scheda" (Ctrl+W), "chiudi la prima/…/ultima scheda" (Ctrl+N, poi Ctrl+W),
+  "riapri la scheda" (Ctrl+Maiusc+T), "nuova scheda"; `minimize_window` dal modello solo con un
+  verbo di riduzione (e, tolto, diventa una domanda)
+- #6: "torna indietro", "pagina precedente" (Alt+←), "vai avanti" (Alt+→). Ogni `press_hotkey`
+  toglie i numeri: la pagina cambia
+- Trovati dalla suite scrivendo queste correzioni: `numero("")` andava in errore; un costruttore di
+  frasi si chiamava come l'handler `_clicca_numero`, e il test di M2 sugli handler l'ha segnalato
+- Banchi dopo le correzioni: router 141/141, anafora 12/12, persona nel target (0/20 falsi rifiuti)
+
+| # | Richiesta | Perché oggi non si può | Strada possibile |
+| :-- | :-- | :-- | :-- |
+| 2 | **Metis dice di aver agito senza averlo fatto** (conversazione del 2026-09-26 19:04, `CONVOS/Metis_20260926_1920.md`) | 4 turni finiti in conversazione con una frase da azione e **nessuno strumento** nel log: "Torna indietro" → "Indietro."; "su ottantuna" e "clicca su ottanto uno" → "Cliccato l'ottantuno."; "Mastra in numeria" → "Ecco 99 numeri.". Il modello di conversazione copia le frasi degli esiti che trova in memoria. Nei due clic, il router aveva proposto `clicca_numero(81)` e il controllo "numero detto" l'aveva tolto (giustamente: 81 non si riconosceva), lasciando la frase alla conversazione | ✅ Corretto (sopra) |
+| 3 | Storpiature di "mostra i numeri" e dei numeri | Misurate in questa conversazione: "Mostra in umere", "Mastra in numeri", "Mastrami i numeri", "Mostrain Numery", "Mastering numeria", "Mostra inumere"; "ottantuna", "ottanto uno". Il percorso rapido non le prende: le salva il modello, non sempre (#2), e **"Mastrami i numeri" li ha nascosti** | ✅ Corretto (sopra) |
+| 4 | 2 clic su 13 rifiutati per la finestra in primo piano | "clicca su 64": in primo piano c'era `explorer.exe` (barra delle applicazioni o desktop); "clicca sul 60": c'era Metis. Ripetuti 8 s dopo, riusciti. È la guardia di M2 nel broker, che guarda il primo piano **prima** che l'handler riporti davanti la finestra numerata | ❌ **Non si cambia** (utente, 2026-09-26): la guardia di M2 resta nel broker. Si ripete il comando con la finestra giusta davanti |
+| 5 | "Chiudi la prima scheda di Chrome" ha **ridotto a icona** Chrome | Nessuno strumento chiude una scheda: il modello ha scelto il più vicino, cioè un'azione diversa da quella chiesta | ✅ Corretto: Ctrl+W, e la riduzione a icona chiede un verbo |
+| 6 | "Torna indietro" nel browser | Nessuno strumento né frase rapida (e vedi #2) | ✅ Corretto: Alt+← / Alt+→ |
+| 7 | Scorrimento della pagina | "Scorri giù/su" esisteva (3 tacche di rotellina) | ✅ **A blocchi**, scelta dell'utente (2026-09-28; il continuo no): "scorri giù/su", "pagina giù", "scendi", "sali" = una schermata (Pag↓/Pag↑); "scorri giù di tre pagine" fino a 5; "vai in cima/in fondo" (Home/Fine); "scorri un po' giù" resta la rotellina. Pag↓ e Home/Fine vanno all'elemento con il fuoco: dentro una casella di testo muovono il cursore invece di scorrere |
+| 1 | Alzare o abbassare il volume di un video su YouTube | `set_volume` è nella specifica (§9.2, T1) ma **non è mai stato implementato**. Con i numeri no: la barra del volume è uno slider, fuori da D-NAV 5, e un clic al centro la metterebbe al 50% | (a) `set_volume` di sistema, o del solo Chrome, T1: "alza/abbassa il volume", "volume al 30", "muto". (b) Comandi del lettore di YouTube con le sue scorciatoie (pausa, avanti/indietro, schermo intero, successivo) nel percorso rapido, T2. Per il volume, (a): le frecce di YouTube funzionano solo con il player a fuoco |
+
+---
+
+## 5ter. Aggiunte dopo le prove (2026-09-28) ✅
+
+Scelte dell'utente: **scorrimento a blocchi** (il continuo no); dalla lista delle funzioni
+proposte **musica e volume, browser e video, dettatura**; scartate finestre e desktop, cerca
+nella pagina, leggimi la pagina. Decisioni D-NAV 8–12 nel piano (§5 del disegno).
+
+- [x] Scorrimento a blocchi: "scorri giù/su", "pagina giù", "scendi", "sali", "scorri verso l'alto" (Pag↓/Pag↑); "scorri giù di tre pagine" (fino a 5); "vai in cima/in fondo" (Home/Fine); "scorri un po' giù" resta la rotellina
+- [x] Musica e volume (D-NAV 8, T1): `tasto_multimediale` (tasti multimediali di Windows: il lettore che suona li riceve anche da dietro), `set_volume`, `cambia_volume`, `imposta_muto` con le Core Audio via `comtypes` (nessuna dipendenza nuova), `leggi_volume` (T0). "Ferma" da solo non è una pausa: il tasto inverte lo stato. Play/pausa risponde "Fatto.", non "In pausa."
+- [x] Browser: ricarica (F5), scheda successiva/precedente (Ctrl+Tab), "vai alla seconda scheda", zoom (Ctrl +/−/0; "plus" e "minus" nuovi in `KeyName`). "Ingrandisci" da solo no: può voler dire la finestra
+- [x] Video (D-NAV 9, T2): `comando_video` (avanti/indietro 10 s o 5 s, "avanti di un minuto", schermo intero, sottotitoli), solo con YouTube davanti e **mai con il fuoco in un campo di testo**. "Video successivo" è il tasto multimediale
+- [x] Dove sta il fuoco: `cliccabili.fuoco()`, misurato su Chrome vero (pagina = Document di sola lettura; input, textarea, contenteditable = Edit scrivibile; select = ComboBox, trattata da campo)
+- [x] Dettatura (D-NAV 10–12): i campi di testo prendono numero; `scrivi_nel_numero` (rifiuta prima del clic se il numero non è un campo, verifica il fuoco dopo il clic prima di scrivere); `type_text` solo in un campo; **ogni Invio con il fuoco in un campo chiede conferma**, con campo e testo nel dialogo; dal modello, il testo passa solo se è stato detto. Le frasi di dettatura si leggono sulla trascrizione **originale** (maiuscole, accenti, punteggiatura)
+- [x] Nel codice, come in PHASE1: il muto dal modello solo con una parola di muto/silenzio/audio/suono ("la musica è troppo forte" lo produceva 3 volte su 3); tolto, Metis chiede
+
+**Gli strumenti nuovi NON si offrono al modello** (`ToolSpec.al_modello=False`,
+`Registry.per_il_modello`). Con i sette strumenti nel prompt, "qual è l'ultima versione di Python"
+andava sul web 3 volte su 8 (senza di loro 8 su 8; togliendone solo una parte, 0 o 2 su 8: non un
+colpevole, la lista lunga). Si raggiungono con le frasi chiuse, allargate alle forme comuni
+("abbassa un pochino l'audio", "salta questa canzone"); le altre vanno in conversazione, dove la
+persona chiede di ripetere. Dopo: 12/12 sul web. Tolti gli strumenti dell'audio, "la musica è
+troppo forte" è diventata `set_home_device` (T3: la conferma l'avrebbe fermata, e la casa qui non
+è configurata): la regola "dispositivi solo con un verbo di comando", nel prompt da M6, ora è
+anche nel codice (`VERBO_CASA`).
+
+**Trovato lungo la strada.** Una modifica fatta dalla shell ha scritto `\b` come carattere di
+controllo nell'espressione del muto, che quindi non riconosceva niente: i test l'hanno preso
+subito. La prima ricerca di altri casi con `grep -P` non funzionava su questa console (errore
+nascosto); rifatta in Python su tutto il repository: nessun altro.
+
+**Misure.**
+
+| Prova | Esito |
+| :-- | :-- |
+| Volume sul dispositivo vero | letto e riscritto uguale (100), senza cambiarlo |
+| Dettatura in un Chrome di prova | "Scrivi nel 14": testo identico, accenti e punteggiatura compresi, 787 ms con la bolla; Invio negato: niente inviato; confermato: inviato con il testo giusto; "digita" con il fuoco fuori dal campo: rifiutato, nulla scritto |
+| Banchi del modello, 3 giri, versione finale | **router 165/165** (con 8 frasi nuove fra musica, volume e dettatura), anafora 12/12, injection 0/18 e 0 eseguite, integrazioni 54/54 ed effetti 15/15 |
+| Suite | **1522 passati**, 30 saltati |
+
+---
+
 ## 6. Criteri di uscita
 
 - [x] Spike fatto, D-NAV 1 decisa sui numeri misurati — *provvisoria finché non c'è la misura su Facebook*

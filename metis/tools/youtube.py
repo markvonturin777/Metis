@@ -36,7 +36,8 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from metis.llm.schemas import RiproduciYoutube
+from metis.llm.schemas import ComandoVideo, RiproduciYoutube
+from metis.security.guards import guardia_finestra
 from metis.security.audit import Tier
 from metis.tools.apps import apri_nel_browser
 from metis.tools.registry import REGISTRY, Rifiuto
@@ -164,3 +165,38 @@ def _riproduci_youtube(call: RiproduciYoutube) -> dict:
     return {"query": call.query, "url": v.url, "pid": pid,
             # Solo per l'Hub: vedi la nota in testa al modulo.
             "per_hub": f"YouTube: {v.titolo}" if v.titolo else "YouTube: video aperto"}
+
+
+# --- i comandi del lettore (PHASE2, dopo le prove, D-NAV 9) ---------------------------
+#
+# Le scorciatoie di YouTube: una lettera, senza modificatori. Finiscono alla
+# pagina solo se il fuoco non e' in un campo di testo; altrimenti si SCRIVONO
+# ("f" nella casella di ricerca). Per questo, prima di premerle, si guarda
+# dove sta il fuoco, e se e' un campo si rifiuta. Il titolo della finestra
+# (scritto dalla pagina) serve solo a restringere, mai ad allargare: una
+# pagina che si chiamasse "YouTube" riceverebbe al massimo una "l".
+
+SCORCIATOIE = {
+    "avanti": ["l"], "indietro": ["j"],                     # 10 secondi
+    "avanti_poco": ["right"], "indietro_poco": ["left"],    # 5 secondi
+    "schermo_intero": ["f"], "sottotitoli": ["c"],
+}
+
+
+@REGISTRY.strumento(Tier.T2, ComandoVideo, guards=(guardia_finestra(),), al_modello=False)
+def _comando_video(call: ComandoVideo) -> dict:
+    """Comanda il video di YouTube in primo piano: avanti, indietro, schermo intero, sottotitoli."""
+    import win32gui
+
+    from metis.tools import cliccabili, finestre, numeri, sendinput
+
+    i = finestre.info(win32gui.GetForegroundWindow())
+    if i is None or "youtube" not in i.titolo.lower():
+        raise Rifiuto("in primo piano non c'e' un video di YouTube")
+    f = cliccabili.fuoco()
+    if f is None or f.scrivibile:
+        raise Rifiuto("il cursore e' in un campo di testo: le scorciatoie ci finirebbero "
+                      "scritte dentro. Clicchi sul video, poi me lo richieda")
+    sendinput.combinazione(SCORCIATOIE[call.comando])
+    numeri.invalida()
+    return {"comando": call.comando}

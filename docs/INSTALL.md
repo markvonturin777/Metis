@@ -193,7 +193,18 @@ applicazione), a voce:
 | :-- | :-- |
 | "Mostra i numeri" | Un numero su ogni link, pulsante, scheda e casella visibile (al massimo 99) |
 | "Clicca il 7" (anche "clicca sul sette") | Clic sull'elemento 7. Se nel frattempo la pagina si è mossa, **non clicca** e lo dice |
-| "Scorri giù" / "scorri su" | Scorre; i numeri spariscono, e si richiedono |
+| "Scorri giù" / "scorri su" (anche "pagina giù", "scendi", "sali") | Un blocco, cioè una schermata (Pag↓/Pag↑). I numeri spariscono, e si richiedono |
+| "Scorri giù di tre pagine" | Più blocchi, fino a 5 |
+| "Vai in cima" / "vai in fondo" | L'inizio e la fine della pagina |
+| "Scorri un po' giù" | Un passo piccolo, con la rotellina |
+| "Torna indietro" / "vai avanti" | La pagina precedente e la successiva |
+| "Chiudi la scheda", "chiudi la seconda scheda", "riapri la scheda", "nuova scheda" | Le schede del browser |
+| "Ricarica la pagina", "scheda successiva", "vai alla seconda scheda", "ingrandisci la pagina", "zoom normale" | Il browser |
+| "Pausa", "riprendi", "brano successivo", "canzone precedente" | Il lettore che sta suonando (YouTube, Spotify…), anche dietro |
+| "Alza/abbassa il volume (di 20)", "volume al 30", "muto", "togli il muto" | Il volume di Windows, anche quello della voce di Metis |
+| "Avanti/indietro di 10 secondi", "schermo intero", "sottotitoli" | Il video di YouTube in primo piano (non con il cursore in un campo di testo) |
+| "Scrivi nel 12: ricette di pasta" | Scrive nel campo con quel numero (i campi di testo prendono numero). Senza numero: "digita …" nel campo dove c'è il cursore |
+| "Premi invio" | Con il cursore in un campo di testo **chiede sempre conferma**, e mostra il testo che parte |
 | "Nascondi i numeri" | Li toglie. Spariscono anche da soli dopo 60 s e dopo ogni clic |
 
 I clic su elementi che **pubblicano, inviano, seguono, eliminano** ("Condividi", "Mi piace",

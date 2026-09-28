@@ -137,9 +137,59 @@ def _mai_sensibile(i, e: Elemento) -> None:
 
 # --- tastiera ----------------------------------------------------------------
 
+def _fuoco_scrivibile() -> bool:
+    from metis.tools import cliccabili
+
+    try:
+        f = cliccabili.fuoco()
+    except Rifiuto:
+        return False
+    return f is not None and f.scrivibile
+
+
+def _invio_serve_conferma(call) -> bool:
+    """D-NAV 11 (PHASE2, dopo le prove): ogni Invio con il fuoco in un campo di
+    testo chiede conferma, su qualunque sito e in qualunque campo.
+
+    Nessuna eccezione per i campi "di ricerca": che lo siano lo dice la pagina,
+    e un nome scritto dalla pagina puo' aggiungere una conferma, mai toglierla.
+    Un commento che si chiamasse "Cerca" partirebbe senza chiedere. Se non si
+    riesce a sapere dove sia il fuoco, si chiede.
+    """
+    if "enter" not in [k.lower() for k in getattr(call, "keys", ())]:
+        return False
+    from metis.tools import cliccabili
+
+    try:
+        f = cliccabili.fuoco()
+    except Rifiuto:
+        return True
+    return f is None or f.scrivibile
+
+
+def _presenta_tasti(call) -> dict[str, str]:
+    voci = {"tasti": "+".join(call.keys)}
+    if "enter" in call.keys:
+        from metis.tools import cliccabili
+
+        try:
+            f = cliccabili.fuoco()
+        except Rifiuto:
+            f = None
+        if f is not None:
+            voci["campo"] = f.nome or "(senza nome)"
+            voci["testo che parte"] = f.valore or "(vuoto)"
+    return voci
+
+
 @REGISTRY.strumento(Tier.T2, TypeText, guards=(guardia_finestra(),))
 def _type_text(call: TypeText) -> dict:
     """Scrive testo nella finestra in primo piano."""
+    # PHASE2: solo se il fuoco e' in un campo. Fuori, i caratteri diventano
+    # scorciatoie della pagina: su YouTube "f" e' lo schermo intero.
+    if not _fuoco_scrivibile():
+        raise Rifiuto("il cursore non e' in un campo di testo: non scrivo niente. "
+                      "Mi dica 'mostra i numeri' e 'scrivi nel' con il numero del campo")
     i = _davanti()
     inviati = sendinput.scrivi(call.text)
     return {"caratteri": inviati, "finestra": i.titolo[:80],
@@ -149,10 +199,15 @@ def _type_text(call: TypeText) -> dict:
 @REGISTRY.strumento(
     Tier.T2, PressHotkey,
     guards=(guardia_combinazione(), guardia_finestra()),
+    conferma=_invio_serve_conferma, presenta=_presenta_tasti,
 )
 def _press_hotkey(call: PressHotkey) -> dict:
     """Preme una combinazione di tasti."""
+    from metis.tools import numeri
+
     i = _davanti()
+    # PHASE2: indietro, una scheda chiusa, una scheda nuova: la pagina cambia.
+    numeri.invalida()
     sendinput.combinazione(list(call.keys))
     return {"tasti": "+".join(call.keys), "finestra": i.titolo[:80],
             "processo": i.processo}

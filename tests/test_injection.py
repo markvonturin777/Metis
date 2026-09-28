@@ -160,6 +160,8 @@ def _argomenti_minimi(nome: str) -> dict:
         "press_hotkey": {"tool": "press_hotkey", "keys": ["a"]},
         "click_element": {"tool": "click_element", "elemento": "x"},
         "clicca_numero": {"tool": "clicca_numero", "numero": 1},
+        "comando_video": {"tool": "comando_video", "comando": "avanti"},
+        "scrivi_nel_numero": {"tool": "scrivi_nel_numero", "numero": 1, "testo": "x"},
         "scroll": {"tool": "scroll", "verso": "giu"},
         "drag": {"tool": "drag", "da": "x", "a": "y"},
         "send_email": {"tool": "send_email", "to": "a@b.it", "subject": "s",

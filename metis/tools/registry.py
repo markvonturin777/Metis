@@ -79,6 +79,13 @@ class ToolSpec:
     # alle 17:00" e' qualcosa a cui si puo' dire di no sapendo perche'.
     # Ritorna {etichetta: testo}. I testi NON si troncano: vedi `presentazione`.
     presenta: Callable[[BaseModel], dict[str, str]] | None = None
+    # PHASE2, dopo le aggiunte (2026-09-28): uno strumento puo' esistere per il
+    # broker e per il percorso rapido senza essere offerto al modello. Con i
+    # sette strumenti nuovi nel prompt, "qual e' l'ultima versione di Python"
+    # andava sul web 3 volte su 8 invece di 8 su 8: la lista lunga sposta le
+    # scelte di un modello da 8B. Quelli con `al_modello=False` si raggiungono
+    # solo con le frasi chiuse, che non sbagliano.
+    al_modello: bool = True
 
 
 class Registry:
@@ -91,7 +98,8 @@ class Registry:
     def strumento(self, tier: Tier, schema: type[BaseModel],
                   guards: tuple[Guard, ...] = (), implemented: bool = True,
                   conferma: bool | Callable[[BaseModel], bool] = False,
-                  presenta: Callable[[BaseModel], dict[str, str]] | None = None):
+                  presenta: Callable[[BaseModel], dict[str, str]] | None = None,
+                  al_modello: bool = True):
         """Decoratore. Il nome viene dal Literal dello schema, non a mano."""
 
         def deco(fn: Callable[[BaseModel], Any]) -> Callable[[BaseModel], Any]:
@@ -102,7 +110,7 @@ class Registry:
                 name=nome, tier=tier, schema=schema, handler=fn,
                 guards=tuple(guards), implemented=implemented,
                 descrizione=(fn.__doc__ or schema.__doc__ or "").strip().split("\n")[0],
-                conferma=conferma, presenta=presenta,
+                conferma=conferma, presenta=presenta, al_modello=al_modello,
             )
             return fn
 
@@ -117,8 +125,13 @@ class Registry:
         return sorted(self._tools)
 
     def disponibili(self) -> list[ToolSpec]:
-        """Solo quelli eseguibili davvero: e' cio' che si offre al modello."""
+        """Solo quelli eseguibili davvero."""
         return [s for s in self._tools.values() if s.implemented]
+
+    def per_il_modello(self) -> list[ToolSpec]:
+        """Quelli che si offrono al modello: eseguibili, e non riservati al
+        percorso rapido (`al_modello`)."""
+        return [s for s in self.disponibili() if s.al_modello]
 
     def __contains__(self, nome: object) -> bool:
         return nome in self._tools
@@ -152,7 +165,7 @@ class Registry:
         """Schema da passare a Ollama come `format`. Solo gli implementati:
         offrire al modello uno strumento che non puo' funzionare significa
         provocare fallimenti e insegnargli a ripetere la richiesta."""
-        schemi = [s.schema for s in self.disponibili()]
+        schemi = [s.schema for s in self.per_il_modello()]
         if not schemi:
             return {}
         if len(schemi) == 1:
@@ -164,7 +177,7 @@ class Registry:
     def descrizione_per_prompt(self) -> str:
         """Elenco leggibile per il system prompt del tool calling."""
         righe = []
-        for s in sorted(self.disponibili(), key=lambda x: (x.tier.value, x.name)):
+        for s in sorted(self.per_il_modello(), key=lambda x: (x.tier.value, x.name)):
             righe.append(f"- {s.name} ({s.tier.value}): {s.descrizione}")
         return "\n".join(righe)
 
@@ -239,6 +252,6 @@ def carica_tutti() -> Registry:
     from metis.tools import esterni  # noqa: F401
     from metis.tools import web  # noqa: F401
     from metis.tools import home_assistant, scheduler  # noqa: F401
-    from metis.tools import numeri, youtube  # noqa: F401
+    from metis.tools import media, numeri, youtube  # noqa: F401
 
     return REGISTRY

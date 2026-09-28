@@ -604,7 +604,8 @@ Il registro è la superficie d'azione completa di Metis. **Ciò che non è elenc
 | `move_window_to_monitor` | `(window: str, monitor: MonitorRef) -> None` | Geometria via Win32, DPI-aware |
 | `resize_window` | `(window: str, disposizione: Disposizione) -> None` | Metà schermo, centrata, piena: mai pixel |
 | `minimize` / `maximize` / `restore` / `focus_window` | `(window: str) -> None` | — |
-| `set_volume` | `(level: int)` `0–100` | — |
+| `set_volume` | `(livello: int)` `0–100` | PHASE2 (2026-09-28): volume di sistema con le Core Audio; con `cambia_volume(verso, passo)` e `imposta_muto(muto)` |
+| `tasto_multimediale` | `(tasto: play_pausa\|successivo\|precedente\|stop)` | PHASE2. Lo riceve Windows e lo gira al lettore che suona: T1 (D-NAV 8). Play/pausa inverte lo stato, e Metis dice "Fatto.", non "In pausa." |
 | `schedule_reminder` | `(when: datetime, text: str) -> int` | Notifica desktop, reversibile |
 | `riproduci_youtube` | `(query: str) -> None` | PHASE2. Il primo video della ricerca (pagina dei risultati di YouTube, poi ddgs). Dal web esce solo un id `[A-Za-z0-9_-]{11}`, l'indirizzo si ricostruisce; il titolo va all'Hub. Dal modello passa solo con un verbo di riproduzione |
 
@@ -614,8 +615,10 @@ Il registro è la superficie d'azione completa di Metis. **Ciò che non è elenc
 | :-- | :-- | :-- |
 | `click_element` | `(elemento: str, tipo: TipoElemento) -> None` | Risolto via UIA, **anche nel browser** da PHASE2 (CDP non si apre sul profilo dell'utente da Chrome 136). Ambiguità → numeri sui soli candidati. Mai su un elemento sensibile o vietato: il sensibile riceve il numero 1 e passa da `clicca_numero`. **Coordinate grezze vietate.** |
 | `clicca_numero` | `(numero: 1–99) -> None` | PHASE2. Denylist finestre (sul primo piano e sulla finestra numerata), parole vietate; **conferma** se il nome è sensibile. Al clic l'elemento deve esserci ancora, con lo stesso nome, entro 6 px: altrimenti rifiuto. Dal modello passa solo un numero **detto** nella frase. Prima del clic, per numero e per nome, una **bolla** sul punto del clic per almeno `[evidenza] attesa_ms` (250), sul rettangolo riletto; kill switch e guardia della finestra si rivalutano dopo l'attesa, un istante prima di premere |
-| `type_text` | `(text: str) -> None` | Denylist finestre |
-| `press_hotkey` | `(keys: list[Key]) -> None` | Denylist finestre + denylist combinazioni |
+| `type_text` | `(text: str) -> None` | Denylist finestre. Da PHASE2: solo con il fuoco in un campo di testo (UIA), o i caratteri diventano scorciatoie della pagina |
+| `scrivi_nel_numero` | `(numero: 1–99, testo: str) -> None` | PHASE2. Clic verificato come `clicca_numero` sul campo numerato, poi il fuoco deve essere in quel campo; il testo dal modello passa solo se è stato detto. Non preme Invio |
+| `comando_video` | `(comando: avanti\|indietro\|avanti_poco\|indietro_poco\|schermo_intero\|sottotitoli)` | PHASE2. Solo con YouTube davanti e il fuoco fuori da un campo (D-NAV 9) |
+| `press_hotkey` | `(keys: list[Key]) -> None` | Denylist finestre + denylist combinazioni. Da PHASE2: **Invio con il fuoco in un campo di testo chiede sempre conferma** (D-NAV 11), con il campo e il testo nel dialogo |
 | `scroll` | `(verso: "su"\|"giu", quantita: 1-10) -> None` | Denylist finestre |
 | `drag` | `(da: str, a: str) -> None` | Denylist finestre |
 

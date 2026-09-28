@@ -61,6 +61,8 @@ KeyName = Literal[
     "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
     "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
     "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12",
+    # PHASE2, dopo le prove: lo zoom del browser (Ctrl + / Ctrl -).
+    "plus", "minus",
 ]
 
 # Dove mandare una finestra. Le prime tre sono relative a dove si trova
@@ -305,6 +307,62 @@ class CliccaNumero(_Strumento):
     numero: int = Field(..., ge=1, le=99)
 
 
+class TastoMultimediale(_Strumento):
+    """T1 — Pausa/riprendi, brano successivo o precedente, per il lettore che suona."""
+
+    tool: Literal["tasto_multimediale"]
+    tasto: Literal["play_pausa", "successivo", "precedente", "stop"]
+
+
+class LeggiVolume(_Strumento):
+    """T0 — Dice a che livello e' il volume di sistema, e se e' muto."""
+
+    tool: Literal["leggi_volume"]
+
+
+class SetVolume(_Strumento):
+    """T1 — Porta il volume di sistema a un livello da 0 a 100."""
+
+    tool: Literal["set_volume"]
+    livello: int = Field(..., ge=0, le=100)
+
+
+class CambiaVolume(_Strumento):
+    """T1 — Alza o abbassa il volume di sistema di qualche punto."""
+
+    tool: Literal["cambia_volume"]
+    verso: Literal["su", "giu"]
+    passo: int = Field(10, ge=1, le=50)
+
+
+class ImpostaMuto(_Strumento):
+    """T1 — Toglie o rimette l'audio di sistema."""
+
+    tool: Literal["imposta_muto"]
+    muto: bool
+
+
+class ComandoVideo(_Strumento):
+    """T2 — Comanda il lettore di YouTube in primo piano con le sue scorciatoie."""
+
+    tool: Literal["comando_video"]
+    comando: Literal["avanti", "indietro", "avanti_poco", "indietro_poco",
+                     "schermo_intero", "sottotitoli"]
+
+
+class ScriviNelNumero(_Strumento):
+    """T2 — Scrive nel campo di testo con quel numero il testo dettato (PHASE2).
+
+    Il testo e' quello DETTO dall'utente: dal modello passa solo se compare
+    nella frase (`toolcall.chiesta`). Non preme Invio: l'Invio e' un comando a
+    parte, e con il fuoco in un campo chiede sempre conferma (D-NAV 11).
+    """
+
+    tool: Literal["scrivi_nel_numero"]
+    numero: int = Field(..., ge=1, le=99)
+    testo: str = Field(..., min_length=1, max_length=500)
+
+
 class MostraNumeri(_Strumento):
     """T0 — Mostra un numero su ogni elemento cliccabile della finestra."""
 
@@ -460,6 +518,13 @@ SCHEMI: tuple[type[_Strumento], ...] = (
     MostraNumeri,
     CliccaNumero,
     NascondiNumeri,
+    TastoMultimediale,
+    LeggiVolume,
+    SetVolume,
+    CambiaVolume,
+    ImpostaMuto,
+    ComandoVideo,
+    ScriviNelNumero,
     SendEmail,
     ScheduleReminder,
     ScheduleEmail,

@@ -201,6 +201,10 @@ class Decisione:
     # Frase gia' pronta, se la decisione viene da un comando custom che ne
     # dichiara una. Altrimenti la compone `risposte.descrivi`.
     risposta: str | None = None
+    # PHASE2: una domanda fissa al posto della conversazione, quando la frase
+    # chiedeva un'azione e l'azione non si e' potuta decidere. Vedi
+    # `frasi_chiuse.chiarimento` e `CHIARIRE_SE_TOLTO`.
+    chiarimento: str | None = None
 
     @property
     def call(self) -> dict | None:
@@ -225,7 +229,7 @@ class ToolRouter:
         self.options = {"temperature": TEMPERATURA, "num_ctx": NUM_CTX}
 
     def _union(self):
-        schemi = [s.schema for s in self.registry.disponibili()]
+        schemi = [s.schema for s in self.registry.per_il_modello()]
         schemi.append(NessunoStrumento)
         uno = Annotated[Union[tuple(schemi)], Field(discriminator="tool")]
 
@@ -347,7 +351,11 @@ class ToolRouter:
             if len(tenute) < len(chieste):
                 note.append("chrome superfluo")
             nota = "; ".join(note) or None
-            return Decisione(tuple(tenute), "llm", _ms(t0), riparazioni, nota)
+            tolte = [a for a in azioni if a not in chieste]
+            domanda = next((CHIARIRE_SE_TOLTO[a.get("tool")] for a in tolte
+                            if a.get("tool") in CHIARIRE_SE_TOLTO), None) if not tenute else None
+            return Decisione(tuple(tenute), "llm", _ms(t0), riparazioni, nota,
+                             chiarimento=domanda)
 
         # Due tentativi falliti: si risponde a parole. Deny-by-default anche
         # qui — nel dubbio non si agisce.
@@ -372,14 +380,55 @@ def precedenti(storia: list[dict] | None, testo: str) -> list[dict]:
     return scambi[-4:]
 
 
+# PHASE2, dopo le prove: "chiudi la prima scheda di Chrome" ha ridotto Chrome a
+# icona. Il modello, senza uno strumento per la scheda, aveva preso il piu'
+# vicino. Ridurre a icona passa solo con un verbo che lo chiede.
+VERBO_RIDUZIONE = re.compile(
+    r"\b(?:riduc|riduci|minimizz|rimpicciol|nascond|abbass|iconizz)\w*|\bicona\b")
+
+# PHASE2, dopo le aggiunte (2026-09-28): il modello usava il muto come ripiego
+# per "meno suono". "La musica e' troppo forte" e "fermati un attimo con la
+# musica" toglievano l'audio, 3 volte su 3. Il muto passa solo se la frase
+# parla di muto, silenzio, audio o suono.
+VERBO_MUTO = re.compile(r"\bmut\w*|\bsilenz\w*|\bzitt\w*|\baudio\b|\bsuono\b")
+
+# E i dispositivi di casa (T3): la regola "solo con un verbo di comando" era
+# nel prompt da M6, non nel codice. Tolti gli strumenti dell'audio dal prompt,
+# "la musica e' troppo forte" e' diventata `set_home_device`: la conferma
+# l'avrebbe fermata, ma un T3 scelto per una lamentela non si propone.
+VERBO_CASA = re.compile(r"\b(?:accend|spegn|attiv|disattiv|avvi|azion)\w*|\bdai\b"
+                        r"|\bfai partire\b|\bmetti in funzione\b")
+
 # Gli strumenti che passano solo se la frase contiene il loro verbo.
 VERBI_RICHIESTI = {"open_application": VERBO_APERTURA,
-                   "riproduci_youtube": VERBO_RIPRODUZIONE}
+                   "riproduci_youtube": VERBO_RIPRODUZIONE,
+                   "minimize_window": VERBO_RIDUZIONE,
+                   "imposta_muto": VERBO_MUTO,
+                   "set_home_device": VERBO_CASA}
+
+# Se il controllo toglie uno di questi, l'utente aveva chiesto un'azione: si
+# fa una domanda invece di lasciare la frase alla conversazione. Non
+# `open_application`: li' la frase tolta era una domanda ("sai aiutarmi nella
+# programmazione?", PHASE1), e alla domanda si risponde.
+CHIARIRE_SE_TOLTO = {"clicca_numero": "Non ho capito il numero: me lo ripete?",
+                     "scrivi_nel_numero": "Non ho capito dove scrivere o cosa: me lo ripete?",
+                     "minimize_window": "Non ho capito cosa fare: me lo ripete con altre parole?",
+                     "imposta_muto": "Non ho capito cosa fare: me lo ripete con altre parole?",
+                     "set_home_device": "Non ho capito cosa fare: me lo ripete con altre parole?"}
 
 
 def chiesta(azione: dict, testo: str) -> bool:
     """L'azione e' stata chiesta dalla frase? Conta per gli strumenti di
     `VERBI_RICHIESTI` (vedi la nota in testa), e per `clicca_numero`."""
+    if azione.get("tool") == "scrivi_nel_numero":
+        # Il numero detto, e il testo DETTO: il modello non scrive nelle pagine
+        # parole sue. Confronto sulle forme normalizzate.
+        from metis.core.numeri_parlati import numeri_in
+        from metis.core.router import normalizza
+
+        detto = normalizza(testo)
+        return (azione.get("numero") in numeri_in(detto)
+                and normalizza(str(azione.get("testo", ""))) in detto)
     if azione.get("tool") == "clicca_numero":
         # PHASE2 — il numero deve essere stato DETTO. E' la stessa ragione per
         # cui le finestre non hanno un handle (specifica §9.6): un indice

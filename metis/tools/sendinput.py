@@ -73,6 +73,13 @@ VK = {
     "up": 0x26, "down": 0x28, "left": 0x25, "right": 0x27,
 }
 VK.update({f"f{n}": 0x6F + n for n in range(1, 13)})        # F1 = 0x70
+# PHASE2: lo zoom del browser. VK_OEM_PLUS e VK_OEM_MINUS: su una tastiera
+# italiana sono proprio i tasti + e -, e Chrome accetta Ctrl + con entrambi.
+VK.update({"plus": 0xBB, "minus": 0xBD})
+
+# I tasti multimediali. Non vanno alla finestra in primo piano: li riceve
+# Windows e li gira al lettore che sta suonando. Vedi `tools/media.py`.
+MULTIMEDIALI = {"play_pausa": 0xB3, "successivo": 0xB0, "precedente": 0xB1, "stop": 0xB2}
 
 
 class _MOUSEINPUT(ctypes.Structure):
@@ -170,6 +177,11 @@ def combinazione(tasti: list[str]) -> None:
     for vk in reversed(codici):
         _invia(_tasto(vk, True))
         time.sleep(PAUSA_S)
+
+
+def multimediale(nome: str) -> None:
+    vk = MULTIMEDIALI[nome]
+    _invia(_tasto(vk, False), _tasto(vk, True))
 
 
 # --- mouse -------------------------------------------------------------------

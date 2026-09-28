@@ -16,4 +16,5 @@ language     = "it"
 # Va esteso man mano che emergono termini ricorrenti sbagliati.
 prompt = """Metis. Visual Studio Code. GitHub Desktop. Ollama. \
 friggitrice ad aria. Banca Centrale Europea. investing punto com. \
-schermo, finestra, monitor, promemoria, commercialista."""
+schermo, finestra, monitor, promemoria, commercialista. \
+mostra i numeri, nascondi i numeri, clicca il sette, scorri giù."""

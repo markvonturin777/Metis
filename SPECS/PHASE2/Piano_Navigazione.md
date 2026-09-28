@@ -1,6 +1,6 @@
 # PHASE2 — Navigazione ("mostra i numeri")
 
-> **Durata stimata:** 15 giorni (13 + 2 per l'evidenziazione, aggiunta il 2026-09-26) · **Ramo:** `svil/phase2` · **Tag:** `p2-navigazione`
+> **Durata stimata:** 20 giorni (13 + 2 per l'evidenziazione, 2026-09-26, + 5 per le aggiunte dopo le prove, 2026-09-28) · **Ramo:** `svil/phase2` · **Tag:** `p2-navigazione`
 > **Parte da:** l'analisi di fattibilità del 2026-09-25 (in conversazione) e dalla sessione in cui
 > "apri Chrome e aprimi YouTube su una canzone rilassante" ha aperto solo Chrome.
 > **Riferimento normativo:** [Specifica V1.0](../PHASE0/Metis_V1.0_Specifica_Ufficiale.md), §8
@@ -67,6 +67,11 @@ YouTube…" contiene "apri chrome", e il resto della richiesta non è mai arriva
 | **D-NAV 4** | YouTube: aprire la ricerca (A) o far partire un video (B)? | **Entrambi**, A per primo | A è quasi gratuito e toglie subito il difetto; B è ciò che è stato chiesto |
 | **D-NAV 5** | Su cosa compaiono i numeri? | **Link, pulsanti, schede e caselle di spunta visibili, al massimo 99** | Oltre i 99 i numeri coprono la pagina e smettono di servire; con "scorri giù" si passa alla parte successiva |
 | **D-NAV 6** | Che forma ha l'evidenziazione? | ✅ **Confermata dall'utente il 2026-09-26: bolla circolare sul punto del clic, più un contorno tenue dell'elemento.** (Scartate: solo il contorno arrotondato; solo la bolla) | La bolla dice *dove* andrà il clic (il centro della parte visibile), come l'eye tracker; il contorno dice *cosa* è stato trovato. Un link lungo 400 px dentro un cerchio solo coprirebbe mezza pagina. Le catture del giorno 12 servono a rifinire colori e tempi, non a riaprire la forma |
+| **D-NAV 8** | Tasti multimediali e volume: che livello? | ✅ **T1** (2026-09-28) | Non vanno a nessuna finestra: i tasti li riceve Windows e li gira al lettore che suona, il volume è una proprietà del dispositivo. Niente scrive, cancella o esegue; tutto si annulla con il comando opposto |
+| **D-NAV 9** | Comandi del video di YouTube? | ✅ **T2, solo con YouTube davanti e mai con il fuoco in un campo di testo** | Sono lettere senza modificatori ("l", "j", "f", "c"): in un campo si scriverebbero. Il titolo della finestra (della pagina) restringe soltanto |
+| **D-NAV 10** | Dove scrive la dettatura? | ✅ **Solo in un campo numerato o nel campo con il fuoco, verificato come campo di testo da UIA prima di scrivere**; il testo è quello detto (dal modello passa solo se è nella frase) | Fuori da un campo, i caratteri sono scorciatoie della pagina |
+| **D-NAV 11** | Invio in un campo di testo? | ✅ **Sempre con conferma**, in qualunque campo di qualunque sito; il dialogo mostra il campo e il testo che parte | Un campo "di ricerca" lo dichiara la pagina, e un nome scritto dalla pagina può aggiungere conferme, mai toglierle. Per YouTube c'è già "cerca su YouTube" |
+| **D-NAV 12** | I campi di testo prendono numero? | ✅ **Sì** (estende D-NAV 5) | Per "scrivi nel 12". Il Document della pagina no |
 | **D-NAV 7** | Il clic aspetta l'evidenziazione? | ✅ **Confermata dall'utente il 2026-09-26: almeno 250 ms di bolla prima del clic**, in parallelo con la rilettura **e con le pause del clic** (misurato: 230 → 275 ms, non i 30–50 stimati qui: vedi il tracking, §3 #14). Valore in `config/navigazione.toml` | Un'evidenziazione che compare dopo il clic è un effetto, non un'informazione. Con la rilettura (~200 ms) già in corso, "clicca il N" resta sotto i 500 ms |
 
 ---
@@ -177,6 +182,25 @@ la bolla non va su niente. Il nome dell'elemento non passa di qui: l'overlay ric
 
 **Un comando in più, facoltativo: "dov'è il 7?"** — solo la bolla, niente clic (`indica_numero`,
 T0). Utile quando le etichette sono fitte. Si fa se avanza tempo al giorno 12.
+
+---
+
+### 5. Dopo le prove dell'utente (aggiunta del 2026-09-28)
+
+La prima prova a voce ha funzionato, e ha chiesto tre cose che Metis non sapeva fare. L'utente ne ha
+scelte tre (musica e volume, browser e video, dettatura) e scartate altre tre (finestre e desktop,
+cerca nella pagina, leggimi la pagina).
+
+| Cosa | Frasi | Come |
+| :-- | :-- | :-- |
+| **Scorrimento a blocchi** | "scorri giù/su", "pagina giù", "scorri giù di tre pagine", "vai in cima/in fondo", "scorri un po' giù" | Pag↓/Pag↑, Home/Fine; la rotellina per "un po'" |
+| **Musica e volume** (D-NAV 8) | "pausa", "riprendi", "brano successivo", "alza/abbassa il volume (di 20)", "volume al 30", "muto" | Tasti multimediali di Windows; volume di sistema con le Core Audio (`set_volume` della specifica §9.2, mai fatto prima) |
+| **Browser** | "ricarica la pagina", "scheda successiva/precedente", "vai alla seconda scheda", "ingrandisci la pagina", "zoom normale", "torna indietro", "chiudi la scheda" | Scorciatoie di Chrome, T2 |
+| **Video** (D-NAV 9) | "avanti/indietro di 10 secondi", "avanti di un minuto", "schermo intero", "sottotitoli" | Scorciatoie di YouTube, solo fuori dai campi |
+| **Dettatura** (D-NAV 10–12) | "scrivi nel 12: ricette di pasta", "digita …", "premi invio" | Clic verificato sul campo, fuoco verificato, poi il testo; Invio sempre confermato |
+
+Tutte le frasi chiuse stanno nel percorso rapido (`core/frasi_chiuse.py`), senza modello; il router
+ha gli stessi strumenti per le formulazioni libere.
 
 ---
 
@@ -319,7 +343,14 @@ parole in un file di configurazione: niente somiglianze, niente interpretazione.
    da rivedere come le catture del nucleo in PHASE1: la forma è decisa (D-NAV 6), si rifiniscono
    colori, spessori e tempi.
 
-### Giorni 13–14 — Prove vere
+### Giorni 13–17 — Aggiunte dopo le prove (2026-09-28)
+
+1. Correzioni della prima prova: azioni dichiarate e non fatte, storpiature, schede e indietro.
+2. Scorrimento a blocchi; musica e volume; browser e video.
+3. Dettatura: campi numerati, `scrivi_nel_numero`, `type_text` solo in un campo, Invio confermato.
+4. Prova vera della dettatura in un Chrome di prova; banchi del modello rifatti insieme.
+
+### Giorni 18–19 — Prove vere
 
 1. Facebook, YouTube, un quotidiano online, Esplora risorse, VS Code: "mostra i numeri", "clicca il
    N", "scorri giù", "nascondi". Si misurano il tempo per mostrare i numeri, il tempo del clic e
@@ -328,7 +359,7 @@ parole in un file di configurazione: niente somiglianze, niente interpretazione.
 3. Il giro di injection di M5 ripetuto con una pagina costruita apposta: etichette ostili, pulsanti
    invisibili, testo bianco su bianco. 0 azioni non volute.
 
-### Giorno 15 — Chiusura
+### Giorno 20 — Chiusura
 
 Specifica §9 (strumenti nuovi) e §8 (clic sensibili) aggiornate, `docs/INSTALL.md` (come si usa, e
 cosa serve a Chrome secondo D-NAV 1), bundle rigenerato e riprovato, tag.
@@ -362,7 +393,7 @@ cosa serve a Chrome secondo D-NAV 1), bundle rigenerato e riprovato, tag.
 | Cosa | Perché |
 | :-- | :-- |
 | Il modello che "guarda" lo schermo (visione) | Gli 8 GB di VRAM sono già pieni, e un modello che ha visto la pagina deciderebbe il clic: è l'injection che la regola di M5 esclude |
-| Compilare moduli, scrivere nei campi delle pagine | `type_text` esiste già; scrivere per conto dell'utente dentro un sito è una capacità nuova, da pensare a parte |
+| Compilare moduli interi, login | ~~Scrivere nei campi~~: entrato il 2026-09-28 come **dettatura** (D-NAV 10–12), un campo alla volta, con il fuoco verificato e ogni Invio confermato. Restano fuori i moduli compilati dal modello e ogni accesso |
 | Acquisti, pagamenti, login | Mai: nessun clic su un pulsante di pagamento, sensibile o no |
 | Navigazione autonoma a più passi ("trovami il volo più economico") | È un agente che legge le pagine e decide: la stessa ragione della visione |
 | Riprodurre musica senza YouTube (Spotify, file locali) | Un'altra integrazione; il file system personale resta fuori ambito (specifica §1.2) |

@@ -398,9 +398,11 @@ def test_mostra_e_nascondi_sono_percorsi_rapidi(frase, tool):
 
 
 def test_scorri_giu_e_un_percorso_rapido():
+    """Da 2026-09-28 "scorri giu'" e' un blocco (Pag giu'): vedi
+    `test_dopo_le_prove.py`. La rotellina resta per "un po'"."""
     r = Router(REG, comandi=[], usa_llm=False)
-    assert r.decidi("scorri giù").calls == ({"tool": "scroll", "verso": "giu"},)
-    assert r.decidi("scorri in alto").calls == ({"tool": "scroll", "verso": "su"},)
+    assert r.decidi("scorri giù").calls == ({"tool": "press_hotkey", "keys": ["pagedown"]},)
+    assert r.decidi("scorri un po' in alto").calls == ({"tool": "scroll", "verso": "su"},)
 
 
 def test_dal_modello_passa_solo_un_numero_detto():
@@ -626,3 +628,144 @@ def test_kill_switch_premuto_durante_la_bolla_ferma_il_clic(desk, broker, monkey
         KILL_SWITCH.ripristina()
         monkeypatch.setattr(sendinput, "avvicina", originale)
     assert r.denied and desk.clic == [] and _eventi(desk, "spegni")
+
+
+# --- la dettatura (D-NAV 10-12) ---------------------------------------------------------
+
+CAMPO = Elemento("Cerca", "casella_di_testo", (400, 10, 700, 30))
+
+
+@pytest.fixture
+def dettatura(desk, monkeypatch):
+    desk.pagina.append(CAMPO)
+    desk.fuoco = cliccabili.Fuoco(50004, "Cerca", CAMPO.rect, True, "")
+    desk.scritti = []
+    desk.tasti = []
+    monkeypatch.setattr(cliccabili, "fuoco", lambda: desk.fuoco)
+    monkeypatch.setattr(sendinput, "scrivi", lambda t: desk.scritti.append(t) or len(t))
+    monkeypatch.setattr(sendinput, "combinazione", desk.tasti.append)
+    monkeypatch.setattr(numeri, "ATTESA_FUOCO_S", 0)
+    return desk
+
+
+def _scrivi(broker, n, testo, conferma=True, chiesti=None):
+    return broker.execute({"tool": "scrivi_nel_numero", "numero": n, "testo": testo},
+                          _ctx(conferma, chiesti))
+
+
+def test_scrive_nel_campo_numerato(dettatura, broker):
+    _mostra(broker)
+    r = _scrivi(broker, 6, "ricette di pasta")
+    assert r.ok and dettatura.clic == [(550, 20)] and dettatura.scritti == ["ricette di pasta"]
+    assert descrivi_sequenza([r]) == "Scritto nel 6."
+    assert "IGNORA" not in descrivi_sequenza([r])
+
+
+def test_un_numero_che_non_e_un_campo_non_si_clicca_nemmeno(dettatura, broker):
+    _mostra(broker)
+    r = _scrivi(broker, 1, "ciao")
+    assert r.denied and "non e' un campo" in r.detail
+    assert dettatura.clic == [] and dettatura.scritti == []
+
+
+def test_se_dopo_il_clic_il_fuoco_non_e_in_un_campo_non_si_scrive(dettatura, broker):
+    """La pagina ha risposto al clic in un altro modo: il fuoco e' sul
+    documento. Scrivere li' vorrebbe dire premere scorciatoie ("f", "k")."""
+    _mostra(broker)
+    dettatura.fuoco = cliccabili.Fuoco(50030, "Pagina", (0, 0, 1000, 800), False, "")
+    r = _scrivi(broker, 6, "ricette")
+    assert r.denied and "non scrivo niente" in r.detail and dettatura.scritti == []
+
+
+def test_se_il_fuoco_e_in_un_altro_campo_non_si_scrive(dettatura, broker):
+    _mostra(broker)
+    dettatura.fuoco = cliccabili.Fuoco(50004, "Altro", (10, 700, 200, 720), True, "")
+    r = _scrivi(broker, 6, "ricette")
+    assert r.denied and dettatura.scritti == []
+
+
+def test_un_campo_con_un_nome_sensibile_chiede_conferma(dettatura, broker):
+    dettatura.pagina[-1] = Elemento("Scrivi un commento e pubblica", "casella_di_testo",
+                                    CAMPO.rect)
+    _mostra(broker)
+    chiesti = []
+    r = _scrivi(broker, 6, "bel video", conferma=False, chiesti=chiesti)
+    assert r.denied and r.stage == "conferma" and chiesti
+    assert chiesti[0]["testo"] == "bel video" and dettatura.scritti == []
+
+
+def test_invio_in_un_campo_chiede_sempre_conferma(dettatura, broker):
+    """D-NAV 11: anche se il campo si chiama "Cerca". Il nome lo scrive la
+    pagina, e un nome della pagina aggiunge conferme, non le toglie."""
+    dettatura.fuoco = cliccabili.Fuoco(50004, "Cerca", CAMPO.rect, True, "ricette di pasta")
+    chiesti = []
+    r = broker.execute({"tool": "press_hotkey", "keys": ["enter"]}, _ctx(False, chiesti))
+    assert r.denied and r.stage == "conferma" and dettatura.tasti == []
+    r = broker.execute({"tool": "press_hotkey", "keys": ["enter"]}, _ctx(True))
+    assert r.ok and r.confirmed is True and dettatura.tasti == [["enter"]]
+
+
+def test_la_conferma_dell_invio_mostra_il_campo_e_il_testo(dettatura):
+    from metis.tools.registry import presentazione
+
+    dettatura.fuoco = cliccabili.Fuoco(50004, "Cerca", CAMPO.rect, True, "ricette di pasta")
+    spec = REG.get("press_hotkey")
+    voci = presentazione(spec, spec.schema(tool="press_hotkey", keys=["enter"]))
+    assert voci["campo"] == "Cerca" and voci["testo che parte"] == "ricette di pasta"
+
+
+def test_invio_fuori_da_un_campo_non_chiede(dettatura, broker):
+    dettatura.fuoco = cliccabili.Fuoco(50030, "Pagina", (0, 0, 1000, 800), False, "")
+    chiesti = []
+    r = broker.execute({"tool": "press_hotkey", "keys": ["enter"]}, _ctx(True, chiesti))
+    assert r.ok and chiesti == []
+
+
+def test_se_non_si_sa_dove_sia_il_fuoco_l_invio_chiede(dettatura, broker, monkeypatch):
+    from metis.tools.registry import Rifiuto
+
+    def muto():
+        raise Rifiuto("la finestra non risponde")
+    monkeypatch.setattr(cliccabili, "fuoco", muto)
+    r = broker.execute({"tool": "press_hotkey", "keys": ["enter"]}, _ctx(False))
+    assert r.denied and r.stage == "conferma"
+
+
+def test_gli_altri_tasti_non_chiedono(dettatura, broker):
+    chiesti = []
+    assert broker.execute({"tool": "press_hotkey", "keys": ["alt", "left"]},
+                          _ctx(True, chiesti)).ok
+    assert chiesti == []
+
+
+def test_digita_solo_in_un_campo(dettatura, broker):
+    r = broker.execute({"tool": "type_text", "text": "ciao"}, _ctx())
+    assert r.ok and dettatura.scritti == ["ciao"]
+    dettatura.fuoco = cliccabili.Fuoco(50030, "Pagina", (0, 0, 1000, 800), False, "")
+    r = broker.execute({"tool": "type_text", "text": "fk"}, _ctx())
+    assert r.denied and dettatura.scritti == ["ciao"]
+
+
+def test_dal_modello_il_testo_deve_essere_stato_detto():
+    from metis.llm.toolcall import chiesta
+
+    a = {"tool": "scrivi_nel_numero", "numero": 6, "testo": "ricette di pasta"}
+    assert chiesta(a, "Scrivi nel 6 ricette di pasta.")
+    assert not chiesta({**a, "testo": "compra subito"}, "scrivi nel 6 ricette di pasta")
+    assert not chiesta({**a, "numero": 7}, "scrivi nel 6 ricette di pasta")
+
+
+@pytest.mark.parametrize("detto,atteso", [
+    ("Scrivi nel 12: ricette di pasta.", (12, "ricette di pasta")),
+    ("scrivi nel campo 3 Buongiorno, come sta?", (3, "Buongiorno, come sta?")),
+    ("Metis, scrivi nel ventotto Roma Termini", (28, "Roma Termini")),
+    ("scrivi sul 5 perché no", (5, "perché no")),
+])
+def test_la_frase_di_dettatura_tiene_il_testo_com_e(detto, atteso):
+    (c,) = Router(REG, comandi=[], usa_llm=False).decidi(detto).calls
+    assert (c["numero"], c["testo"]) == atteso
+
+
+def test_scrivimi_una_poesia_resta_conversazione():
+    d = Router(REG, comandi=[], usa_llm=False).decidi("scrivimi una poesia")
+    assert d.calls == () and d.chiarimento is None

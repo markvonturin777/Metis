@@ -14,6 +14,12 @@ tanto esce scritto.
 
 Il testo arriva gia' normalizzato (minuscole, senza accenti, senza
 punteggiatura): "ventitré" e' "ventitre", "l'11" e' "l 11".
+
+LE STORPIATURE MISURATE (prove dell'utente, 2026-09-26)
+"su ottantuna" e "clicca su ottanto uno": il femminile ("ottantuna") e la
+decina con la vocale sbagliata ("ottanto"). Entrambi si leggono. La decina
+storpiata vale anche da sola ("il settanto" = 70): non c'e' altro che possa
+voler dire.
 """
 
 from __future__ import annotations
@@ -27,15 +33,22 @@ _DIECI = {"dieci": 10, "undici": 11, "dodici": 12, "tredici": 13,
           "diciotto": 18, "diciannove": 19}
 _DECINE = {"venti": 20, "trenta": 30, "quaranta": 40, "cinquanta": 50,
            "sessanta": 60, "settanta": 70, "ottanta": 80, "novanta": 90}
+# Le decine come le scrive Whisper quando sbaglia la vocale finale, e tronche
+# ("ottant uno" da "ottant'uno"). Solo da quaranta in su: "vento" e "trento"
+# sono parole.
+_DECINE_STORPIATE = {d[:-1] + "o": v for d, v in _DECINE.items() if v >= 40}
+_DECINE_TRONCHE = {d[:-1]: v for d, v in _DECINE.items()}
+_UNITA_COMPOSTE = {**_UNITA, "una": 1, "un": 1}
 
 
 def _parole() -> dict[str, int]:
-    p = {**_UNITA, **_DIECI, **_DECINE, "un": 1, "una": 1}
+    p = {**_UNITA, **_DIECI, **_DECINE, **_DECINE_STORPIATE, "un": 1, "una": 1}
     for d, vd in _DECINE.items():
         for u, vu in _UNITA.items():
             p[d + u] = vd + vu                     # ventiuno, ventiotto
             if u in ("uno", "otto"):
                 p[d[:-1] + u] = vd + vu            # ventuno, ventotto: l'elisione
+        p[d[:-1] + "una"] = vd + 1                 # ventuna, ottantuna: il femminile
     return p
 
 
@@ -46,15 +59,18 @@ def numero(testo: str) -> int | None:
     """Un numero solo, in cifre o in parole (anche "venti otto", "venti e
     otto"). None se non e' un numero da 1 a 99."""
     t = testo.strip().split()
+    if not t:
+        return None
     if len(t) == 1:
         w = t[0]
         if w.isdigit():
             n = int(w)
             return n if 1 <= n <= MASSIMO else None
         return PAROLE.get(w)
-    if len(t) in (2, 3) and t[0] in _DECINE and t[-1] in _UNITA and (
+    decina = _DECINE.get(t[0]) or _DECINE_STORPIATE.get(t[0]) or _DECINE_TRONCHE.get(t[0])
+    if len(t) in (2, 3) and decina and t[-1] in _UNITA_COMPOSTE and (
             len(t) == 2 or t[1] == "e"):
-        return _DECINE[t[0]] + _UNITA[t[-1]]
+        return decina + _UNITA_COMPOSTE[t[-1]]
     return None
 
 
@@ -73,7 +89,8 @@ def numeri_in(testo: str) -> set[int]:
         n = numero(w)
         if n is not None:
             fuori.add(n)
-        if w in _DECINE and i + 1 < len(parole):
+        if (w in _DECINE or w in _DECINE_STORPIATE or w in _DECINE_TRONCHE) \
+                and i + 1 < len(parole):
             coppia = numero(" ".join(parole[i:i + 2]))
             terna = numero(" ".join(parole[i:i + 3])) if i + 2 < len(parole) else None
             fuori.update(x for x in (coppia, terna) if x is not None)

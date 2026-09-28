@@ -40,6 +40,7 @@ per parole intere: "apri vs code" non sta dentro "riapri vs codex".
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from metis.core import frasi_chiuse
@@ -70,6 +71,12 @@ def _contiene(detto: tuple[str, ...], frase: tuple[str, ...]) -> bool:
     return False
 
 
+def _numeri_a_schermo() -> bool:
+    from metis.tools import numeri
+
+    return numeri.attuale() is not None
+
+
 @dataclass(frozen=True)
 class _Voce:
     """Una frase configurata, pronta per il confronto."""
@@ -84,9 +91,13 @@ class Router:
 
     def __init__(self, registry: Registry, libreria: Libreria | None = None,
                  tool_router: ToolRouter | None = None, usa_llm: bool = True,
-                 comandi: list[Comando] | None = None):
+                 comandi: list[Comando] | None = None,
+                 numeri_a_schermo: Callable[[], bool] | None = None):
         self.registry = registry
         self.tool_router = tool_router
+        # PHASE2: "sul 60" senza verbo e' un clic solo con i numeri a schermo.
+        # Iniettabile per i test; di norma lo chiede agli strumenti.
+        self._numeri_a_schermo = numeri_a_schermo or _numeri_a_schermo
         self.usa_llm = usa_llm
         self.fast_hit = 0
         self.llm_hit = 0
@@ -169,17 +180,26 @@ class Router:
 
         # PHASE2 — le frasi chiuse con un parametro, dopo i comandi
         # dell'utente: una frase che l'utente si e' configurato vince.
-        chiamate = frasi_chiuse.riconosci(normalizza(testo))
+        detto = normalizza(testo)
+        # La dettatura prima delle altre, e sulla frase originale: vedi
+        # `frasi_chiuse.dettatura`.
+        chiamate = frasi_chiuse.dettatura(testo) or frasi_chiuse.riconosci(
+            detto, self._numeri_a_schermo())
         if chiamate is not None:
             self.fast_hit += 1
             return Decisione(chiamate, "fast_path", (time.perf_counter() - t0) * 1000)
 
         if not self.usa_llm or self.tool_router is None:
-            return Decisione((), "chat", (time.perf_counter() - t0) * 1000)
-
-        d = self.tool_router.decidi(testo, storia, slot)
+            d = Decisione((), "chat", (time.perf_counter() - t0) * 1000)
+        else:
+            d = self.tool_router.decidi(testo, storia, slot)
         if d.e_strumento:
             self.llm_hit += 1
+        elif d.chiarimento is None:
+            # PHASE2, dopo le prove: una frase che sembra un comando e che
+            # nessuno ha capito non va alla conversazione, che risponderebbe
+            # "Cliccato" senza aver cliccato. Si chiede.
+            d.chiarimento = frasi_chiuse.chiarimento(detto)
         return d
 
     def stats(self) -> dict:

@@ -123,6 +123,22 @@ CASI = [
     ("metti i numeri sulla pagina", ["mostra_numeri"], None),
     ("togli quei numeri", ["nascondi_numeri"], None),
     ("metti un po di musica jazz", ["riproduci_youtube"], None),
+
+    # PHASE2, dopo le prove (2026-09-28): musica, volume, video, dettatura.
+    # Questi strumenti NON si offrono al modello (`al_modello=False`): le
+    # frasi comuni le prende il percorso rapido; le altre vanno in
+    # conversazione, dove la persona chiede di ripetere invece di agire.
+    ("abbassa un pochino l audio", ["cambia_volume"], lambda c: c[0]["verso"] == "giu"),
+    # Il modello sceglie il muto per "meno suono": il controllo sul verbo lo
+    # toglie e Metis chiede. Nessuna azione e' l'esito giusto, non l'ideale.
+    ("la musica e troppo forte", None, None),
+    ("metti il volume al venti per cento", ["set_volume"], lambda c: c[0]["livello"] == 20),
+    ("salta questa canzone", ["tasto_multimediale"], lambda c: c[0]["tasto"] == "successivo"),
+    ("fermati un attimo con la musica", None, None),
+    ("che volume ho adesso", ["leggi_volume"], None),
+    ("questa canzone mi piace molto", None, None),
+    ("scrivi nel 5 ricette di pasta", ["scrivi_nel_numero"],
+     lambda c: c[0]["numero"] == 5 and "pasta" in c[0]["testo"]),
 ]
 
 

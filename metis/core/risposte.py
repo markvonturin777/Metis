@@ -37,6 +37,20 @@ _APP = {"vscode": "Visual Studio Code", "github_desktop": "GitHub Desktop",
 # dettaglio e' un messaggio tecnico (JSON, Pydantic, nome sconosciuto).
 _STADI_TECNICI = frozenset({"json", "registro", "schema"})
 
+# PHASE2: le combinazioni del percorso rapido, dette come azioni.
+# "Premuto alt+left" e' un dettaglio tecnico pronunciato.
+_TASTI_IN_PAROLE = {"alt+left": "Indietro.", "alt+right": "Avanti.",
+                    "ctrl+w": "Scheda chiusa.", "ctrl+shift+t": "Scheda riaperta.",
+                    "ctrl+t": "Nuova scheda.",
+                    # Lo scorrimento a blocchi: una parola, si sente a ogni blocco.
+                    "pagedown": "Giù.", "pageup": "Su.",
+                    "home": "In cima.", "end": "In fondo.",
+                    "f5": "Ricarico.", "ctrl+tab": "Scheda successiva.",
+                    "ctrl+shift+tab": "Scheda precedente.", "ctrl+plus": "Più grande.",
+                    "ctrl+minus": "Più piccolo.", "ctrl+0": "Zoom normale.",
+                    "enter": "Inviato."}
+_TASTI_IN_PAROLE.update({f"ctrl+{n}": "Fatto." for n in "123456789"})
+
 _DOVE = {0: "sul primo schermo", 1: "sul secondo schermo",
          2: "sul terzo schermo", 3: "sul quarto schermo"}
 
@@ -137,13 +151,37 @@ def descrivi(result: Result) -> str:
         return f"Scritto in {v.get('processo', 'quella finestra')}."
 
     if result.tool == "press_hotkey":
-        return f"Premuto {v.get('tasti', '')}."
+        return _TASTI_IN_PAROLE.get(v.get("tasti", ""), f"Premuto {v.get('tasti', '')}.")
 
     if result.tool == "click_element":
         return f"Cliccato {(v.get('elemento') or '')[:60]}."
 
     if result.tool == "scroll":
         return "Scorro."
+
+    # -- PHASE2, dopo le prove: musica, volume, video -------------------------
+    #
+    # Play/pausa e' un tasto solo che inverte lo stato, e nessuno dice a Metis
+    # in che stato fosse: "Fatto.", non "In pausa.".
+
+    if result.tool == "tasto_multimediale":
+        return {"successivo": "Successivo.", "precedente": "Precedente.",
+                "stop": "Fermato."}.get(v.get("tasto"), "Fatto.")
+
+    if result.tool == "leggi_volume":
+        if v.get("muto"):
+            return f"L'audio è disattivato; il volume è al {v.get('livello', '')}."
+        return f"Il volume è al {v.get('livello', '')}."
+
+    if result.tool in ("set_volume", "cambia_volume"):
+        return f"Volume al {v.get('livello', '')}."
+
+    if result.tool == "imposta_muto":
+        return "Audio disattivato." if v.get("muto") else "Audio riattivato."
+
+    if result.tool == "comando_video":
+        return {"avanti": "Avanti.", "avanti_poco": "Avanti.", "indietro": "Indietro.",
+                "indietro_poco": "Indietro."}.get(v.get("comando"), "Fatto.")
 
     # -- PHASE2: i numeri ---------------------------------------------------
     #
@@ -156,6 +194,9 @@ def descrivi(result: Result) -> str:
 
     if result.tool == "clicca_numero":
         return f"Cliccato il {v.get('numero', '')}."
+
+    if result.tool == "scrivi_nel_numero":
+        return f"Scritto nel {v.get('numero', '')}."
 
     if result.tool == "nascondi_numeri":
         return "Numeri tolti." if v.get("nascosti") else "Non c'erano numeri."
@@ -286,6 +327,21 @@ def domanda_conferma(call: dict) -> str:
         return f"Email a {call.get('to', '')}, in partenza {data()}. Confermo?"
     if tool == "send_email":
         return f"Email a {call.get('to', '')}. Confermo l'invio?"
+    if tool == "press_hotkey" and "enter" in call.get("keys", []):
+        # D-NAV 11. Il nome del campo si dice qui, alla voce, e non in memoria.
+        from metis.tools import cliccabili
+
+        try:
+            f = cliccabili.fuoco()
+        except Exception:                          # noqa: BLE001
+            f = None
+        campo = (f.nome if f is not None else "")[:50]
+        return f"Premo Invio nel campo {campo}. Confermo?" if campo else "Premo Invio. Confermo?"
+    if tool == "scrivi_nel_numero":
+        from metis.tools import numeri
+
+        nome = (numeri.nome_di(call.get("numero", 0)) or "")[:50]
+        return f"Scrivo nel {call.get('numero')}, {nome}. Confermo?"
     if tool == "clicca_numero":
         # Il nome si pronuncia QUI, e solo qui: e' cio' a cui si sta dicendo
         # di si'. Questa frase va alla voce e non entra in memoria (vedi

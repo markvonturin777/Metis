@@ -569,6 +569,15 @@ class Orchestrator:
                 return self._percorso_web(m, decisione, query, slot, tok)
             if getattr(decisione, "e_strumento", False):
                 return self._esegui_strumento(m, decisione, tok)
+            # PHASE2: la frase chiedeva un'azione che non si e' potuta
+            # decidere. Una domanda fissa, non la conversazione: il modello
+            # di conversazione, in quel caso, risponde "Cliccato" senza aver
+            # cliccato (prova dell'utente del 2026-09-26).
+            chiarimento = getattr(decisione, "chiarimento", None)
+            if isinstance(chiarimento, str) and chiarimento:
+                self.sm.fire(Event.INTENT_CHAT)
+                m.extra["chiarimento"] = True
+                return self._chiudi_parlando(m, chiarimento)
 
         self.sm.fire(Event.INTENT_CHAT)
 

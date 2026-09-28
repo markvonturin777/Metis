@@ -37,6 +37,7 @@ from __future__ import annotations
 import queue
 import threading
 import time
+from dataclasses import dataclass
 
 from metis.tools.registry import Rifiuto
 from metis.tools.uia import Elemento
@@ -52,6 +53,10 @@ TIPI = {
     50002: "casella_di_spunta",  # CheckBox
     50013: "casella_di_spunta",  # RadioButton
     50011: "voce_di_menu",       # MenuItem
+    # D-NAV 12 (PHASE2, dopo le prove): anche le caselle di testo, per la
+    # dettatura. Il Document della pagina no: e' la pagina intera.
+    50004: "casella_di_testo",   # Edit
+    50003: "casella_di_testo",   # ComboBox (la ricerca di molti siti)
 }
 # Per `click_element`, che nomina un tipo (`TipoElemento`): anche le caselle
 # di testo e le voci di elenco, che non prendono numeri ma si cliccano per nome.
@@ -255,6 +260,51 @@ class Lettore:
 
 
 LETTORE = Lettore()
+
+
+# --- dove sta il fuoco (PHASE2, dopo le prove) --------------------------------------
+#
+# Serve a due cose che devono sapere se i tasti finirebbero SCRITTI: i comandi
+# del video (una "f" nella casella di ricerca non mette lo schermo intero, la
+# scrive) e la dettatura (che deve scrivere SOLO in un campo). Misurato su
+# Chrome vero, 2026-09-28: pagina senza campo attivo = Document di sola
+# lettura; input, textarea, contenteditable = Edit scrivibile; pulsanti e link
+# no; una select = ComboBox scrivibile, e la si tratta da campo per prudenza.
+
+_EDIT, _DOCUMENTO, _COMBO = 50004, 50030, 50003
+_P_VALORE_DISPONIBILE, _P_SOLA_LETTURA, _P_VALORE = 30043, 30046, 30045
+
+
+@dataclass(frozen=True)
+class Fuoco:
+    tipo: int
+    nome: str                   # della pagina: per il broker e il dialogo, mai per il modello
+    rect: tuple[int, int, int, int]
+    scrivibile: bool
+    valore: str = ""            # il testo nel campo: solo per chi conferma un Invio
+
+
+def _fuoco(uia: _UIA) -> Fuoco | None:
+    el = uia.uia.GetFocusedElement()
+    if el is None:
+        return None
+    tipo = el.CurrentControlType
+    r = el.CurrentBoundingRectangle
+    valore = bool(el.GetCurrentPropertyValue(_P_VALORE_DISPONIBILE))
+    sola_lettura = bool(el.GetCurrentPropertyValue(_P_SOLA_LETTURA))
+    scrivibile = tipo in (_EDIT, _DOCUMENTO, _COMBO) and valore and not sola_lettura
+    try:
+        testo = str(el.GetCurrentPropertyValue(_P_VALORE) or "")[:500] if valore else ""
+    except Exception:                              # noqa: BLE001
+        testo = ""
+    return Fuoco(tipo, (el.CurrentName or "").strip()[:200],
+                 (r.left, r.top, r.right, r.bottom), scrivibile, testo)
+
+
+def fuoco() -> Fuoco | None:
+    """L'elemento con il fuoco della tastiera, o None. Solleva `Rifiuto` se UIA
+    non risponde: chi chiede deve trattare il dubbio come "non si sa"."""
+    return LETTORE.esegui(_fuoco)
 
 
 def cornice_visibile(rect) -> tuple[int, int, int, int]:

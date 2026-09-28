@@ -45,7 +45,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from metis.llm.schemas import CliccaNumero, MostraNumeri, NascondiNumeri
+from metis.llm.schemas import CliccaNumero, MostraNumeri, NascondiNumeri, ScriviNelNumero
 from metis.security.audit import Tier
 from metis.security.guards import (
     DENY_CLASSI,
@@ -310,7 +310,8 @@ def serve_conferma(call) -> bool:
 
 
 def presenta(call) -> dict[str, str]:
-    """Cosa vede chi conferma: il numero e il nome letto, per intero."""
+    """Cosa vede chi conferma: il numero e il nome letto, per intero (e il
+    testo, se si sta per scrivere)."""
     n = getattr(call, "numero", 0)
     num = attuale()
     finestra = ""
@@ -319,8 +320,11 @@ def presenta(call) -> dict[str, str]:
 
         i = finestre.info(num.hwnd)
         finestra = i.titolo if i else ""
-    return {"numero": str(n), "elemento": nome_di(n) or "(non piu' a schermo)",
+    voci = {"numero": str(n), "elemento": nome_di(n) or "(non piu' a schermo)",
             "finestra": finestra}
+    if getattr(call, "testo", None):
+        voci["testo"] = call.testo
+    return voci
 
 
 # --- gli strumenti --------------------------------------------------------------------
@@ -376,6 +380,20 @@ def _stesso(a: Elemento, b: Elemento) -> bool:
                     conferma=serve_conferma, presenta=presenta)
 def _clicca_numero(call: CliccaNumero) -> dict:
     """Clicca l'elemento con quel numero, fra quelli mostrati."""
+    e, (x, y) = _clic_verificato(call)
+    invalida()                   # la pagina cambia: i numeri non valgono piu'
+    return {"numero": call.numero, "tipo": e.tipo, "punto": [x, y],
+            # Il nome va nell'audit (NFR-9 esteso) e nell'Hub. Non nella frase,
+            # non negli slot: vedi la nota in testa.
+            "audit": f"{call.numero}: {e.nome[:120]}",
+            "per_hub": f"Clic sul {call.numero}: {e.nome[:80]}" if e.nome
+                       else f"Clic sul {call.numero}"}
+
+
+def _clic_verificato(call) -> tuple[Elemento, tuple[int, int]]:
+    """Il clic sull'elemento `call.numero`, con tutte le verifiche: finestra
+    davanti, bolla, rilettura, guardie all'ultimo istante. Lo usano il clic e
+    la dettatura. Ritorna l'elemento numerato e il punto cliccato."""
     import win32gui
 
     from metis.tools import cliccabili, finestre, sendinput
@@ -431,13 +449,47 @@ def _clicca_numero(call: CliccaNumero) -> dict:
 
     sendinput.clic(x, y, avvicinato=comparsa is not None)
     segnala_clic()               # l'onda, dal punto del clic
-    invalida()                   # la pagina cambia: i numeri non valgono piu'
-    return {"numero": call.numero, "tipo": e.tipo, "punto": [x, y],
-            # Il nome va nell'audit (NFR-9 esteso) e nell'Hub. Non nella frase,
-            # non negli slot: vedi la nota in testa.
-            "audit": f"{call.numero}: {e.nome[:120]}",
-            "per_hub": f"Clic sul {call.numero}: {e.nome[:80]}" if e.nome
-                       else f"Clic sul {call.numero}"}
+    return e, (x, y)
+
+
+# --- la dettatura (PHASE2, dopo le prove, D-NAV 10-12) ---------------------------------
+#
+# "Scrivi nel 12: ricette di pasta". Il clic e' quello verificato di sopra, con
+# la conferma se il nome del campo e' sensibile; poi, PRIMA di scrivere, si
+# guarda dove e' finito il fuoco. Se non e' un campo di testo — la pagina ha
+# risposto al clic in un altro modo, o il campo era un pulsante travestito —
+# non si scrive niente: sulla pagina di YouTube una "f" mette lo schermo
+# intero, una "k" mette in pausa. Invio non si preme: e' un comando a parte, e
+# chiede conferma (D-NAV 11).
+
+ATTESA_FUOCO_S = 0.15          # il campo prende il fuoco un attimo dopo il clic
+
+
+@REGISTRY.strumento(Tier.T2, ScriviNelNumero,
+                    guards=(guardia_finestra(), GUARDIA_NUMERATA, GUARDIA_VIETATE),
+                    conferma=serve_conferma, presenta=presenta, al_modello=False)
+def _scrivi_nel_numero(call: ScriviNelNumero) -> dict:
+    """Scrive il testo dettato nel campo di testo con quel numero."""
+    from metis.tools import cliccabili, sendinput
+
+    num = attuale()
+    if num is None:
+        raise Rifiuto("non ci sono numeri a schermo: dica 'mostra i numeri'")
+    e = num.elemento(call.numero)
+    if e.tipo != "casella_di_testo":
+        # Prima del clic: un link cliccato "per scriverci" porterebbe altrove.
+        raise Rifiuto(f"il {call.numero} non e' un campo di testo: non scrivo niente")
+    e, _ = _clic_verificato(call)
+    invalida()
+    time.sleep(ATTESA_FUOCO_S)
+    f = cliccabili.fuoco()
+    if f is None or not f.scrivibile or cliccabili.interseca(f.rect, e.rect) is None:
+        raise Rifiuto(f"ho cliccato il {call.numero} ma il cursore non e' in un campo di "
+                      "testo: non scrivo niente")
+    scritti = sendinput.scrivi(call.testo)
+    return {"numero": call.numero, "caratteri": scritti,
+            "audit": f"{call.numero}: {e.nome[:100]} <- {scritti} caratteri",
+            "per_hub": f"Scritto nel {call.numero}" + (f": {e.nome[:60]}" if e.nome else "")}
 
 
 # --- NFR-9 esteso ---------------------------------------------------------------------
