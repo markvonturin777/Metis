@@ -89,6 +89,7 @@ from metis.gui.widgets.conferma import DialogoConferma  # noqa: E402
 from metis.gui.widgets.conversazione import Conversazione  # noqa: E402
 from metis.gui.widgets.telemetria import Telemetria as CruscottoTelemetria  # noqa: E402
 from metis.gui.workers.nucleo import Nucleo  # noqa: E402
+from metis.gui.workers.frasi import LettoreFrasi  # noqa: E402
 from metis.gui.workers.meteo import Meteo as WorkerMeteo  # noqa: E402
 from metis.gui.workers.telemetria import Telemetria as WorkerTelemetria  # noqa: E402
 
@@ -98,6 +99,8 @@ class Segnali(QObject):
 
     kill_cambiato = Signal(bool)
     pausa_cambiata = Signal(bool)
+    # PHASE4: la richiesta al lettore delle frasi, che vive su un altro thread.
+    rileggi_frasi = Signal()
 
 
 class Applicazione(QObject):
@@ -183,6 +186,14 @@ class Applicazione(QObject):
         self.worker_meteo.moveToThread(self.thread_meteo)
         self.thread_meteo.started.connect(self.worker_meteo.avvia)
 
+        # --- PHASE4: thread delle frasi non capite ------------------------
+        # Rilegge `turns.jsonl` quando glielo si chiede: all'avvio, a fine
+        # turno, dopo una decisione nel pannello. Mai sul thread della GUI.
+        self.worker_frasi = LettoreFrasi(config=config)
+        self.thread_frasi = QThread()
+        self.thread_frasi.setObjectName("metis-frasi")
+        self.worker_frasi.moveToThread(self.thread_frasi)
+
         self.lag = MisuratoreLag()
         self.segnali = Segnali()
 
@@ -228,6 +239,7 @@ class Applicazione(QObject):
         self.worker_telemetria.dati.connect(self._risorse)
         self.worker_telemetria.errore.connect(self._errore)
         self.worker_meteo.dati.connect(self.hub.imposta_meteo)
+        self.worker_frasi.pronta.connect(self._frasi)
 
         self.ponte.richiesta.connect(self._mostra_conferma)
         self.ponte.chiusa.connect(self._chiudi_conferma)
@@ -245,12 +257,15 @@ class Applicazione(QObject):
         self.hub.chiede_pulisci.connect(self._pulisci)
         self.hub.chiede_muto.connect(self._muto)
         self.hub.chiede_impostazioni.connect(self._impostazioni)
+        self.hub.sessione.chiede_frasi.connect(self.mostra_fullscreen)
+        self.fullscreen.frasi.deciso.connect(self._chiedi_frasi)
 
         for vista in (self.minimal, self.hub, self.fullscreen):
             self.segnali.kill_cambiato.connect(vista.imposta_kill)
         self.segnali.pausa_cambiata.connect(self.hub.imposta_pausa)
         self.segnali.pausa_cambiata.connect(self.minimal.imposta_pausa)
         self.lag.freeze.connect(self._freeze)
+        self.segnali.rileggi_frasi.connect(self.worker_frasi.rileggi)
 
         if self.tray is not None:
             t = self.tray
@@ -306,6 +321,8 @@ class Applicazione(QObject):
             self.conversazione.sistema(f"strumento: {m['strumento']}")
         for riga in m.get("per_hub") or ():
             self.conversazione.sistema(riga)
+        # PHASE4: un turno in piu' nel log, forse una frase non capita.
+        self._chiedi_frasi()
 
     @Slot(float, float)
     def _livello(self, rms: float, picco: float) -> None:
@@ -363,6 +380,20 @@ class Applicazione(QObject):
         if sis is not None and sis.router is not None:
             self.fullscreen.collega_comandi(sis.libreria)
         self.hub.imposta_pronto()
+        self._chiedi_frasi()
+
+    # -- PHASE4: le frasi non capite ---------------------------------------
+
+    @Slot()
+    def _chiedi_frasi(self) -> None:
+        """Il lettore sta su un altro thread: gli si parla con un segnale, e la
+        risposta torna in `_frasi`, in coda sul thread della GUI."""
+        self.segnali.rileggi_frasi.emit()
+
+    @Slot(object)
+    def _frasi(self, raccolta) -> None:
+        self.fullscreen.frasi.aggiorna(raccolta)
+        self.hub.sessione.imposta_frasi(len(raccolta.da_rivedere))
 
     @Slot(dict)
     def _contatori(self, d: dict) -> None:
@@ -567,6 +598,7 @@ class Applicazione(QObject):
         self.thread_nucleo.start()
         self.thread_telemetria.start()
         self.thread_meteo.start()
+        self.thread_frasi.start()
         self.hotkeys.start()
         if self.tray is not None:
             self.tray.mostra()
@@ -615,6 +647,9 @@ class Applicazione(QObject):
         # ogni quarto d'ora.
         self.thread_meteo.quit()
         self.thread_meteo.wait(4500)
+        # Una lettura in corso dura al piu' qualche decimo di secondo.
+        self.thread_frasi.quit()
+        self.thread_frasi.wait(2000)
         self.nucleo.chiudi()
 
 

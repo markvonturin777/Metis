@@ -6,6 +6,7 @@
     python benchmarks/gui_screenshot.py --nucleo           # il nucleo in ogni stato, un foglio
     python benchmarks/gui_screenshot.py --viste            # Minimal, Diagnostica, T3, impostazioni
     python benchmarks/gui_screenshot.py --evidenza         # PHASE2: la bolla, ogni stile
+    python benchmarks/gui_screenshot.py --frasi            # PHASE4: pannello, dialogo, editor
 
 Il criterio estetico dell'Hub lo chiude l'utente guardando queste immagini:
 per un'interfaccia non esiste un test che dica "e' bella". Esiste pero' un
@@ -232,6 +233,75 @@ def catture_viste(app: QApplication, modello, cartella: Path) -> list[Path]:
     return fatte
 
 
+def catture_frasi(app: QApplication, hub: HubView, cartella: Path) -> list[Path]:
+    """PHASE4 — il pannello delle frasi non capite, il dialogo e il contatore
+    dell'Hub, con le frasi vere della prova del 2026-09-26."""
+    import tempfile
+
+    from metis.gui.widgets.comandi import EditorComandi
+    from metis.gui.widgets.frasi import DialogoFrasi, PannelloFrasi
+    from metis.memory import frasi
+    from metis.memory.commands import Libreria
+    from metis.tools.registry import carica_tutti
+
+    ora = datetime.now().timestamp()
+
+    def g(frase, volte, motivo, ore_fa, tolta=None):
+        return frasi.Gruppo(frasi.normalizza(frase), frase, volte, ora - ore_fa * 3600,
+                            motivo, tolta, frasi.parametrica(frase, tolta))
+
+    raccolta = frasi.Raccolta(
+        da_rivedere=[g("Mastra in numeria.", 4, frasi.CHIARIMENTO, 20),
+                     g("clicca su ottanto uno.", 2, frasi.AZIONE_TOLTA, 20, "clicca_numero"),
+                     g("chiudi la prima scheda di chrome", 1, frasi.CONVERSAZIONE, 50),
+                     g("metti su la musica di prima", 1, frasi.CONVERSAZIONE, 3),
+                     g("Torna indietro.", 2, frasi.RIPETUTA, 26)],
+        turni=140, non_capiti=10)
+    # Una libreria di prova, in una cartella temporanea: le catture non
+    # devono mai toccare `config/commands.json`.
+    tmp = Path(tempfile.mkdtemp()) / "commands.json"
+    tmp.write_text('{"comandi": []}', encoding="utf-8")
+    lib = Libreria(carica_tutti(), tmp)
+    lib.aggiungi({"id": "scrivania", "frasi": ["prepara la scrivania"],
+                  "azioni": [{"tool": "get_telemetry"}]})
+
+    fatte = []
+    pannello = PannelloFrasi()
+    pannello.collega(lib)
+    pannello.aggiorna(raccolta)
+    pannello.resize(420, 150)
+    pannello.setStyleSheet(f"background: {tema.SFONDO};")
+    pannello.show()
+    aspetta(app, 0.2)
+    fatte.append(cartella / "frasi_pannello.png")
+    pannello.grab().save(str(fatte[-1]))
+    pannello.hide()
+
+    dlg = DialogoFrasi(raccolta, lib, decise=Path(tempfile.mkdtemp()) / "d.json")
+    dlg.show()
+    for riga, nome in ((0, "frasi_dialogo.png"), (1, "frasi_dialogo_parametrica.png"),
+                       (4, "frasi_dialogo_debole.png")):
+        dlg.elenco.setCurrentRow(riga)
+        aspetta(app, 0.2)
+        fatte.append(cartella / nome)
+        dlg.grab().save(str(fatte[-1]))
+    dlg.hide()
+
+    ed = EditorComandi(lib)
+    ed.nuovo_da_frase("chiudi la prima scheda di chrome", "press_hotkey")
+    ed.show()
+    aspetta(app, 0.2)
+    fatte.append(cartella / "frasi_editor_precompilato.png")
+    ed.grab().save(str(fatte[-1]))
+    ed.hide()
+
+    hub.sessione.imposta_frasi(len(raccolta.da_rivedere))
+    aspetta(app, 0.3)
+    fatte.append(cartella / "frasi_hub_contatore.png")
+    hub.grab().save(str(fatte[-1]))
+    return fatte
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--stati", nargs="*",
@@ -243,6 +313,7 @@ def main() -> int:
     ap.add_argument("--nucleo", action="store_true", help="solo il foglio degli stati del nucleo")
     ap.add_argument("--viste", action="store_true", help="Minimal, Diagnostica, dialogo T3")
     ap.add_argument("--evidenza", action="store_true", help="PHASE2: la bolla, ogni stile")
+    ap.add_argument("--frasi", action="store_true", help="PHASE4: le frasi non capite")
     args = ap.parse_args()
 
     app = QApplication(sys.argv)
@@ -263,6 +334,10 @@ def main() -> int:
     hub.show()
     if args.viste:
         for f in catture_viste(app, hub.modello, args.cartella):
+            print(f)
+        return 0
+    if args.frasi:
+        for f in catture_frasi(app, hub, args.cartella):
             print(f)
         return 0
     if args.nucleo:

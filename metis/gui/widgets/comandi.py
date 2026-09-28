@@ -56,6 +56,17 @@ QListWidget {{
 _MONO = f"font-family: '{tema.FONT_NUMERI}';"
 
 
+def _id_da_frase(frase: str, esistenti: set[str]) -> str:
+    """Un identificativo leggibile dalla frase, mai uguale a uno che c'e' gia'."""
+    from metis.memory.commands import normalizza
+
+    base = "_".join(normalizza(frase).split())[:40].strip("_") or "comando"
+    ident, n = base, 2
+    while ident in esistenti:
+        ident, n = f"{base}_{n}", n + 1
+    return ident
+
+
 def _etichetta(testo: str) -> QLabel:
     lab = QLabel(testo)
     lab.setStyleSheet(f"color: {tema.TESTO_TENUE}; font-size: 11px; letter-spacing: 1px;")
@@ -201,6 +212,25 @@ class EditorComandi(QDialog):
         self.esito.setText("")
         self.bottone_elimina.setEnabled(False)
         self.campo_id.setFocus()
+
+    def nuovo_da_frase(self, frase: str, suggerito: str | None = None) -> None:
+        """PHASE4 — "Crea comando" dal pannello delle frasi non capite.
+
+        Il modulo parte con la frase detta e, se il modello aveva proposto uno
+        strumento poi tolto, con quello strumento **senza argomenti** (D-FRASI
+        6): gli argomenti erano scelte del modello, e un 81 inventato non si
+        suggerisce. Il comando non si salva finche' l'utente non li scrive, e
+        la validazione e' quella di sempre.
+        """
+        self._nuovo()
+        self.campo_id.setText(_id_da_frase(frase, {c.id for c in self.libreria}))
+        self.campo_frasi.setPlainText(frase.strip())
+        if suggerito and self.libreria.registry.get(suggerito) is not None:
+            self.campo_azioni.setPlainText(json.dumps([{"tool": suggerito}]))
+            self.esito.setStyleSheet(f"color: {tema.ATTENZIONE}; font-size: 12px;")
+            self.esito.setText(f"'{suggerito}' e' lo strumento che il modello aveva "
+                               "proposto: gli argomenti sono da scrivere.")
+        self.campo_azioni.setFocus()
 
     # -- modifiche ---------------------------------------------------------
 

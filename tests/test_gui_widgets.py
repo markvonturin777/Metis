@@ -448,7 +448,9 @@ def test_json_malformato_lo_dice_invece_di_esplodere(editor):
 def test_una_azione_sola_senza_parentesi_quadre_viene_accettata(editor):
     """Errore frequente e privo di ambiguita': si accetta e si continua."""
     e, lib, _ = editor
-    _compila(e, "x", "prova", '{"tool": "get_telemetry"}')
+    # PHASE4: due parole. "prova" da sola non passa piu' la guardia delle frasi
+    # nuove (`commands.controlla_frasi`), e questo test parla d'altro.
+    _compila(e, "x", "fai la prova", '{"tool": "get_telemetry"}')
     e._salva()
     assert len(lib) == 1
 

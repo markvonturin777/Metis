@@ -21,3 +21,12 @@
 
 [meteo]
 citta = ""
+
+# PHASE4 — il pannello "frasi non capite" della Diagnostica legge i turni di
+# `data/logs/turns.jsonl` solo da questo istante in poi. Prima la suite dei
+# test ci scriveva turni finti ("risposta finta", fonti su e0.it) che non si
+# possono separare da quelli veri; l'ultimo e' delle 12:05 del 2026-09-28, e
+# la correzione e' del pomeriggio dello stesso giorno. Le due sedute vere di
+# quei giorni restano in `CONVOS/`, usate come casi di prova.
+[frasi]
+dal = "2026-09-28T14:35"

@@ -615,7 +615,7 @@ Il registro è la superficie d'azione completa di Metis. **Ciò che non è elenc
 | :-- | :-- | :-- |
 | `click_element` | `(elemento: str, tipo: TipoElemento) -> None` | Risolto via UIA, **anche nel browser** da PHASE2 (CDP non si apre sul profilo dell'utente da Chrome 136). Ambiguità → numeri sui soli candidati. Mai su un elemento sensibile o vietato: il sensibile riceve il numero 1 e passa da `clicca_numero`. **Coordinate grezze vietate.** |
 | `clicca_numero` | `(numero: 1–99) -> None` | PHASE2. Denylist finestre (sul primo piano e sulla finestra numerata), parole vietate; **conferma** se il nome è sensibile. Al clic l'elemento deve esserci ancora, con lo stesso nome, entro 6 px: altrimenti rifiuto. Dal modello passa solo un numero **detto** nella frase. Prima del clic, per numero e per nome, una **bolla** sul punto del clic per almeno `[evidenza] attesa_ms` (250), sul rettangolo riletto; kill switch e guardia della finestra si rivalutano dopo l'attesa, un istante prima di premere |
-| `type_text` | `(text: str) -> None` | Denylist finestre. Da PHASE2: solo con il fuoco in un campo di testo (UIA), o i caratteri diventano scorciatoie della pagina |
+| `type_text` | `(text: str) -> None` | Denylist finestre. Da PHASE2: solo con il fuoco in un campo di testo (UIA), o i caratteri diventano scorciatoie della pagina. Da PHASE4: dal modello passa solo con un verbo di scrittura (scrivi, digita…) **e** il testo detto nella frase |
 | `scrivi_nel_numero` | `(numero: 1–99, testo: str) -> None` | PHASE2. Clic verificato come `clicca_numero` sul campo numerato, poi il fuoco deve essere in quel campo; il testo dal modello passa solo se è stato detto. Non preme Invio |
 | `comando_video` | `(comando: avanti\|indietro\|avanti_poco\|indietro_poco\|schermo_intero\|sottotitoli)` | PHASE2. Solo con YouTube davanti e il fuoco fuori da un campo (D-NAV 9) |
 | `press_hotkey` | `(keys: list[Key]) -> None` | Denylist finestre + denylist combinazioni. Da PHASE2: **Invio con il fuoco in un campo di testo chiede sempre conferma** (D-NAV 11), con il campo e il testo nel dialogo |
@@ -675,7 +675,7 @@ sia ancora lui.
 
 | Livello | Contenuto | Supporto | Persistenza |
 | :-- | :-- | :-- | :-- |
-| **Comandi custom** | Frase di attivazione → azione | `config/commands.json` | Permanente, editabile da GUI |
+| **Comandi custom** | Frase di attivazione → azione | `config/commands.json` | Permanente, editabile da GUI. Da PHASE4 le frasi nascono anche dall'uso: una frase non capita diventa un comando o una variante dal pannello della Diagnostica, sempre per decisione dell'utente. Le frasi **nuove** passano due guardie (`commands.controlla_frasi`): almeno due parole oltre alle cortesie, e non già riconosciute da un altro comando o dalle frasi fisse |
 | **Conversazionale** | Ultimi N turni + riassunto | In memoria + SQLite | Sessione, con riassunto automatico |
 | **Slot di riferimento** | Stato corrente degli oggetti citabili | In memoria | Sessione |
 
@@ -719,7 +719,7 @@ Il contesto è vincolato a 8k token dalla VRAM (§3.2). Strategia:
 | :-- | :-- | :-- |
 | **Minimal** — overlay sempre in primo piano | Guardare di sfuggita mentre si lavora | Nucleo in miniatura (64 px), stato in parole, livello audio, ultima frase, push-to-talk, kill switch |
 | **Hub** — la vista di tutti i giorni | "Cosa sta facendo Metis, e come sta il sistema?" | Sistema e sessione, meteo, fotocamera (segnaposto, D-UI 1); il nucleo animato; la conversazione a fumetti con input di testo, pulisci ed esporta |
-| **Diagnostica** — la control room di PHASE0 | "Perché Metis ha fatto così?" | Conversazione come registro, dashboard hardware, contesto del prompt, editor dei comandi custom, audit log, metriche di latenza |
+| **Diagnostica** — la control room di PHASE0 | "Perché Metis ha fatto così?" | Conversazione come registro, dashboard hardware, contesto del prompt, editor dei comandi custom, audit log, metriche di latenza; da PHASE4 le **frasi non capite** (sotto) |
 
 Una vista alla volta; i dati sono gli stessi oggetti (la conversazione è un modello, disegnato a fumetti nell'Hub e come registro nella Diagnostica).
 
@@ -745,6 +745,18 @@ Una vista alla volta; i dati sono gli stessi oggetti (la conversazione è un mod
 | **Muto** | La voce tace, la coda scorre con i tempi di sempre; le risposte restano scritte |
 | **Impostazioni** | Città del meteo, riduci animazioni, vista all'avvio, muto all'avvio, in `config/gui.local.toml` (ignorato da git). La geocodifica la fa il worker del meteo: nessuna rete sul thread della GUI |
 | **Colori** | Solo in `metis/gui/tema.py` (cornice) e `metis/core/palette.py` (stati); un test lo verifica |
+
+### 11.5 Le frasi non capite (PHASE4)
+
+> [Piano](../PHASE4/Piano_Frasi_Non_Capite.md) · [tracking](../PHASE4/Tracking_PHASE4.md)
+
+| Elemento | Regola |
+| :-- | :-- |
+| **Segnali** | L'orchestratore scrive `extra["non_capito"]` nel turno di `data/logs/turns.jsonl` quando accade: chiarimento, azione proposta e tolta dal codice, decisione non valida (JSON o stadi tecnici del broker), strumento che non riesce, "non ho capito" della conversazione. Con il motivo, il nome del primo strumento tolto (mai gli argomenti). I rifiuti di sicurezza non sono segnali |
+| **Segnale debole** | La stessa frase ridetta entro 30 s dopo una risposta a parole: segna il primo dei due turni, e non entra nella quota |
+| **Pannello** | Nella Diagnostica, sotto i comandi rapidi: frasi raggruppate per forma normalizzata, contate, e la **quota dei turni non capiti** degli ultimi 30 giorni. Legge su un thread suo (`metis-frasi`), all'avvio, a fine turno e dopo ogni decisione. Nell'Hub, la Sessione dice quante sono, e porta qui |
+| **Azioni** | *Crea comando* (editor con la frase e lo strumento suggerito, senza argomenti), *Variante di…*, *Segnala* (esportabili in Markdown per chi sviluppa), *Ignora*. Le frasi con un parametro solo *Segnala* e *Ignora*. Le decisioni in `data/frasi_decise.json` |
+| **Da quando** | `[frasi] dal` in `config/gui.toml`: prima, `turns.jsonl` contiene turni finti della suite dei test |
 
 ---
 

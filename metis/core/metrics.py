@@ -81,7 +81,12 @@ class TurnMetrics:
             "totale": self.total_ms,
         }
 
-    def append_to_log(self, path: Path = LOG) -> None:
+    def append_to_log(self, path: Path | None = None) -> None:
+        # PHASE4 — `LOG` si legge qui, non come default dell'argomento: un
+        # default si valuta una volta, all'import, e spostare `metrics.LOG`
+        # dalla suite o dal soak non sarebbe servito a niente. I turni finti
+        # finivano nel file da cui il pannello delle frasi legge l'uso vero.
+        path = LOG if path is None else path
         path.parent.mkdir(parents=True, exist_ok=True)
         row = {k: v for k, v in asdict(self).items() if not k.startswith("t_")}
         row["ts"] = time.time()

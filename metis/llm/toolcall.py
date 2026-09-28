@@ -205,6 +205,14 @@ class Decisione:
     # chiedeva un'azione e l'azione non si e' potuta decidere. Vedi
     # `frasi_chiuse.chiarimento` e `CHIARIRE_SE_TOLTO`.
     chiarimento: str | None = None
+    # PHASE4: cosa il modello aveva proposto e il codice ha tolto (verbo
+    # mancante, numero o testo non detti). Solo i NOMI degli strumenti: gli
+    # argomenti sono scelte del modello, e un 81 inventato non va suggerito a
+    # nessuno (specifica §9.6). Li legge il pannello delle frasi non capite.
+    tolte: tuple[str, ...] = ()
+    # PHASE4: due JSON non validi di fila. Diverso da `errore` senza azioni,
+    # che vale anche per Ollama giu': quello non e' una frase non capita.
+    riparazione_fallita: bool = False
 
     @property
     def call(self) -> dict | None:
@@ -355,11 +363,13 @@ class ToolRouter:
             domanda = next((CHIARIRE_SE_TOLTO[a.get("tool")] for a in tolte
                             if a.get("tool") in CHIARIRE_SE_TOLTO), None) if not tenute else None
             return Decisione(tuple(tenute), "llm", _ms(t0), riparazioni, nota,
-                             chiarimento=domanda)
+                             chiarimento=domanda,
+                             tolte=tuple(a.get("tool", "?") for a in tolte))
 
         # Due tentativi falliti: si risponde a parole. Deny-by-default anche
         # qui — nel dubbio non si agisce.
-        return Decisione((), "llm", _ms(t0), riparazioni, ultimo_errore)
+        return Decisione((), "llm", _ms(t0), riparazioni, ultimo_errore,
+                         riparazione_fallita=True)
 
 
 def precedenti(storia: list[dict] | None, testo: str) -> list[dict]:
@@ -399,12 +409,19 @@ VERBO_MUTO = re.compile(r"\bmut\w*|\bsilenz\w*|\bzitt\w*|\baudio\b|\bsuono\b")
 VERBO_CASA = re.compile(r"\b(?:accend|spegn|attiv|disattiv|avvi|azion)\w*|\bdai\b"
                         r"|\bfai partire\b|\bmetti in funzione\b")
 
+# PHASE4, dalla prima seduta vera (2026-09-28): "Devi dire grazie." e "Ma sei
+# rincoglionito?" sono diventati `type_text`. Li ha fermati solo il controllo
+# "il cursore non e' in un campo di testo"; con il fuoco in un campo, Metis
+# avrebbe scritto "grazie". Si scrive solo se la frase chiede di scrivere.
+VERBO_SCRITTURA = re.compile(r"\b(?:scriv|digit|batt|inserisc|dett)\w*")
+
 # Gli strumenti che passano solo se la frase contiene il loro verbo.
 VERBI_RICHIESTI = {"open_application": VERBO_APERTURA,
                    "riproduci_youtube": VERBO_RIPRODUZIONE,
                    "minimize_window": VERBO_RIDUZIONE,
                    "imposta_muto": VERBO_MUTO,
-                   "set_home_device": VERBO_CASA}
+                   "set_home_device": VERBO_CASA,
+                   "type_text": VERBO_SCRITTURA}
 
 # Se il controllo toglie uno di questi, l'utente aveva chiesto un'azione: si
 # fa una domanda invece di lasciare la frase alla conversazione. Non
@@ -438,6 +455,15 @@ def chiesta(azione: dict, testo: str) -> bool:
         from metis.core.router import normalizza
 
         return azione.get("numero") in numeri_in(normalizza(testo))
+    if azione.get("tool") == "type_text":
+        # Il verbo di scrittura E il testo detto, come `scrivi_nel_numero`: il
+        # modello non scrive parole sue.
+        from metis.core.router import normalizza
+
+        detto = normalizza(testo)
+        scritto = normalizza(str(azione.get("text", "")))
+        return (VERBO_SCRITTURA.search(detto) is not None
+                and bool(scritto) and scritto in detto)
     verbo = VERBI_RICHIESTI.get(azione.get("tool"))
     if verbo is None:
         return True

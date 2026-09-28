@@ -539,6 +539,10 @@ def esegui(args) -> Path:
     # Il log di Metis per questa prova va nella sua cartella: vedi la nota in
     # testa. Va fissato PRIMA di `configure`.
     mlog.JSONL = cartella / "metis.jsonl"
+    # PHASE4: anche i turni. Le interazioni sintetiche nel `turns.jsonl` vero
+    # si sarebbero mescolate a quelle reali, e al pannello delle frasi.
+    from metis.core import metrics
+    metrics.LOG = cartella / "turns.jsonl"
     mlog.configure(level="INFO")
     log = mlog.get_logger()
 

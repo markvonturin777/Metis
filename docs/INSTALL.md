@@ -233,6 +233,28 @@ Cosa sapere:
 - "Clicca il 7" **scritto** nell'Hub viene rifiutato come ogni altra azione T2 mentre Metis è
   in primo piano: si usa la voce, con la finestra giusta davanti.
 
+### 5.2 Le frasi non capite (PHASE4)
+
+Quando Metis non capisce una frase (chiede di ripetere, toglie un'azione proposta, uno
+strumento non riesce…), la frase finisce nel pannello **FRASI NON CAPITE** della Diagnostica,
+sotto i comandi rapidi; nell'Hub la tessera Sessione dice quante ce ne sono da rivedere, e un
+clic porta lì. "Rivedi le frasi…" le mostra una per una:
+
+| Azione | Effetto |
+| :-- | :-- |
+| **Crea comando…** | L'editor dei comandi con la frase già scritta; se il modello aveva proposto uno strumento, c'è anche lui, senza argomenti da completare |
+| **Variante di…** | La frase si aggiunge a un comando che esiste già |
+| **Segnala** | La frase va fra quelle da passare a chi sviluppa; "Esporta segnalate…" le scrive in Markdown |
+| **Ignora** | Sparisce dal pannello |
+
+Le frasi con un numero, una quantità o un testo ("clicca su ottanto uno") non possono diventare
+comandi, che hanno azioni fisse: si segnalano. Una frase nuova deve avere almeno due parole oltre
+alle cortesie e non essere già riconosciuta; se no, l'editor dice perché.
+
+In testa al pannello c'è la **quota dei turni non capiti** degli ultimi 30 giorni: è la misura
+di quanto Metis è macchinosa. Le decisioni stanno in `data\frasi_decise.json`; per ricominciare
+da capo basta cancellarlo. I turni si leggono da `[frasi] dal` in `config\gui.toml` in poi.
+
 ---
 
 ## 6. Avvio automatico

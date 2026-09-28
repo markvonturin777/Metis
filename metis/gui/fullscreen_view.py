@@ -38,6 +38,7 @@ from metis.gui.widgets.audit import VistaAudit
 from metis.gui.widgets.comandi import PannelloComandi
 from metis.gui.widgets.contesto import PannelloContesto
 from metis.gui.widgets.conversazione import Conversazione
+from metis.gui.widgets.frasi import PannelloFrasi
 from metis.gui.widgets.stato import IndicatoreStato, VuMeter
 from metis.gui.widgets.telemetria import Telemetria
 
@@ -165,6 +166,12 @@ class FullscreenView(QWidget):
         # ne accorge.
         self.comandi = PannelloComandi()
         lay.addWidget(self.comandi)
+
+        # PHASE4 — accanto ai comandi perche' e' da qui che nascono i comandi
+        # nuovi: una frase non capita diventa un comando o una variante.
+        lay.addWidget(_titolo("FRASI NON CAPITE"))
+        self.frasi = PannelloFrasi()
+        lay.addWidget(self.frasi)
         return box
 
     # -- ingressi ----------------------------------------------------------
@@ -186,8 +193,10 @@ class FullscreenView(QWidget):
         self.contesto.aggiorna(stato)
 
     def collega_comandi(self, libreria) -> None:
-        """La libreria dei comandi, quando il sistema e' pronto."""
+        """La libreria dei comandi, quando il sistema e' pronto. Serve anche al
+        pannello delle frasi, per *Crea* e *Variante*."""
         self.comandi.collega(libreria)
+        self.frasi.collega(libreria)
 
 
 def _titolo(testo: str) -> QLabel:

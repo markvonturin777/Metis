@@ -35,7 +35,7 @@ _APP = {"vscode": "Visual Studio Code", "github_desktop": "GitHub Desktop",
 
 # Gli stadi del broker che rifiutano una tool call malformata. Il loro
 # dettaglio e' un messaggio tecnico (JSON, Pydantic, nome sconosciuto).
-_STADI_TECNICI = frozenset({"json", "registro", "schema"})
+STADI_TECNICI = frozenset({"json", "registro", "schema"})
 
 # PHASE2: le combinazioni del percorso rapido, dette come azioni.
 # "Premuto alt+left" e' un dettaglio tecnico pronunciato.
@@ -61,7 +61,7 @@ def descrivi(result: Result) -> str:
             # Lo strumento ha scelto di non agire, e il motivo e' gia' una
             # frase rivolta all'utente: si pronuncia cosi' com'e'.
             return result.detail if result.detail.endswith(".") else result.detail + "."
-        if result.stage in _STADI_TECNICI:
+        if result.stage in STADI_TECNICI:
             # M7 — "Non lo faccio: to: String should match pattern..." era il
             # messaggio di Pydantic, pronunciato. Questi tre stadi rifiutano
             # una tool call MALFORMATA: il difetto e' della decisione, non

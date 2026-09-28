@@ -141,6 +141,56 @@ def valida(dato: dict, registry) -> Comando:
     return _con_normalizzate(Comando(ident, tuple(frasi), tuple(pulite), risposta))
 
 
+# --- PHASE4: le guardie sulle frasi nuove ---------------------------------------
+
+MIN_PAROLE = 2
+
+
+def controlla_frasi(frasi: list[str] | tuple[str, ...], registry,
+                    altri: list[Comando]) -> None:
+    """`Errore` se una frase NUOVA non si puo' aggiungere, con il motivo in parole.
+
+    Le frasi nuove arrivano soprattutto dal pannello delle frasi non capite, e
+    una frase aggiunta per comodita' non deve cambiare cosa fa Metis con le
+    altre. Due regole:
+
+    - almeno due parole oltre alle cortesie: una sola ("sei", "bye") e' il
+      tipo di storpiatura che scatterebbe per sbaglio;
+    - non deve essere gia' riconosciuta, da un altro comando o dalle frasi
+      fisse di Metis. Un doppione non serve, e sopra una frase fissa la
+      cambierebbe: i comandi dell'utente vengono prima (`Router.decidi`).
+
+    Una terza regola, "nessuna collisione per contenimento", e' gia' dentro
+    la seconda: il percorso rapido ammette attorno a una frase solo cortesie
+    (PHASE2) e prova per prime le frasi piu' lunghe (M4), quindi una frase
+    nuova non puo' scattare dentro la frase di un altro comando. Resta solo
+    l'uguaglianza, e la si controlla chiedendo al router stesso: nessuna
+    seconda implementazione del confronto che possa divergere.
+
+    Solo per le frasi nuove: `carica` non scarta i comandi scritti prima di
+    queste regole ("telemetria", "si lavora").
+    """
+    from metis.core import frasi_chiuse
+    from metis.core.router import CORTESIE, Router
+
+    router = Router(registry, comandi=list(altri), usa_llm=False,
+                    numeri_a_schermo=lambda: True)
+    for f in frasi:
+        detto = normalizza(f)
+        if len([p for p in detto.split() if p not in CORTESIE]) < MIN_PAROLE:
+            raise Errore(f"'{f}': servono almeno {MIN_PAROLE} parole oltre alle "
+                         "cortesie ('per favore', 'Metis'...), o scatterebbe "
+                         "anche quando non la si intende")
+        gia = router.fast_path(f)
+        if gia is not None:
+            raise Errore(f"'{f}': attiva gia' il comando '{gia.id}'")
+        # Con i numeri a schermo: e' lo stato in cui le frasi fisse
+        # riconoscono di piu' ("sul 60").
+        if frasi_chiuse.dettatura(f) or frasi_chiuse.riconosci(detto, True):
+            raise Errore(f"'{f}': e' gia' una frase fissa di Metis; un comando "
+                         "la sostituirebbe")
+
+
 def _breve(exc: Exception) -> str:
     from pydantic import ValidationError
 
@@ -242,15 +292,34 @@ class Libreria:
         c = valida(dato, self.registry)          # solleva Errore se non va
         if any(x.id == c.id for x in self.comandi):
             raise Errore(f"esiste gia' un comando con id '{c.id}'")
+        controlla_frasi(c.frasi, self.registry, self.comandi)
         self._scrivi([*self.comandi, c])
         return c
 
     def modifica(self, ident: str, dato: dict) -> Comando:
-        if not any(x.id == ident for x in self.comandi):
+        vecchio = self.get(ident)
+        if vecchio is None:
             raise Errore(f"non esiste nessun comando con id '{ident}'")
         c = valida(dato, self.registry)
+        # Le guardie guardano solo le frasi che il comando non aveva: cambiare
+        # la risposta di "telemetria" non deve diventare impossibile.
+        nuove = [f for f, n in zip(c.frasi, c.normalizzate)
+                 if n not in vecchio.normalizzate]
+        controlla_frasi(nuove, self.registry,
+                        [x for x in self.comandi if x.id != ident])
         self._scrivi([c if x.id == ident else x for x in self.comandi])
         return c
+
+    def aggiungi_frase(self, ident: str, frase: str) -> Comando:
+        """PHASE4 — "Aggiungi come variante di...": una frase in piu' a un
+        comando esistente, con le stesse guardie di una frase nuova."""
+        c = self.get(ident)
+        if c is None:
+            raise Errore(f"non esiste nessun comando con id '{ident}'")
+        if normalizza(frase) in c.normalizzate:
+            raise Errore(f"'{frase}': il comando '{ident}' la conosce gia'")
+        return self.modifica(ident, {**c.come_dizionario(),
+                                     "frasi": [*c.frasi, frase.strip()]})
 
     def elimina(self, ident: str) -> None:
         restanti = [x for x in self.comandi if x.id != ident]

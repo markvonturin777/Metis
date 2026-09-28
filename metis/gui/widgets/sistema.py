@@ -16,8 +16,8 @@ from __future__ import annotations
 
 import time
 
-from PySide6.QtCore import Qt, QTimer, Slot
-from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QVBoxLayout
+from PySide6.QtCore import Qt, QTimer, Signal, Slot
+from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
 from metis.gui import tema
 from metis.gui.componenti import Barra, Pannello, Tessera
@@ -72,6 +72,8 @@ class PannelloSessione(Pannello):
     """Da quanto e' acceso Metis e quanto ha lavorato. Il "System Uptime"
     della reference, con i contatori dell'orchestratore."""
 
+    chiede_frasi = Signal()
+
     def __init__(self, parent=None):
         super().__init__("Sessione", "timer", parent)
         self._t0 = time.monotonic()
@@ -96,6 +98,19 @@ class PannelloSessione(Pannello):
         self.carico = Barra("Carico medio")
         self.corpo.addWidget(self.carico)
         self._carico = None
+
+        # PHASE4 — le frasi non capite da rivedere (D-FRASI 8). Rivederle e' un
+        # lavoro da fare ogni tanto, non da avere sotto gli occhi: qui c'e'
+        # solo quante sono, e un clic porta alla Diagnostica. Con zero, niente.
+        self.frasi = QPushButton("")
+        self.frasi.setFlat(True)
+        self.frasi.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.frasi.setStyleSheet(f"QPushButton {{ color: {tema.ATTENZIONE}; border: none;"
+                                 " text-align: left; padding: 2px 0; font-size: 12px; }}")
+        self.frasi.setToolTip("Apri la Diagnostica per rivederle")
+        self.frasi.clicked.connect(self.chiede_frasi)
+        self.frasi.setVisible(False)
+        self.corpo.addWidget(self.frasi)
 
         # L'orologio gira solo con il pannello visibile: vedi il principio
         # delle animazioni ferme in tray, nel piano di PHASE1.
@@ -122,6 +137,12 @@ class PannelloSessione(Pannello):
         self.t_azioni.imposta(str(d.get("strumenti_ok", 0)))
         negate = d.get("strumenti_negati", 0)
         self.t_negate.imposta(str(negate), tema.ATTENZIONE if negate else None)
+
+    @Slot(int)
+    def imposta_frasi(self, n: int) -> None:
+        self.frasi.setText("1 frase non capita da rivedere" if n == 1 else
+                           f"{n} frasi non capite da rivedere")
+        self.frasi.setVisible(n > 0)
 
     @Slot(dict)
     def aggiorna_risorse(self, d: dict) -> None:

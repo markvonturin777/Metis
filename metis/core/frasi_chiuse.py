@@ -81,9 +81,12 @@ _CLICCA = re.compile(
 # Senza verbo ("sul 60", "su ottantuna"): SOLO con i numeri a schermo, e con
 # almeno una preposizione o un articolo. "Sei" da solo non e' un clic sul 6.
 _SOLO_NUMERO = re.compile(rf"^(?:{_PREPOSIZIONI} )+{_NUMERO}$")
+# PHASE4 — "ma stra minumere" (prima seduta vera, 2026-09-28, segnalata
+# dall'utente dal pannello): il verbo spezzato in due, e una "mi" davanti a
+# "numere". Il router aveva proposto un video.
 _MOSTRA = re.compile(
-    r"^(?:m[ao]st\w*|fammi vedere|fai vedere|metti|visualizza|dammi|numera)"
-    r"(?: (?:i|in|tutti i))? i?n?umer\w*$")
+    r"^(?:m[ao] ?st\w*|fammi vedere|fai vedere|metti|visualizza|dammi|numera)"
+    r"(?: (?:i|in|tutti i))? (?:m?i)?n?umer\w*$")
 _NASCONDI = re.compile(r"^(?:nascondi|togli|leva|chiudi|spegni|via|basta)(?: (?:i|con i))? numeri$")
 
 # PHASE2, dopo le prove: il browser. Le scorciatoie di Chrome, che valgono

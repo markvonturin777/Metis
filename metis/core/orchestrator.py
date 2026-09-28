@@ -74,6 +74,7 @@ from metis.core.errors import Categoria, messaggio
 from metis.core.metrics import TurnMetrics
 from metis.core.state_machine import Event, State, StateMachine, Transition
 from metis.llm.client import CancelToken
+from metis.memory import frasi
 from metis.memory.conversation import Memoria
 
 
@@ -184,6 +185,27 @@ class Counters:
     # M6
     annunci: int = 0
     annunci_rimandati: int = 0
+
+
+def _tolte(decisione) -> tuple[str, ...]:
+    """I nomi delle azioni tolte dal codice, o niente. Solo una tupla vera
+    conta: una decisione finta dei test, o di un router che non conosce il
+    campo, non deve diventare un segnale per sbaglio."""
+    tolte = getattr(decisione, "tolte", ())
+    return tolte if isinstance(tolte, tuple) else ()
+
+
+def _non_capito(m: TurnMetrics, motivo: str, decisione=None) -> None:
+    """PHASE4 — il segno nel turno che il pannello delle frasi rilegge.
+
+    Il primo segnale vince (`frasi.SEGNALI` e' in ordine di precedenza, e i
+    chiamanti lo rispettano). Con il motivo viaggia il nome del primo
+    strumento tolto, mai i suoi argomenti: e' il suggerimento di D-FRASI 6.
+    """
+    m.extra.setdefault("non_capito", motivo)
+    tolte = _tolte(decisione)
+    if tolte:
+        m.extra.setdefault("tolta", tolte[0])
 
 
 class Orchestrator:
@@ -558,6 +580,7 @@ class Orchestrator:
         # Strumento, fonti o conversazione? Il router decide, e nel dubbio
         # sceglie la conversazione: rispondere a parole non fa danni, agire
         # quando non era richiesto sì.
+        decisione = None
         if self.d.azioni is not None:
             decisione = self.d.azioni.decidi(m.transcript, self.history)
             # Le fonti si guardano PRIMA degli strumenti. Una decisione che
@@ -577,6 +600,7 @@ class Orchestrator:
             if isinstance(chiarimento, str) and chiarimento:
                 self.sm.fire(Event.INTENT_CHAT)
                 m.extra["chiarimento"] = True
+                _non_capito(m, frasi.CHIARIMENTO, decisione)
                 return self._chiudi_parlando(m, chiarimento)
 
         self.sm.fire(Event.INTENT_CHAT)
@@ -600,6 +624,14 @@ class Orchestrator:
             m.tokens, m.tok_per_s = gm.tokens, gm.tok_per_s
             m.reply = gm.text
             self.mem.aggiungi("assistant", gm.text)
+        # PHASE4 — la frase e' finita in conversazione: per una buona
+        # ragione (era una domanda) o perche' nessuno l'ha capita?
+        if _tolte(decisione):
+            _non_capito(m, frasi.AZIONE_TOLTA, decisione)
+        elif getattr(decisione, "riparazione_fallita", False) is True:
+            _non_capito(m, frasi.RIPARAZIONE, decisione)
+        elif frasi.detta_dalla_persona(m.reply):
+            _non_capito(m, frasi.CONVERSAZIONE, decisione)
         self.counters.turns += 1
         m.append_to_log()
         if self.d.on_turn_end is not None:
@@ -836,6 +868,20 @@ class Orchestrator:
                                    for c in decisione.calls[:len(risultati)])
         m.extra["azioni"] = len(risultati)
         m.extra["esito"] = getattr(ultimo.outcome, "value", str(ultimo.outcome))
+        # PHASE4 — una tool call malformata, rifiutata dal broker prima delle
+        # policy: la decisione non e' stata capita. I rifiuti di sicurezza
+        # (policy, guardie, conferma, lo strumento stesso) hanno stadi loro e
+        # non passano di qui: sono corretti, non incomprensioni (D-FRASI 2).
+        from metis.core.risposte import STADI_TECNICI
+
+        stadio = getattr(ultimo, "stage", None)
+        if not ultimo.ok and stadio in STADI_TECNICI:
+            _non_capito(m, frasi.RIPARAZIONE, decisione)
+        elif not ultimo.ok and stadio in ("strumento", "esecuzione"):
+            # Lo strumento non e' riuscito: "non trovo l'elemento", "la finestra
+            # non c'e' piu'", o un'eccezione. Non e' sicurezza: di solito e' lo
+            # strumento sbagliato, o un difetto (prima seduta vera, 2026-09-28).
+            _non_capito(m, frasi.STRUMENTO, decisione)
         # PHASE2 — righe per l'Hub, mai per il modello: il titolo di un video
         # e' testo di una pagina. Va nelle metriche del turno, che leggono
         # solo la GUI e il log; la memoria riceve `frase`, qui sotto.

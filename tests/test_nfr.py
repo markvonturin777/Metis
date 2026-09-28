@@ -121,6 +121,33 @@ def test_la_suite_non_scrive_nel_log_di_metis():
     assert (vero.stat().st_size if vero.exists() else 0) == prima
 
 
+def test_la_suite_non_scrive_nei_turni_veri():
+    """PHASE4 — lo stesso difetto, su `data/logs/turns.jsonl`: la suite ci
+    aggiungeva turni finti a ogni esecuzione, e da li' legge il pannello delle
+    frasi non capite. Vedi `tests/conftest.py`."""
+    from pathlib import Path
+
+    from metis.core import metrics
+
+    vero = Path("data/logs/turns.jsonl")
+    prima = vero.stat().st_size if vero.exists() else 0
+    metrics.TurnMetrics(turn_id="suite", t_speech_end=0.0,
+                        transcript="prova della suite").append_to_log()
+    assert metrics.LOG != vero
+    assert "prova della suite" in metrics.LOG.read_text(encoding="utf-8")
+    assert (vero.stat().st_size if vero.exists() else 0) == prima
+
+
+def test_i_turni_seguono_il_percorso_spostato(tmp_path, monkeypatch):
+    """Il difetto vero: il percorso era il default dell'argomento, valutato
+    all'import, e spostare `metrics.LOG` non cambiava niente."""
+    from metis.core import metrics
+
+    monkeypatch.setattr(metrics, "LOG", tmp_path / "turni.jsonl")
+    metrics.TurnMetrics(turn_id="t", t_speech_end=0.0).append_to_log()
+    assert (tmp_path / "turni.jsonl").exists()
+
+
 def test_nfr8_dice_quanto_e_durato_l_uso():
     """PHASE1: "0 blocchi in 30 minuti" chiede anche i 30 minuti."""
     eventi = [{"event": "sessione interfaccia", "esercizio_s": 1200},

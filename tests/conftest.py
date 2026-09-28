@@ -40,6 +40,28 @@ try:
 except OSError:                 # un'altra suite lo tiene aperto: si accoda
     pass
 
+# PHASE4 — LO STESSO PER I TURNI
+# `data/logs/turns.jsonl` era rimasto fuori: ogni esecuzione della suite ci
+# aggiungeva una quarantina di turni finti ("risposta finta", fonti su e0.it),
+# e da quel file legge il pannello delle frasi non capite.
+import metis.core.metrics as _metriche  # noqa: E402
+
+_metriche.LOG = CARTELLA_LOG / "turns.jsonl"
+try:
+    _metriche.LOG.unlink(missing_ok=True)
+except OSError:
+    pass
+
+# E le decisioni del pannello delle frasi: un test che clicca "Ignora" non
+# deve toccare le scelte vere dell'utente.
+import metis.memory.frasi as _frasi  # noqa: E402
+
+_frasi.DECISE = CARTELLA_LOG / "frasi_decise.json"
+try:
+    _frasi.DECISE.unlink(missing_ok=True)
+except OSError:
+    pass
+
 
 @pytest.fixture(scope="session")
 def app_qt():

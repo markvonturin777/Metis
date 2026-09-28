@@ -31,6 +31,8 @@ def router(numeri=False):
 @pytest.mark.parametrize("detto", [
     "Mostra in umere.", "Mastra in numeri.", "Mastrami i numeri.", "Mostrain Numery.",
     "Mastering numeria.", "Mastra in numeria.", "Mostra inumere.", "Mostrami i numeri.",
+    # PHASE4: segnalata dall'utente dal pannello delle frasi (2026-09-28).
+    "ma stra minumere.", "mastra i numeri.",
 ])
 def test_le_storpiature_di_mostra_i_numeri(detto):
     d = router().decidi(detto)

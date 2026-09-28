@@ -31,8 +31,9 @@
 | **PHASE1** | Interfaccia "Hub" (tre viste, nucleo animato, meteo, input di testo) | 🟡 15/17 criteri; manca NFR-8 con l'uso reale e il tag `p1-hub` |
 | **PHASE2** | Navigazione: YouTube, "mostra i numeri", bolla, media, dettatura | 🟡 codice fatto; mancano prove a voce (Facebook, feed), catture, bundle, tag |
 | **PHASE3** | Voce e lingua (Kokoro, inglese) | ❌ annullata il 2026-09-26; resta solo la velocità della voce |
-| **PHASE4** | Imparare dall'uso: frasi non capite → comandi ([piano](SPECS/PHASE4/Piano_Frasi_Non_Capite.md)) | 📋 pianificata il 2026-09-28 — **la prossima** |
-| **PHASE5** | Mani libere: sessione di ascolto, conferme a voce, router di navigazione ([piano](SPECS/PHASE5/Piano_Mani_Libere.md)) | 📋 pianificata il 2026-09-28, decisioni D-MANI chiuse; dopo PHASE4 |
+| **PHASE4** | Imparare dall'uso: frasi non capite → comandi ([piano](SPECS/PHASE4/Piano_Frasi_Non_Capite.md)) | 🟡 codice, banchi e prova vera fatti (2026-09-28); restano bundle e tag |
+| **PHASE6** | Qualità della conversazione: persona in stile Jarvis, cronologia pulita, router ([piano](SPECS/PHASE6/Piano_Conversazione.md)) | 📋 pianificata il 2026-09-28 — **la prossima, prima di PHASE5** |
+| **PHASE5** | Mani libere: sessione di ascolto, conferme a voce, router di navigazione ([piano](SPECS/PHASE5/Piano_Mani_Libere.md)) | 📋 pianificata il 2026-09-28, decisioni D-MANI chiuse; dopo PHASE6 |
 
 ---
 
@@ -125,7 +126,7 @@
 | "Questa finestra" catturata al PTT | ✅ | Deittici ("questa finestra") risolti nel codice |
 | Scaling DPI **diverso** fra monitor | 🟡 | Matematica testata su monitor sintetici; hardware con scaling misto assente |
 | `click_element` per nome via UI Automation (anche nel browser) | ✅ | Esatti → sottostringhe → rifiuto; ambiguità → numeri sui candidati |
-| `type_text` | ✅ | Da PHASE2 solo con il fuoco in un campo di testo |
+| `type_text` | ✅ | Da PHASE2 solo con il fuoco in un campo di testo. Da PHASE4, dal modello solo con un verbo di scrittura e il testo detto ("Devi dire grazie" non scrive più) |
 | `press_hotkey`, `scroll` | ✅ | Con denylist |
 | `drag` | 🟡 | Scritto e registrato, **mai provato a mano** |
 | Playwright su CDP per il browser | ❌ | Da Chrome 136 la porta di debug non si apre sul profilo dell'utente: sostituito da UIA. `browser.py` resta per i banchi |
@@ -180,7 +181,7 @@
 | Il contenuto web non entra nella memoria | ✅ | |
 | Persona Metis (formale, "lei", 1–3 frasi, ironia discreta) | ✅ | Non dichiara mai azioni non fatte (6/12 → 0/12) |
 | Metis parla di sé al femminile e in prima persona | ✅ | 2026-09-28: 1 maschile su 36 risposte (prima ~8 su 24); banco della persona nel target |
-| Pannello "frasi non capite" → comandi e varianti | 📋 | PHASE4 |
+| Pannello "frasi non capite" → comandi e varianti | ✅ | PHASE4: cinque segnali nel turno, pannello nella Diagnostica con la quota dei turni non capiti, Crea / Variante / Segnala / Ignora, guardie sulle frasi nuove, contatore nell'Hub |
 | **Memoria a lungo termine, preferenze persistenti** | 📋 | Backlog V1.1 #3 |
 | **Ricerca multi-hop** | 📋 | Dopo la V1.0 |
 | RAG su documenti locali, vector store | 🚫 | Nessun accesso ai file; 3 fonti per turno non richiedono embedding |
