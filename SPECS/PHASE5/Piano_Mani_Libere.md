@@ -1,9 +1,10 @@
 # PHASE5 — Mani libere
 
 > **Durata stimata:** 12 giorni · **Ramo:** `svil/phase5` · **Tag:** `p5-mani-libere`
-> **Si fa dopo PHASE4** ([frasi non capite](../PHASE4/Piano_Frasi_Non_Capite.md)), scelta dell'utente del
-> 2026-09-28: il pannello di PHASE4 e la sua quota di turni non capiti ci saranno già, e misureranno
-> quanto attrito toglie questa fase.
+> **Si fa dopo PHASE4** ([frasi non capite](../PHASE4/Piano_Frasi_Non_Capite.md)) **e PHASE6**
+> ([qualità della conversazione](../PHASE6/Piano_Conversazione.md)), scelte dell'utente del 2026-09-28:
+> il pannello di PHASE4 misurerà quanto attrito toglie questa fase, e con una Metis che capisce togliere
+> il tasto vale di più.
 > **Parte da:** la conversazione del 2026-09-28. L'utente non usa Metis attivamente perché è
 > "clunky". Delle cinque cause proposte ha indicato **il tasto per ogni comando** ("sicuramente"),
 > **le conferme solo col clic** e **le frasi troppo rigide** ("abbastanza"), meno **i numeri che
@@ -43,7 +44,8 @@ comando né una conferma. **La fase comincia misurando questo rischio, non costr
 
 - [ ] PHASE2 chiusa (`p2-navigazione`): questa fase lavora sopra le sue frasi chiuse e i suoi numeri
 - [ ] PHASE4 chiusa (`p4-frasi`): i turni di sessione ignorati diventano un segnale del suo pannello
-- [ ] Ramo `svil/phase5` creato dal ramo di PHASE4
+- [ ] PHASE6 chiusa (`p6-conversazione`)
+- [ ] Ramo `svil/phase5` creato dal ramo di PHASE6
 - [ ] **Spike del giorno 0** fatto: le sue misure confermano le soglie di D-MANI 3, 5 e 9
 - [x] Decisioni D-MANI chiuse — **tutte come da raccomandazione**, confermate dall'utente il 2026-09-28,
       compresa la facoltativa D-MANI 11
@@ -65,6 +67,7 @@ comando né una conferma. **La fase comincia misurando questo rischio, non costr
 | Volume di sistema con Core Audio via `comtypes` | `tools/media.py` | Funziona; il **misuratore di picco** dello stesso dispositivo non è ancora letto |
 | Chiarimento con domanda fissa ("Non ho capito il numero: me lo ripete?") | `frasi_chiuse.chiarimento`, orchestratore | Funziona; a microfono aperto andrebbe ripensato (D-MANI 6) |
 | Kill switch, pausa dell'ascolto dalla tray | `panic()`, tray | Funzionano, restano la via d'uscita |
+| Finestra di riferimento catturata al tasto | `finestre.cattura_riferimento` | **Difetto trovato in PHASE4** (seduta del 2026-09-28): nei turni senza tasto resta quella di prima, anche chiusa → "quella finestra non c'è più" quattro volte di fila. Con la sessione diventerebbe la norma: va ricatturata a ogni turno (giorni 1–2) |
 
 ---
 
