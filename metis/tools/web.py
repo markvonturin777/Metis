@@ -76,6 +76,19 @@ PUBBLICITA = (("bing.com", "/aclick"), ("duckduckgo.com", "/y.js"),
 TTL_CACHE_S = 15 * 60
 BACKOFF_S = (1.0, 3.0, 9.0)   # tre tentativi; l'ultimo non attende nessuno
 TIMEOUT_FETCH_S = 8.0      # oltre, il filler vocale non regge
+
+# PHASE6 (D-CONV 10) — come si presenta Metis ai siti. Con "Metis/1.0" molti
+# rifiutavano la pagina (403), e la risposta diventava "Informazione non
+# presente nei sistemi" (prima seduta vera, 2026-09-28). Metis legge una pagina
+# alla volta su richiesta dell'utente, come farebbe lui col browser. Misura su
+# 30 pagine da 10 ricerche: rifiutate 8 con "Metis/1.0", 5 con queste; le altre
+# le blocca un anti-bot qualunque cosa si mandi. Il contenuto resta dato non
+# fidato (§8.5 della specifica): cambia chi bussa, non come si legge.
+INTESTAZIONI = {
+    "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                   "(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"),
+    "Accept-Language": "it-IT,it;q=0.9,en;q=0.6",
+}
 MAX_BYTE = 200 * 1024      # protegge il contesto e la memoria
 REGIONE = "it-it"
 
@@ -392,7 +405,7 @@ def scarica(url: str, cache: Cache | None = None) -> Pagina:
 
     try:
         with httpx.Client(follow_redirects=True, timeout=TIMEOUT_FETCH_S,
-                          headers={"User-Agent": "Metis/1.0"}) as cl:
+                          headers=INTESTAZIONI) as cl:
             with cl.stream("GET", url) as r:
                 r.raise_for_status()
                 pezzi: list[bytes] = []

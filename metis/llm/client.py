@@ -245,7 +245,14 @@ class LlmClient:
         self.model = model
         self.host = host
         self.client = ollama.Client(host=host)
-        self.options = {"num_ctx": num_ctx, "temperature": temperature, "top_p": 0.9}
+        # PHASE6 — i parametri raccomandati da Qwen 3 per il modo senza
+        # "thinking", con la `presence_penalty` che la scheda del modello
+        # consiglia per i quantizzati contro le risposte ripetitive. Nel
+        # banco della conversazione: ripetizioni da 11/24 a 5/24, tic del
+        # "lei" da 10/24 a 1/24. `num_ctx` resta quello del router (vedi
+        # NUM_CTX): cambiare gli altri parametri non ricarica il modello.
+        self.options = {"num_ctx": num_ctx, "temperature": temperature, "top_p": 0.8,
+                        "top_k": 20, "presence_penalty": 1.5}
         # M7 — chi libera memoria grafica quando Ollama la esaurisce. Lo
         # imposta chi costruisce il sistema, che sa che esiste Whisper.
         self.su_oom = None

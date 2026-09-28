@@ -364,7 +364,11 @@ class ToolRouter:
                             if a.get("tool") in CHIARIRE_SE_TOLTO), None) if not tenute else None
             return Decisione(tuple(tenute), "llm", _ms(t0), riparazioni, nota,
                              chiarimento=domanda,
-                             tolte=tuple(a.get("tool", "?") for a in tolte))
+                             # Una ricerca tolta perche' la domanda era un'opinione
+                             # (PHASE6) e' il comportamento voluto, non una frase
+                             # non capita: non va nel pannello di PHASE4.
+                             tolte=tuple(a.get("tool", "?") for a in tolte
+                                         if a.get("tool") != "web_search"))
 
         # Due tentativi falliti: si risponde a parole. Deny-by-default anche
         # qui — nel dubbio non si agisce.
@@ -415,13 +419,26 @@ VERBO_CASA = re.compile(r"\b(?:accend|spegn|attiv|disattiv|avvi|azion)\w*|\bdai\
 # avrebbe scritto "grazie". Si scrive solo se la frase chiede di scrivere.
 VERBO_SCRITTURA = re.compile(r"\b(?:scriv|digit|batt|inserisc|dett)\w*")
 
+# PHASE6 (D-CONV 11), dalla stessa seduta: "bravissimo, hai schippato una
+# pubblicita' su youtube" e' diventato `click_element("pubblicita'")`. Un clic
+# per nome passa solo se la frase chiede di cliccare.
+VERBO_CLIC = re.compile(r"\b(?:clicc|click|premi|preme|pigia|schiacc|selezion|tocca)\w*")
+
+# PHASE6 (D-CONV 7): le domande sui gusti di Metis non hanno una fonte. "Qual
+# e' il David di Caravaggio che ti piace di piu'?" era finita sul web, e la
+# risposta era "Informazione non presente nei sistemi". Con queste parole la
+# ricerca proposta dal modello si toglie, e risponde la conversazione.
+OPINIONE = re.compile(r"\bti piac\w*|\bpreferisc\w*|\b(?:tuo|tua|tuoi|tue)(?:\s+\w+){0,3}\s+prefer\w*"
+                      r"|\bche ne pensi\b|\bcosa ne pensi\b|\bsecondo te\b")
+
 # Gli strumenti che passano solo se la frase contiene il loro verbo.
 VERBI_RICHIESTI = {"open_application": VERBO_APERTURA,
                    "riproduci_youtube": VERBO_RIPRODUZIONE,
                    "minimize_window": VERBO_RIDUZIONE,
                    "imposta_muto": VERBO_MUTO,
                    "set_home_device": VERBO_CASA,
-                   "type_text": VERBO_SCRITTURA}
+                   "type_text": VERBO_SCRITTURA,
+                   "click_element": VERBO_CLIC}
 
 # Se il controllo toglie uno di questi, l'utente aveva chiesto un'azione: si
 # fa una domanda invece di lasciare la frase alla conversazione. Non
@@ -455,6 +472,10 @@ def chiesta(azione: dict, testo: str) -> bool:
         from metis.core.router import normalizza
 
         return azione.get("numero") in numeri_in(normalizza(testo))
+    if azione.get("tool") == "web_search":
+        from metis.core.router import normalizza
+
+        return OPINIONE.search(normalizza(testo)) is None
     if azione.get("tool") == "type_text":
         # Il verbo di scrittura E il testo detto, come `scrivi_nel_numero`: il
         # modello non scrive parole sue.

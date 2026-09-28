@@ -139,6 +139,13 @@ CASI = [
     ("questa canzone mi piace molto", None, None),
     ("scrivi nel 5 ricette di pasta", ["scrivi_nel_numero"],
      lambda c: c[0]["numero"] == 5 and "pasta" in c[0]["testo"]),
+
+    # PHASE6, dalla prima seduta vera (2026-09-28): i gusti di Metis non si
+    # cercano sul web, un complimento non e' un clic, un insulto non e' testo.
+    ("qual e il david di caravaggio che ti piace di piu", None, None),
+    ("qual e il tuo film preferito", None, None),
+    ("bravissimo hai schippato una pubblicita su youtube", None, None),
+    ("devi dire grazie", None, None),
 ]
 
 
@@ -185,6 +192,10 @@ CASI_CONVERSAZIONE = [
     (SALUTO, "aprimi il primo risultato", SLOT_FONTE, ["open_url"],
      lambda c: "investing" in c[0]["url"]),
     (DOPO_CHATBOT, "che tempo fa domani a Milano", "", ["web_search"], None),
+    # PHASE6: "cerca sul web" dopo una domanda cerca quella domanda.
+    (SALUTO + [_u("Chi ha vinto il Giro d'Italia quest'anno?"),
+               _a("Informazione non presente nei sistemi.")],
+     "Cerca sul web.", "", ["web_search"], lambda c: "giro" in c[0]["query"].lower()),
 ]
 
 

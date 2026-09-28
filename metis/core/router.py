@@ -71,6 +71,20 @@ def _contiene(detto: tuple[str, ...], frase: tuple[str, ...]) -> bool:
     return False
 
 
+def _domanda_precedente(storia: list[dict] | None, testo: str) -> str | None:
+    """L'ultima frase dell'utente prima di questa, che non sia a sua volta un
+    "cerca sul web". La cronologia contiene gia' la frase di adesso: si salta."""
+    adesso = normalizza(testo)
+    for m in reversed(storia or []):
+        if m.get("role") != "user":
+            continue
+        detto = normalizza(m.get("content", ""))
+        if not detto or detto == adesso or frasi_chiuse.cerca_riferito(detto):
+            continue
+        return m["content"].strip()
+    return None
+
+
 def _numeri_a_schermo() -> bool:
     from metis.tools import numeri
 
@@ -188,6 +202,15 @@ class Router:
         if chiamate is not None:
             self.fast_hit += 1
             return Decisione(chiamate, "fast_path", (time.perf_counter() - t0) * 1000)
+
+        # PHASE6 (D-CONV 8): "cerca sul web" senza argomento cerca la domanda
+        # di prima. Senza una domanda da cercare, decide il router come sempre.
+        if frasi_chiuse.cerca_riferito(detto):
+            domanda = _domanda_precedente(storia, testo)
+            if domanda:
+                self.fast_hit += 1
+                return Decisione(({"tool": "web_search", "query": domanda[:200]},),
+                                 "fast_path", (time.perf_counter() - t0) * 1000)
 
         if not self.usa_llm or self.tool_router is None:
             d = Decisione((), "chat", (time.perf_counter() - t0) * 1000)

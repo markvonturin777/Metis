@@ -365,6 +365,26 @@ FRASI: tuple[tuple[re.Pattern, Callable[[re.Match], tuple[dict, ...] | None]], .
 )
 
 
+# PHASE6 (D-CONV 8) — "cerca sul web" riferito alla domanda di prima. Nella
+# prima seduta vera (2026-09-28): "Qual e' il David di Caravaggio…?", poi "Cerca
+# sul web." -> "Non ho accesso a Internet". La frase non ha argomento: cosa
+# cercare lo dice la domanda precedente, e lo sceglie `Router.decidi`, che ha la
+# cronologia.
+_CERCA_RIFERITO = re.compile(
+    r"^(?:(?:allora|e|ora|adesso|dai)\s+)?"
+    r"(?:cerc(?:a|hi|ano)(?:lo|la|li|le)?|cercami|guarda|controlla|vedi)"
+    r"(?:\s+(?:sul|su|in|nel|nella|con)\s+(?:web|internet|rete|google|il web))?"
+    r"(?:\s+(?:allora|pure|per favore))?$")
+
+
+def cerca_riferito(detto: str) -> bool:
+    """ "cerca sul web", "cercalo", "guarda su internet": senza argomento."""
+    testo = " ".join(_ritaglia(detto.split()))
+    return bool(testo) and _CERCA_RIFERITO.match(testo) is not None \
+        and any(p in testo for p in ("web", "internet", "rete", "google", "cercal", "cercam",
+                                     "cerchil", "cercanol"))
+
+
 def riconosci(detto: str, numeri_a_schermo: bool = False) -> tuple[dict, ...] | None:
     """Le chiamate per una frase gia' normalizzata, oppure None."""
     testo = " ".join(_ritaglia(detto.split()))

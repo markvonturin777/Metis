@@ -51,6 +51,12 @@ from metis.llm.grounding import BUDGET, CONTESTO_MAX, conta_messaggi, conta_toke
 # e' un messaggio: 8 turni di conversazione sono 16 messaggi.
 FINESTRA_MESSAGGI = 16
 
+# PHASE6 (D-CONV 2) — la conversazione ne vede meno: con 16 messaggi il modello
+# si incastrava sulle proprie risposte e le ricopiava (banco: ripetizioni 11/36
+# con 16, 3/36 con 4). Il riassunto e il router
+# continuano a usare la finestra intera.
+FINESTRA_CONVERSAZIONE = 4
+
 # Mai riassunti, qualunque cosa succeda. Vedi la nota in testa.
 INTOCCABILI_MESSAGGI = 8
 
@@ -79,6 +85,20 @@ SCAMBIO:
 {scambio}"""
 
 INTESTAZIONE_RIASSUNTO = "[RIASSUNTO DEI TURNI PRECEDENTI]"
+
+# PHASE6 — L'ORIGINE DI UN MESSAGGIO
+# Rigiocata contro Qwen la prima seduta vera (2026-09-28), la conversazione
+# ricopiava le risposte precedenti: "Quali azioni puoi fare?" -> "Lei non ha
+# chiesto niente.", 8 volte su 36 nel banco. Nella cronologia c'erano soprattutto
+# scambi corti con il sistema ("mostra i numeri" / "Ecco 71 numeri.", i
+# chiarimenti, gli errori), e un modello da 8B ripete l'ultima cosa detta.
+# Ogni messaggio porta quindi un'origine. Il router li vede tutti (gli servono
+# per "spostala" dopo "apri Chrome"); la conversazione solo le parole, e le
+# ultime azioni in una riga del messaggio di sistema (D-CONV 1).
+PAROLE = "parole"
+AZIONE = "azione"
+ULTIME_AZIONI = 3
+INTESTAZIONE_AZIONI = "[ULTIME AZIONI, ESEGUITE DAL SISTEMA]"
 
 
 @dataclass
@@ -121,7 +141,12 @@ class Memoria:
 
     system: str = ""
     riassumi: Callable[[str], str] | None = None
+    # PHASE6 — la persona per la domanda numero n (`prompts.per_turno`): gli
+    # esempi di tono ruotano. Senza, vale `system`.
+    persona: Callable[[int], str] | None = None
+    domande: int = 0
     finestra: int = FINESTRA_MESSAGGI
+    finestra_conversazione: int = FINESTRA_CONVERSAZIONE
     intoccabili: int = INTOCCABILI_MESSAGGI
     soglia: float = SOGLIA_RIASSUNTO
 
@@ -139,11 +164,36 @@ class Memoria:
 
     # -- scrittura ---------------------------------------------------------
 
-    def aggiungi(self, ruolo: str, testo: str) -> None:
+    def aggiungi(self, ruolo: str, testo: str, origine: str = PAROLE) -> None:
         if not testo:
             return
         with self._lock:
-            self.turni.append({"role": ruolo, "content": testo})
+            self.turni.append({"role": ruolo, "content": testo, "origine": origine})
+            if ruolo == "user":
+                self.domande += 1
+
+    def _system(self) -> str:
+        """La persona di adesso. Una persona che esplode non ferma il turno."""
+        if self.persona is not None:
+            try:
+                return self.persona(self.domande)
+            except Exception:                      # noqa: BLE001
+                pass
+        return self.system
+
+    def segna_azione(self) -> None:
+        """L'ultima frase dell'utente era un comando, non una conversazione.
+
+        La frase dell'utente entra in memoria prima che il router decida
+        (`Orchestrator._elabora`): solo dopo si sa che era "mostra i numeri".
+        Senza questo, la conversazione vedrebbe una domanda rimasta senza
+        risposta.
+        """
+        with self._lock:
+            for m in reversed(self.turni):
+                if m["role"] == "user":
+                    m["origine"] = AZIONE
+                    return
 
     def svuota(self) -> None:
         with self._lock:
@@ -153,13 +203,18 @@ class Memoria:
     # -- lettura -----------------------------------------------------------
 
     def messaggi(self, slot: str = "", fonti: str = "",
-                 domanda: str | None = None) -> list[dict]:
+                 domanda: str | None = None, per: str = "tutto") -> list[dict]:
         """I messaggi da passare al modello, nell'ordine che conta.
 
             system + slot        la persona e il mondo
+            [ultime azioni]      solo per la conversazione (PHASE6)
             riassunto            cosa e' successo prima
             finestra scorrevole  gli ultimi turni per intero
             [fonti + domanda]    solo nei turni con contenuto web
+
+        `per="conversazione"` toglie dalla finestra i messaggi di origine
+        AZIONE e mette le ultime tre azioni in una riga del messaggio di
+        sistema. Il router chiede "tutto". Vedi la nota su PAROLE e AZIONE.
 
         GLI SLOT STANNO NEL MESSAGGIO DI SISTEMA, NON IN UNO LORO
         Qwen 3 tratta il secondo messaggio `system` come testo qualunque, e
@@ -173,9 +228,21 @@ class Memoria:
         su cosa non entra in memoria in `grounding.py`.
         """
         with self._lock:
-            testa = self.system
+            testa = self._system()
             if slot:
                 testa = f"{testa}\n\n{slot}" if testa else slot
+
+            if per == "conversazione":
+                parole = [m for m in self.turni if m.get("origine", PAROLE) != AZIONE]
+                azioni = [m["content"] for m in self.turni[-self.finestra:]
+                          if m.get("origine") == AZIONE and m["role"] == "assistant"]
+                coda = parole[-self.finestra_conversazione:]
+                if azioni:
+                    riga = "\n".join(f"- {a}" for a in azioni[-ULTIME_AZIONI:])
+                    blocco = f"{INTESTAZIONE_AZIONI}\n{riga}"
+                    testa = f"{testa}\n\n{blocco}" if testa else blocco
+            else:
+                coda = self.turni[-self.finestra:]
 
             out: list[dict] = []
             if testa:
@@ -184,7 +251,6 @@ class Memoria:
                 out.append({"role": "system",
                             "content": f"{INTESTAZIONE_RIASSUNTO}\n{self.riassunto}"})
 
-            coda = self.turni[-self.finestra:]
             if domanda is not None:
                 # La sostituzione vale se l'ultimo messaggio e' dell'utente,
                 # che e' il caso normale: l'orchestratore lo aggiunge prima di
@@ -202,7 +268,8 @@ class Memoria:
                     coda = coda[:-1] + [{"role": "user", "content": domanda}]
                 else:
                     coda = list(coda) + [{"role": "user", "content": domanda}]
-            out += [dict(m) for m in coda]
+            # L'origine e' della memoria, non del modello: fuori dal messaggio.
+            out += [{"role": m["role"], "content": m["content"]} for m in coda]
 
             if fonti and domanda is None:
                 out.append({"role": "user", "content": fonti})
@@ -212,7 +279,7 @@ class Memoria:
         """Quanto costa il prossimo prompt, voce per voce."""
         with self._lock:
             return Conteggio(
-                system=conta_token(self.system) + 5,
+                system=conta_token(self._system()) + 5,
                 slot=conta_token(slot),
                 riassunto=conta_token(self.riassunto) + (5 if self.riassunto else 0),
                 turni=conta_messaggi(self.turni[-self.finestra:]),

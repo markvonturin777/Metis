@@ -1,0 +1,329 @@
+{
+ "_nota": [
+  "La prima seduta vera di PHASE4 (2026-09-28, 16:04-16:14), da data/logs/turns.jsonl.",
+  "Serve a PHASE6 (benchmarks/prova_conversazione.py): si rigiocano i turni di",
+  "conversazione con la cronologia che Metis aveva in quel momento."
+ ],
+ "turni": [
+  {
+   "detto": "Ue, figa.",
+   "risposta": "Hai 2 schermi.",
+   "strumento": "list_monitors",
+   "esito": "ok",
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "Come stai messo a benzina?",
+   "risposta": "Non ho un motore, ma ho una batteria.",
+   "strumento": null,
+   "esito": null,
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "Come stai messo a benzina?",
+   "risposta": "Non ho un motore, ma ho una batteria.",
+   "strumento": null,
+   "esito": null,
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "Ma non è una domanda, bastardo!",
+   "risposta": "Lei mi ha detto di non parlare così.",
+   "strumento": null,
+   "esito": null,
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "Come stai messo a benzina?",
+   "risposta": "Ho aperto Chrome.",
+   "strumento": "open_application",
+   "esito": "ok",
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "cazioni poi fare.",
+   "risposta": "Lei non ha chiesto niente.",
+   "strumento": null,
+   "esito": null,
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "Quali azioni puoi fare?",
+   "risposta": "Posso aprire applicazioni, cercare informazioni e rispondere alle sue domande.",
+   "strumento": null,
+   "esito": null,
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "Qual è il David di Caravaggio che ti piace di più?",
+   "risposta": "Informazione non presente nei sistemi.",
+   "strumento": null,
+   "esito": null,
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "Cerca sul web.",
+   "risposta": "Non ho accesso a Internet.",
+   "strumento": null,
+   "esito": null,
+   "web": true,
+   "chiarimento": false
+  },
+  {
+   "detto": "Hey Metis.",
+   "risposta": "Lei ha aperto Chrome.",
+   "strumento": null,
+   "esito": null,
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "mostra i numeri.",
+   "risposta": "Ecco 71 numeri.",
+   "strumento": "mostra_numeri",
+   "esito": "ok",
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "Mostrami di nuove numeri.",
+   "risposta": "Ecco 71 numeri.",
+   "strumento": "mostra_numeri",
+   "esito": "ok",
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "mostra i numeri.",
+   "risposta": "Ecco 78 numeri.",
+   "strumento": "mostra_numeri",
+   "esito": "ok",
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "clicca sul 58.",
+   "risposta": "Non lo faccio: in primo piano ci sono io: clicca prima sulla finestra giusta",
+   "strumento": "clicca_numero",
+   "esito": "denied",
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "clicca sul 58.",
+   "risposta": "Cliccato il 58.",
+   "strumento": "clicca_numero",
+   "esito": "ok",
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "quanto si vorrà prima che le iai diventi self-conscious.",
+   "risposta": "Informazione non presente nei sistemi.",
+   "strumento": null,
+   "esito": null,
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "Ora cercano sul web?",
+   "risposta": "No, non cerco sul web. Sono un'assistente basata su dati preesistenti.",
+   "strumento": null,
+   "esito": null,
+   "web": true,
+   "chiarimento": false
+  },
+  {
+   "detto": "se un pezzo di merda.",
+   "risposta": "Lei non dovrebbe parlare così. Se ha bisogno di aiuto, posso provvedere.",
+   "strumento": null,
+   "esito": null,
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "mostra i numeri.",
+   "risposta": "Ecco 78 numeri.",
+   "strumento": "mostra_numeri",
+   "esito": "ok",
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "clicca su 55.",
+   "risposta": "Cliccato il 55.",
+   "strumento": "clicca_numero",
+   "esito": "ok",
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "bravissimo, hai schippato una pubblicità su youtube.",
+   "risposta": "non trovo nessun elemento che si chiami 'pubblicità'.",
+   "strumento": "click_element",
+   "esito": "denied",
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "Devi dire grazie.",
+   "risposta": "il cursore non e' in un campo di testo: non scrivo niente. Mi dica 'mostra i numeri' e 'scrivi nel' con il numero del campo.",
+   "strumento": "type_text",
+   "esito": "denied",
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "Ma sei rincoglionito?",
+   "risposta": "il cursore non e' in un campo di testo: non scrivo niente. Mi dica 'mostra i numeri' e 'scrivi nel' con il numero del campo.",
+   "strumento": "type_text",
+   "esito": "denied",
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "mostra i numeri.",
+   "risposta": "Ecco 78 numeri.",
+   "strumento": "mostra_numeri",
+   "esito": "ok",
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "Scrivi sul 42.",
+   "risposta": "il cursore non e' in un campo di testo: non scrivo niente. Mi dica 'mostra i numeri' e 'scrivi nel' con il numero del campo.",
+   "strumento": "type_text",
+   "esito": "denied",
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "scrivi.",
+   "risposta": "Ecco 99 numeri.",
+   "strumento": "mostra_numeri",
+   "esito": "ok",
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "ciao",
+   "risposta": "Ciao. Cosa posso fare per lei?",
+   "strumento": null,
+   "esito": null,
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "Sì.",
+   "risposta": "Cosa posso fare per lei?",
+   "strumento": null,
+   "esito": null,
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "scrivi ciao!",
+   "risposta": "Scritto in chrome.exe.",
+   "strumento": "type_text",
+   "esito": "ok",
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "clicca su 45.",
+   "risposta": "Non lo faccio: in primo piano ci sono io: clicca prima sulla finestra giusta (cambiata dopo l'autorizzazione)",
+   "strumento": "clicca_numero",
+   "esito": "denied",
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "clicca sul 3.",
+   "risposta": "Non lo faccio: in primo piano ci sono io: clicca prima sulla finestra giusta",
+   "strumento": "clicca_numero",
+   "esito": "denied",
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "mostra i numeri.",
+   "risposta": "Ecco 94 numeri.",
+   "strumento": "mostra_numeri",
+   "esito": "ok",
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "clicca sul 3.",
+   "risposta": "Cliccato il 3.",
+   "strumento": "clicca_numero",
+   "esito": "ok",
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "apricrom e metti in video di youtube.",
+   "risposta": "Ho aperto su YouTube il primo video per apricrom e metti in video di youtube.",
+   "strumento": "riproduci_youtube",
+   "esito": "ok",
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "ma stra minumere.",
+   "risposta": "Non ho capito cosa fare: me lo ripete?",
+   "strumento": null,
+   "esito": null,
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "mostra i numeri.",
+   "risposta": "quella finestra non c'e' piu'.",
+   "strumento": "mostra_numeri",
+   "esito": "denied",
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "mastra i numeri.",
+   "risposta": "quella finestra non c'e' piu'.",
+   "strumento": "mostra_numeri",
+   "esito": "denied",
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "io ho aperto un'altra finestra di Chrome, tu me l'hai aperta, mostrami i numeri.",
+   "risposta": "quella finestra non c'e' piu'.",
+   "strumento": "mostra_numeri",
+   "esito": "denied",
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "Cancella il contesto.",
+   "risposta": "Non c'erano numeri.",
+   "strumento": "nascondi_numeri",
+   "esito": "ok",
+   "web": false,
+   "chiarimento": false
+  },
+  {
+   "detto": "siamo totalmente fuori strada qua.",
+   "risposta": "quella finestra non c'e' piu'.",
+   "strumento": "mostra_numeri",
+   "esito": "denied",
+   "web": false,
+   "chiarimento": false
+  }
+ ]
+}

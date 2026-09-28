@@ -26,6 +26,7 @@ rotto. Confonderli insegnerebbe all'utente a ignorare entrambi.
 from __future__ import annotations
 
 import random
+import re
 
 from metis.security.audit import Outcome
 from metis.security.broker import Result
@@ -53,6 +54,69 @@ _TASTI_IN_PAROLE.update({f"ctrl+{n}": "Fatto." for n in "123456789"})
 
 _DOVE = {0: "sul primo schermo", 1: "sul secondo schermo",
          2: "sul terzo schermo", 3: "sul quarto schermo"}
+
+
+# PHASE6 — LA CONVERSAZIONE NON DICHIARA AZIONI (D-CONV 5)
+# In PHASE2 il modello di conversazione rispondeva "Cliccato l'ottantuno.",
+# "Ecco 99 numeri.", "Indietro." a comandi che nessuno strumento aveva
+# eseguito: copiava gli esiti che trovava in cronologia. La difesa era una
+# regola nel prompt ("di': Non ho capito cosa fare"), che pero' scattava a caso
+# anche su "Quali azioni puoi fare?". Adesso la regola sta qui: la conversazione
+# non esegue niente, quindi una sua risposta che comincia dichiarando
+# un'azione e' sempre falsa, e non arriva alla voce.
+DICHIARA_AZIONE = re.compile(
+    r"^\s*(?:cliccat[oa]\b|ecco \d+ numeri|indietro\s*[.!]|avanti\s*[.!]|fatto\s*[.!]"
+    r"|numeri (?:tolti|mostrati|nascosti)|scheda (?:chiusa|aperta)|scritto\b"
+    r"|ho (?:aperto|chiuso|cliccato|mostrato|spostato|tolto|scritto|messo|avviato|ridotto|nascosto)\b)",
+    re.IGNORECASE)
+NON_FATTO = "Non l'ho fatto: me lo ripete con altre parole?"
+
+
+def dichiara_azione(testo: str) -> bool:
+    return DICHIARA_AZIONE.search(testo or "") is not None
+
+
+# PHASE6 — LA CONVERSAZIONE NON RICOPIA SE STESSA
+# Con la cronologia, Qwen da 8B ricopia le proprie risposte quando la frase
+# dell'utente e' corta o storpiata ("Si'.", "cazioni poi fare"): nel banco 14
+# risposte su 36. Senza cronologia non succede mai. Se la prima frase generata
+# e' quasi uguale all'inizio di una delle ultime risposte, l'orchestratore la
+# scarta e rigenera con la sola domanda.
+def ripete_precedente(primo: str, precedenti: list[str], soglia: float = 0.8) -> bool:
+    from difflib import SequenceMatcher
+
+    from metis.memory.commands import normalizza
+
+    c = normalizza(primo)
+    if len(c) < 12:
+        return False
+    return any(SequenceMatcher(None, c, normalizza(p)[:len(c)]).ratio() >= soglia
+               for p in precedenti[-3:])
+
+
+def solo_domanda(messaggi: list[dict]) -> list[dict]:
+    """La persona e la frase di adesso, senza la cronologia."""
+    sistema = [m for m in messaggi[:1] if m.get("role") == "system"]
+    return sistema + messaggi[-1:]
+
+
+# E il "signore": la persona chiede "al massimo una risposta su quattro", e il
+# modello lo metteva in una su due. Se una delle ultime due risposte l'ha gia'
+# usato, il vocativo si toglie: ", signore." e "Signore, ..." in apertura. "Il
+# signore", che non e' un vocativo, resta com'e'.
+_SIGNORE_IN_CODA = re.compile(r",\s*signore(?=\s*[.!?;,])", re.IGNORECASE)
+_SIGNORE_IN_TESTA = re.compile(r"^\s*signore\s*[,.!]\s*", re.IGNORECASE)
+
+
+def dosa_signore(testo: str, precedenti: list[str]) -> str:
+    if not any("signore" in p.lower() for p in precedenti[-2:]):
+        return testo
+    fuori = _SIGNORE_IN_CODA.sub("", testo)
+    m = _SIGNORE_IN_TESTA.match(fuori)
+    if m:
+        resto = fuori[m.end():]
+        fuori = resto[:1].upper() + resto[1:]
+    return fuori
 
 
 def descrivi(result: Result) -> str:

@@ -75,7 +75,7 @@ from metis.core.metrics import TurnMetrics
 from metis.core.state_machine import Event, State, StateMachine, Transition
 from metis.llm.client import CancelToken
 from metis.memory import frasi
-from metis.memory.conversation import Memoria
+from metis.memory.conversation import AZIONE, Memoria
 
 
 @dataclass
@@ -542,7 +542,7 @@ class Orchestrator:
             pcm = self.d.tts_synth(frase).pcm
         except Exception:                        # noqa: BLE001
             return
-        self.mem.aggiungi("assistant", frase)
+        self.mem.aggiungi("assistant", frase, AZIONE)
         self.sm.fire(Event.DONE)                 # ERRORE -> PARLATO
         self.d.player.enqueue(pcm)
         self.d.player.wait_drained()
@@ -611,7 +611,8 @@ class Orchestrator:
         if tok.cancelled:
             return
 
-        messaggi = self.mem.messaggi(slot=slot)
+        # PHASE6: senza gli scambi con il sistema, che il modello ricopiava.
+        messaggi = self.mem.messaggi(slot=slot, per="conversazione")
         m.extra["contesto_token"] = self.mem.conteggio(slot).totale
         gm = self._genera(m, messaggi, tok)
 
@@ -658,12 +659,28 @@ class Orchestrator:
         FIRST_AUDIO, e il sintomo sarebbe stato "sul percorso web il
         microfono si riapre mentre Metis parla" — cioe' l'eco, di nuovo.
         """
+        from metis.core.risposte import NON_FATTO, dichiara_azione, dosa_signore
+
         m.t_llm_sent = time.perf_counter()
         first = True
         gm = None
-        for chunk, gm in self.d.llm_stream(messaggi, cancel=tok):
+        precedenti = [x["content"] for x in messaggi if x.get("role") == "assistant"]
+        detto: list[str] = []
+        for chunk, gm in self._flusso(m, messaggi, tok, precedenti):
             if tok.cancelled:
                 break
+            chunk = dosa_signore(chunk, precedenti)
+            detto.append(chunk)
+            falso = first and dichiara_azione(chunk)
+            if falso:
+                # PHASE6 (D-CONV 5): la conversazione non esegue niente, quindi
+                # "Cliccato l'81." qui e' falso. Non arriva alla voce: al suo
+                # posto la frase fissa, e il resto della generazione si lascia.
+                chunk = NON_FATTO
+                _non_capito(m, frasi.CONVERSAZIONE)
+                m.extra["azione_dichiarata"] = True
+                if hasattr(gm, "text"):
+                    gm.text = NON_FATTO
             syn = self.d.tts_synth(chunk)
             self.d.player.enqueue(syn.pcm)
             if first:
@@ -673,7 +690,37 @@ class Orchestrator:
                 m.t_first_audio = time.perf_counter()
                 self.sm.fire(Event.FIRST_AUDIO)     # -> PARLATO
                 first = False
+            if falso:
+                break
+        # In memoria va cio' che si e' detto davvero: col "signore" dosato, o
+        # la risposta rigenerata senza cronologia.
+        if detto and hasattr(gm, "text") and not m.extra.get("azione_dichiarata"):
+            gm.text = " ".join(detto)
         return gm
+
+    def _flusso(self, m: TurnMetrics, messaggi: list[dict], tok: CancelToken,
+                precedenti: list[str]):
+        """Il flusso del modello, con la guardia contro le copie (PHASE6).
+
+        Se la prima frase ricopia una delle ultime risposte, il flusso si
+        abbandona e si ricomincia con la sola domanda: senza cronologia il
+        modello non ricopia. Costa un secondo avvio, solo in quel caso.
+        """
+        from metis.core.risposte import ripete_precedente, solo_domanda
+
+        it = iter(self.d.llm_stream(messaggi, cancel=tok))
+        primo = next(it, None)
+        if primo is not None and precedenti and ripete_precedente(primo[0], precedenti):
+            m.extra["ripetizione_evitata"] = True
+            chiudi = getattr(it, "close", None)
+            if chiudi is not None:
+                chiudi()
+            it = iter(self.d.llm_stream(solo_domanda(messaggi), cancel=tok))
+            primo = next(it, None)
+        if primo is None:
+            return
+        yield primo
+        yield from it
 
     # -- ramo conoscenza ---------------------------------------------------
 
@@ -753,7 +800,8 @@ class Orchestrator:
             return
 
         self.sm.fire(Event.CONTEXT_READY)             # -> GENERAZIONE
-        messaggi = self.mem.messaggi(slot=slot, domanda=ctx.messaggio(m.transcript))
+        messaggi = self.mem.messaggi(slot=slot, domanda=ctx.messaggio(m.transcript),
+                                     per="conversazione")
         m.extra["contesto_token"] = self.mem.conteggio(
             slot, fonti=ctx.blocco()).totale
         m.extra["fonte"] = (ctx.citazioni() or [""])[0][:80]
@@ -786,7 +834,9 @@ class Orchestrator:
     def _chiudi_parlando(self, m: TurnMetrics, frase: str) -> None:
         """Dire una frase sola e chiudere il turno. Usato dalla degradazione."""
         m.reply = frase
-        self.mem.aggiungi("assistant", frase)
+        # PHASE6: una frase del sistema, non una risposta del discorso.
+        self.mem.segna_azione()
+        self.mem.aggiungi("assistant", frase, AZIONE)
         self.d.player.enqueue(self.d.tts_synth(frase).pcm)
         m.t_first_audio = time.perf_counter()
         if self.sm.state is not State.PARLATO:
@@ -892,7 +942,10 @@ class Orchestrator:
             m.extra["per_hub"] = per_hub
         if untrusted:
             m.extra["untrusted"] = True
-        self.mem.aggiungi("assistant", frase)
+        # PHASE6: il comando e il suo esito sono un'azione. Il router li vede,
+        # la conversazione li trova in una riga "ultime azioni" (D-CONV 1).
+        self.mem.segna_azione()
+        self.mem.aggiungi("assistant", frase, AZIONE)
 
         syn = self.d.tts_synth(frase)
         m.t_first_audio = time.perf_counter()

@@ -32,7 +32,7 @@
 | **PHASE2** | Navigazione: YouTube, "mostra i numeri", bolla, media, dettatura | 🟡 codice fatto; mancano prove a voce (Facebook, feed), catture, bundle, tag |
 | **PHASE3** | Voce e lingua (Kokoro, inglese) | ❌ annullata il 2026-09-26; resta solo la velocità della voce |
 | **PHASE4** | Imparare dall'uso: frasi non capite → comandi ([piano](SPECS/PHASE4/Piano_Frasi_Non_Capite.md)) | 🟡 codice, banchi e prova vera fatti (2026-09-28); restano bundle e tag |
-| **PHASE6** | Qualità della conversazione: persona in stile Jarvis, cronologia pulita, router ([piano](SPECS/PHASE6/Piano_Conversazione.md)) | 📋 pianificata il 2026-09-28 — **la prossima, prima di PHASE5** |
+| **PHASE6** | Qualità della conversazione: persona in stile Jarvis, cronologia pulita, router ([piano](SPECS/PHASE6/Piano_Conversazione.md)) | 🟡 codice e banchi fatti (2026-09-28); restano la revisione alla cieca e la seduta vera dell'utente |
 | **PHASE5** | Mani libere: sessione di ascolto, conferme a voce, router di navigazione ([piano](SPECS/PHASE5/Piano_Mani_Libere.md)) | 📋 pianificata il 2026-09-28, decisioni D-MANI chiuse; dopo PHASE6 |
 
 ---
@@ -181,6 +181,10 @@
 | Il contenuto web non entra nella memoria | ✅ | |
 | Persona Metis (formale, "lei", 1–3 frasi, ironia discreta) | ✅ | Non dichiara mai azioni non fatte (6/12 → 0/12) |
 | Metis parla di sé al femminile e in prima persona | ✅ | 2026-09-28: 1 maschile su 36 risposte (prima ~8 su 24); banco della persona nel target |
+| **Persona v2 in stile Jarvis** (lei con i verbi, "signore" di rado, ironia garbata, sa cosa sa fare) | 🟡 | PHASE6: in uso; esempi di tono a rotazione. Manca la revisione alla cieca dell'utente |
+| Cronologia della conversazione senza gli scambi con il sistema | ✅ | PHASE6: il router vede tutto, la conversazione le parole (ultimi 4 messaggi) e una riga "ultime azioni" |
+| Guardie sulla conversazione: azioni dichiarate, copie di sé, "signore" dosato | ✅ | PHASE6: nel replay della seduta, ripetizioni 18/36 → 1/36 |
+| "Cerca sul web" riferito alla domanda di prima; opinioni mai sul web | ✅ | PHASE6 |
 | Pannello "frasi non capite" → comandi e varianti | ✅ | PHASE4: cinque segnali nel turno, pannello nella Diagnostica con la quota dei turni non capiti, Crea / Variante / Segnala / Ignora, guardie sulle frasi nuove, contatore nell'Hub |
 | **Memoria a lungo termine, preferenze persistenti** | 📋 | Backlog V1.1 #3 |
 | **Ricerca multi-hop** | 📋 | Dopo la V1.0 |

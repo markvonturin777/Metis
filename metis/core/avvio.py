@@ -334,7 +334,11 @@ def costruisci_sistema(opz: Opzioni, log,
     # 0,1: un riassunto non deve essere creativo, deve essere lo stesso ogni
     # volta. Il client e' quello gia' caricato in VRAM — un secondo modello
     # per riassumere costerebbe un secondo caricamento e un secondo picco.
-    memoria = Memoria(system=SYSTEM, riassumi=llm.riassumi)
+    # PHASE6: la persona per ogni domanda, con gli esempi di tono a rotazione.
+    from metis.llm import prompts
+
+    memoria = Memoria(system=SYSTEM, riassumi=llm.riassumi,
+                      persona=lambda n: prompts.per_turno(prompts.VERSIONE, n))
     riporta(f"memoria      : finestra {memoria.finestra} messaggi, "
             f"riassunto al {int(memoria.soglia * 100)}% del contesto")
 

@@ -114,10 +114,12 @@ def test_l_orchestratore_dice_la_domanda_senza_generare(monkeypatch):
 
 
 def test_la_persona_non_dichiara_azioni():
-    from pathlib import Path
+    """Da PHASE6 la persona in uso e' `metis_v2`, e la protezione vera e' la
+    guardia nel codice (`risposte.dichiara_azione`, test_conversazione.py):
+    qui resta il controllo che la persona lo dica."""
+    from metis.llm import prompts
 
-    testo = Path("metis/llm/prompts/metis_v1.txt").read_text(encoding="utf-8")
-    assert "non dici MAI di aver" in testo
+    assert "non dici mai di aver" in prompts.carica().lower()
 
 
 # --- 4. schede e indietro ---------------------------------------------------------------
