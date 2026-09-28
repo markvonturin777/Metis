@@ -23,9 +23,9 @@ VERSIONE = "metis_v1"
 # Prompt minimo, usato se il file manca. Non e' la persona — e' cio' che
 # resta quando la persona non si carica: meglio un assistente spoglio che un
 # assistente senza vincoli.
-RIPIEGO = ("Sei Metis, assistente personale su questo PC. Rispondi in "
-           "italiano, dai del lei, al massimo due frasi brevi. Non inventare "
-           "fatti. Niente preamboli.")
+RIPIEGO = ("Sei Metis, un'assistente personale su questo PC. Rispondi in "
+           "italiano, dai del lei, parli di te al femminile, al massimo due "
+           "frasi brevi. Non inventare fatti. Niente preamboli.")
 
 
 def carica(nome: str = VERSIONE) -> str:

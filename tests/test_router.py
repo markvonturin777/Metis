@@ -300,14 +300,14 @@ def test_la_frase_dell_utente_arriva_al_modello_una_volta():
     VS Code 5 volte su 5 con il modello vero. Una volta sola, 0 su 5."""
     frase = "Sai aiutarmi nella programmazione?"
     storia = [{"role": "system", "content": "persona"},
-              {"role": "assistant", "content": "Buon pomeriggio. Sono operativo."},
+              {"role": "assistant", "content": "Buon pomeriggio. Sono operativa."},
               {"role": "user", "content": frase}]
     r = _tool_router(NESSUNO)
     r.decidi(frase, storia)
     spediti = r.client.messaggi[0]
     assert [m["content"] for m in spediti if m["role"] == "user"] == [frase]
     assert spediti[-1] == {"role": "user", "content": frase}     # in coda, per ultima
-    assert spediti[-2]["content"] == "Buon pomeriggio. Sono operativo."
+    assert spediti[-2]["content"] == "Buon pomeriggio. Sono operativa."
 
 
 def test_la_stessa_frase_detta_prima_resta_nella_cronologia():

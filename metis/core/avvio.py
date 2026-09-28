@@ -449,7 +449,7 @@ def saluto(ora: int | None = None) -> str:
         apertura = "Buon pomeriggio"
     else:
         apertura = "Buonasera"
-    return f"{apertura}. Sono operativo."
+    return f"{apertura}. Sono operativa."
 
 
 SOGLIA_VRAM_GB = 7.5

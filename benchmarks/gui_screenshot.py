@@ -38,7 +38,7 @@ LINK = "https://www.bing.com/aclick?ld=e8" + "7G1qS5Cs3bZcU-1FQBLKqTVUCUwj8UNEw"
 
 def conversazione_finta() -> ModelloConversazione:
     m = ModelloConversazione()
-    m.metis("Buongiorno. Sono operativo.")
+    m.metis("Buongiorno. Sono operativa.")
     m.chiudi_turno()
     m.utente("Che tempo fa oggi a Milano?")
     m.metis("Secondo MeteoAM, oggi a Milano cielo coperto e 18 gradi.")

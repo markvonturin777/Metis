@@ -289,7 +289,7 @@ def descrivi(result: Result) -> str:
             # "da sola". Stessa ragione di "in funzione", vedi sopra.
             frase += f" Si spegnerà automaticamente alle {v['spegnimento']}."
         elif "spegnimento" in v:
-            frase += (" Attenzione: non sono riuscito a programmare lo "
+            frase += (" Attenzione: non sono riuscita a programmare lo "
                       "spegnimento automatico.")
         if v.get("limite_giorno") is not None:
             frase += f" Oggi {v.get('oggi')} su {v['limite_giorno']}."

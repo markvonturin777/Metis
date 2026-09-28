@@ -150,7 +150,7 @@ def _a(t: str) -> dict:
     return {"role": "assistant", "content": t}
 
 
-SALUTO = [{"role": "system", "content": "persona"}, _a("Buon pomeriggio. Sono operativo.")]
+SALUTO = [{"role": "system", "content": "persona"}, _a("Buon pomeriggio. Sono operativa.")]
 DOPO_VSCODE = SALUTO + [_u("Sai aiutarmi nella programmazione?"),
                         _a("Ho aperto Visual Studio Code.")]
 DOPO_CHATBOT = DOPO_VSCODE + [
